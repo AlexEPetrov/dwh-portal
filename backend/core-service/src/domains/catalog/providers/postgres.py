@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from domains.catalog.models import AssetType
-from domains.catalog.providers.metadata import CatalogObject
+from domains.catalog.providers.metadata import CatalogObject, RelationDependency
 from settings.portal import DwhCollectorSettings
 
 RELATION_KIND = {
@@ -35,6 +35,16 @@ class DirectPostgresMetadataProvider:
             if current == qualified_name:
                 return item
         return None
+
+    def list_relation_dependencies(self) -> list[RelationDependency]:
+        """Return view/matview → relation dependencies from pg_depend/pg_rewrite."""
+        connection = self._connection or self._connect()
+        should_close = self._connection is None
+        try:
+            return self._read_relation_dependencies(connection)
+        finally:
+            if should_close:
+                connection.close()
 
     def _connect(self):
         import psycopg2
@@ -172,3 +182,42 @@ class DirectPostgresMetadataProvider:
                 )
             )
         return objects
+
+    def _read_relation_dependencies(self, connection) -> list[RelationDependency]:
+        database = self._settings.psg_db or "dwh"
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT DISTINCT
+                    dependent_ns.nspname,
+                    dependent_view.relname,
+                    source_ns.nspname,
+                    source_table.relname
+                FROM pg_depend
+                JOIN pg_rewrite ON pg_depend.objid = pg_rewrite.oid
+                JOIN pg_class AS dependent_view ON pg_rewrite.ev_class = dependent_view.oid
+                JOIN pg_class AS source_table ON pg_depend.refobjid = source_table.oid
+                JOIN pg_namespace dependent_ns ON dependent_ns.oid = dependent_view.relnamespace
+                JOIN pg_namespace source_ns ON source_ns.oid = source_table.relnamespace
+                WHERE source_table.oid <> dependent_view.oid
+                  AND dependent_view.relkind IN ('v', 'm')
+                  AND source_table.relkind IN ('r', 'v', 'm')
+                  AND dependent_ns.nspname NOT LIKE 'pg_%'
+                  AND dependent_ns.nspname <> 'information_schema'
+                  AND source_ns.nspname NOT LIKE 'pg_%'
+                  AND source_ns.nspname <> 'information_schema'
+                  AND pg_depend.deptype = 'n'
+                ORDER BY 1, 2, 3, 4
+                """
+            )
+            rows = cursor.fetchall()
+        return [
+            RelationDependency(
+                database=database,
+                dependent_schema=dependent_schema,
+                dependent_name=dependent_name,
+                source_schema=source_schema,
+                source_name=source_name,
+            )
+            for dependent_schema, dependent_name, source_schema, source_name in rows
+        ]

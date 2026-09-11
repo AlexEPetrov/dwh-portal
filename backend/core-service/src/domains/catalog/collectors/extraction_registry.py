@@ -23,6 +23,8 @@ from domains.catalog.models import (
     Relationship,
     RelationshipType,
 )
+from domains.catalog.lineage_adapters.runs import skipped_run
+from domains.catalog.providers.extraction_registry import ExtractionRegistryMissing
 from domains.catalog.providers.lineage import (
     STORAGE_TARGET_TYPES,
     VIEW_TARGET_TYPES,
@@ -73,6 +75,14 @@ class ExtractionRegistryCollector:
             if details["diagnostics"] and details["sources"]:
                 status = CollectorStatus.PARTIAL
             message = f"Ingested {details['sources']} extraction sources"
+        except ExtractionRegistryMissing as exc:
+            return skipped_run(
+                self._store,
+                name="extraction_registry",
+                started=started,
+                reason="REGISTRY_ABSENT",
+                message=str(exc),
+            )
         except Exception as exc:
             status = CollectorStatus.FAILED
             message = str(exc)

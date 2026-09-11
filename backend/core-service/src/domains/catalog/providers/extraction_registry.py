@@ -8,6 +8,16 @@ from domains.catalog.providers.rest_metadata import resolve_rest_metadata
 from settings.portal import DwhCollectorSettings
 
 
+class ExtractionRegistryMissing(Exception):
+    """Target DWH has no sys.data_extraction_sources table."""
+
+
+def _is_undefined_table(exc: Exception) -> bool:
+    if type(exc).__name__ == "UndefinedTable":
+        return True
+    return getattr(exc, "pgcode", None) == "42P01"
+
+
 class ExtractionRegistryProvider:
     """Read sys.data_extraction_sources and resolve loader metadata contracts."""
 
@@ -20,6 +30,14 @@ class ExtractionRegistryProvider:
         should_close = self._connection is None
         try:
             return self._read_registry(connection)
+        except ExtractionRegistryMissing:
+            raise
+        except Exception as exc:
+            if _is_undefined_table(exc):
+                raise ExtractionRegistryMissing(
+                    "sys.data_extraction_sources is not present"
+                ) from exc
+            raise
         finally:
             if should_close:
                 connection.close()
@@ -71,6 +89,8 @@ class ExtractionRegistryProvider:
         # Live DWH columns drift between environments (descr vs description,
         # load_schedule_id vs schedule_id). Resolve against information_schema.
         columns = self._table_columns(connection, "sys", "data_extraction_sources")
+        if not columns:
+            raise ExtractionRegistryMissing("sys.data_extraction_sources is not present")
         descr_expr = self._first_existing(columns, "descr", "description")
         schedule_expr = self._first_existing(columns, "load_schedule_id", "schedule_id")
         access_expr = "s.access_level" if "access_level" in columns else "NULL"
@@ -80,6 +100,13 @@ class ExtractionRegistryProvider:
         )
         tags_expr = "s.tags" if "tags" in columns else "NULL"
         comment_expr = "s.comment" if "comment" in columns else "NULL"
+        ds_columns = self._table_columns(connection, "sys", "data_source_items")
+        if ds_columns:
+            ds_join = "LEFT JOIN sys.data_source_items d ON d.id = s.data_source_id"
+            ds_name_expr = "COALESCE(d.name_eng, d.name_rus, d.slug)"
+        else:
+            ds_join = ""
+            ds_name_expr = "NULL"
         with connection.cursor() as cursor:
             cursor.execute(
                 f"""
@@ -95,12 +122,12 @@ class ExtractionRegistryProvider:
                     s.load_options,
                     {schedule_expr},
                     s.data_source_id,
-                    COALESCE(d.name_eng, d.name_rus, d.slug),
+                    {ds_name_expr},
                     {tags_expr},
                     s.parent_id,
                     {comment_expr}
                 FROM sys.data_extraction_sources s
-                LEFT JOIN sys.data_source_items d ON d.id = s.data_source_id
+                {ds_join}
                 """
             )
             rows = cursor.fetchall()

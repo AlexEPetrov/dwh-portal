@@ -16,6 +16,7 @@ from domains.catalog.providers.lineage import (
 from domains.catalog.providers.metadata import CatalogObject
 from domains.catalog.providers.python_metadata import resolve_python_metadata
 from domains.catalog.providers.rest_metadata import metadata_url
+from settings.portal import DwhCollectorSettings
 
 
 class FakeMetadataProvider:
@@ -293,7 +294,10 @@ def test_daily_runner_localizes_lineage_failure(store):
         store,
         metadata_provider=FakeMetadataProvider(_catalog_objects()),
         lineage_provider=BrokenLineage(),
+        settings=DwhCollectorSettings(lineage_adapters="postgres_sql,extraction_registry"),
     )
     assert result["catalog"].status == CollectorStatus.SUCCESS
     assert result["extraction_registry"].status == CollectorStatus.FAILED
+    assert result["postgres_sql"].status == CollectorStatus.SUCCESS
+    assert result["postgres_sql"].details.get("skipped") is True
     assert store.find_by_qualified_name("dwh.raw.ice_brent") is not None

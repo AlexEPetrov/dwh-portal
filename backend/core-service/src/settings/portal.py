@@ -33,3 +33,7 @@ class DwhCollectorSettings(BaseSettings):
     connection_identity: str = "dwh"
     rest_metadata_timeout_seconds: float = 3.0
     rest_metadata_retries: int = 1
+    # Comma-separated built-in names and/or module:Class plugin paths.
+    lineage_adapters: str | None = None
+    # Local Airflow DAG sources for reverse lineage; never executed.
+    airflow_dags_root: str | None = None

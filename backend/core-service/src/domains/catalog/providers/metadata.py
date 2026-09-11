@@ -7,6 +7,17 @@ from domains.catalog.models import AssetType
 
 
 @dataclass(frozen=True)
+class RelationDependency:
+    """PostgreSQL view/matview dependency used by the SQL lineage adapter."""
+
+    database: str
+    dependent_schema: str
+    dependent_name: str
+    source_schema: str
+    source_name: str
+
+
+@dataclass(frozen=True)
 class CatalogObject:
     asset_type: AssetType
     database: str

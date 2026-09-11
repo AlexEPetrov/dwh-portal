@@ -45,11 +45,6 @@ find . -type d -name "__pycache__" -exec rm -rf {} +
 cd ..
 cd ..
 
-cd ./backend/calc-service
-./build_image.sh
-cd ..
-cd ..
-
 # генерация миграций - забираем из СОБРАННОГО образа!
 
 docker create --name=temp-pvs-core-service 134/pvs-core-service:1.2

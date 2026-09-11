@@ -49,8 +49,18 @@ def data_source_identity(native_id: str) -> tuple[str, str]:
     return f"datasource:{native_id}", f"datasource:{native_id}"
 
 
+def url_data_source_identity(normalized_url: str) -> tuple[str, str]:
+    qualified_name = f"datasource:url:{normalized_url}"
+    return qualified_name, qualified_name
+
+
 def process_identity(extraction_source_id: str, handler_key: str) -> tuple[str, str]:
     qualified_name = f"process:{extraction_source_id}:{handler_key}"
+    return qualified_name, qualified_name
+
+
+def airflow_process_identity(dag_id: str) -> tuple[str, str]:
+    qualified_name = f"process:airflow:{dag_id}"
     return qualified_name, qualified_name
 
 
