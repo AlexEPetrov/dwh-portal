@@ -1,0 +1,28 @@
+.lineage-views-tabs.fill-height.ant-tabs {
+  height: 100%;
+}
+
+.lineage-views-tabs.fill-height > .ant-tabs-nav {
+  flex: 0 0 auto;
+}
+
+.lineage-views-tabs.fill-height > .ant-tabs-content-holder {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lineage-views-tabs.fill-height .ant-tabs-content {
+  height: 100%;
+}
+
+.lineage-views-tabs.fill-height .ant-tabs-tabpane {
+  height: 100%;
+  outline: none;
+}
+
+.lineage-views-tabs.fill-height .ant-tabs-tabpane-active {
+  display: flex !important;
+  flex-direction: column;
+  height: 100%;
+}

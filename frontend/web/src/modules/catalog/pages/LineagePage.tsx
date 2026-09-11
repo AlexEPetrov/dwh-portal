@@ -1,6 +1,6 @@
 import { getAssetLineage, listAssets } from '@shared/api/generated';
 import type { AssetListItem, LineageResponse } from '@shared/api/generated';
-import { Alert, Card, Empty, Select, Space, Typography } from 'antd';
+import { Alert, Card, Empty, Select, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import FreshnessBar from '../components/FreshnessBar';
@@ -85,18 +85,27 @@ const LineagePage = () => {
   }, [lineage]);
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        gap: 16,
+        width: '100%',
+      }}
+    >
+      <div style={{ flex: '0 0 auto' }}>
         <Typography.Title level={2} style={{ marginBottom: 4 }}>
           Lineage
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          Цепочка data-flow: DATA_SOURCE → EXTRACTION_SOURCE → STORAGE → PROCESS → TABLE/VIEW.
-          Начните с источника (ICE, CME…) или extraction.
+          DATA_SOURCE предоставляет EXTRACTION_SOURCE → STORAGE → PROCESS → TABLE/VIEW. Представления:
+          список hops и граф зависимостей (React Flow).
         </Typography.Paragraph>
         <FreshnessBar items={lineage?.collector_freshness} />
       </div>
-      <Card>
+      <Card style={{ flex: '0 0 auto' }}>
         <Select
           showSearch
           optionFilterProp="label"
@@ -123,12 +132,14 @@ const LineagePage = () => {
           description={`В графе нет: ${chainHint.join(', ')}. Выберите DATA_SOURCE «ICE» или пересоберите коллектор после появления get_metadata().`}
         />
       ) : null}
-      {lineage ? (
-        <LineageGraph nodes={lineage.nodes} edges={lineage.edges} />
-      ) : (
-        <Empty description="Выберите объект — для демо удобнее DATA_SOURCE (ICE / CME Group)" />
-      )}
-    </Space>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {lineage ? (
+          <LineageGraph nodes={lineage.nodes} edges={lineage.edges} fillHeight />
+        ) : (
+          <Empty description="Выберите объект — для демо удобнее DATA_SOURCE (ICE / CME Group)" />
+        )}
+      </div>
+    </div>
   );
 };
 
