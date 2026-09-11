@@ -23,6 +23,8 @@ import './lineageViews.css';
 type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
+  selectedAssetId?: string;
+  onSelectInLineage?: (assetId: string) => void;
 };
 
 type AssetNodeData = {
@@ -30,10 +32,13 @@ type AssetNodeData = {
   assetType: string;
   unresolved?: boolean;
   accent: string;
+  selected?: boolean;
+  onOpenObject?: () => void;
+  onSelectInLineage?: () => void;
 };
 
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 64;
+const NODE_WIDTH = 250;
+const NODE_HEIGHT = 88;
 
 const AssetFlowNode = ({ data }: NodeProps<Node<AssetNodeData>>) => (
   <>
@@ -42,7 +47,10 @@ const AssetFlowNode = ({ data }: NodeProps<Node<AssetNodeData>>) => (
       assetType={data.assetType}
       title={data.label}
       unresolved={data.unresolved}
+      selected={data.selected}
       interactive={!data.unresolved}
+      onOpenObject={data.onOpenObject}
+      onSelectInLineage={data.onSelectInLineage}
     />
     <Handle type="source" position={Position.Right} style={{ opacity: 0.35 }} />
   </>
@@ -77,7 +85,7 @@ const layoutWithDagre = (nodes: Node<AssetNodeData>[], edges: Edge[]): Node<Asse
   });
 };
 
-const LineageMapView = ({ nodes, edges }: Props) => {
+const LineageMapView = ({ nodes, edges, selectedAssetId, onSelectInLineage }: Props) => {
   const navigate = useNavigate();
   const flow = useMemo(() => {
     if (!nodes.length || !edges.length) {
@@ -93,6 +101,18 @@ const LineageMapView = ({ nodes, edges }: Props) => {
         assetType: node.asset_type,
         unresolved: node.unresolved,
         accent: TYPE_ACCENT[node.asset_type] || '#8c8c8c',
+        selected: node.id === selectedAssetId,
+        onOpenObject: node.unresolved
+          ? undefined
+          : () => {
+              navigate(`/objects/${node.id}`);
+            },
+        onSelectInLineage:
+          node.unresolved || !onSelectInLineage
+            ? undefined
+            : () => {
+                onSelectInLineage(node.id);
+              },
       },
     }));
     rfNodes.sort((a, b) => {
@@ -119,7 +139,7 @@ const LineageMapView = ({ nodes, edges }: Props) => {
       nodes: layoutWithDagre(rfNodes, rfEdges),
       edges: rfEdges,
     };
-  }, [nodes, edges]);
+  }, [nodes, edges, selectedAssetId, onSelectInLineage, navigate]);
 
   if (!nodes.length) {
     return <Empty description="Нет lineage для выбранного объекта" />;
@@ -152,12 +172,6 @@ const LineageMapView = ({ nodes, edges }: Props) => {
         nodesConnectable={false}
         elementsSelectable
         style={{ width: '100%', height: '100%' }}
-        onNodeClick={(_, node) => {
-          const asset = nodes.find((item) => item.id === node.id);
-          if (asset && !asset.unresolved) {
-            navigate(`/objects/${asset.id}`);
-          }
-        }}
       >
         <Background gap={16} color="#f0f0f0" />
         <Controls showInteractive={false} />

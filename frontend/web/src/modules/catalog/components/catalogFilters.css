@@ -1,0 +1,19 @@
+.catalog-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.catalog-filter-sep {
+  width: 1px;
+  height: 22px;
+  margin-inline: 4px;
+  background: #e8e8e8;
+  flex: 0 0 auto;
+}

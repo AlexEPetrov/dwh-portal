@@ -1,25 +1,32 @@
 import { listAssets } from '@shared/api/generated';
 import type { AssetListItem, AssetListResponse } from '@shared/api/generated';
-import { Button, Card, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  FilterChipGroup,
+  FilterClear,
+  FilterSep,
+  FilterToolbar,
+} from '../components/FilterToolbar';
 import FreshnessBar from '../components/FreshnessBar';
 import { formatBytes, formatDateTime, formatRows } from '../format';
 
 const TYPE_TOGGLES = [
-  { type: 'DATA_SOURCE', label: 'Источники' },
-  { type: 'EXTRACTION_SOURCE', label: 'Extraction' },
-  { type: 'PROCESS', label: 'Loaders' },
-  { type: 'TABLE', label: 'Таблицы' },
-  { type: 'VIEW', label: 'Views' },
+  { key: 'DATA_SOURCE', label: 'Source' },
+  { key: 'EXTRACTION_SOURCE', label: 'Extract' },
+  { key: 'PROCESS', label: 'Loader' },
+  { key: 'TABLE', label: 'Table' },
+  { key: 'VIEW', label: 'View' },
 ] as const;
 
 const PAGE_SIZE = 25;
 
 const ObjectsPage = () => {
   const navigate = useNavigate();
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(['DATA_SOURCE']);
+  /** Empty = show all types. */
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'active' | 'deleted'>('active');
   const [page, setPage] = useState(1);
@@ -30,7 +37,6 @@ const ObjectsPage = () => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    // Load a broad slice once; type + search filter live on the client for demo UX.
     listAssets({ status, page: 1, pageSize: 200 })
       .then((payload) => {
         if (!cancelled) {
@@ -137,55 +143,46 @@ const ObjectsPage = () => {
   );
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <div>
         <Typography.Title level={2} style={{ marginBottom: 4 }}>
           Objects
         </Typography.Title>
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          Включите один или несколько типов. Поиск фильтрует список сразу при вводе.
-        </Typography.Paragraph>
         <FreshnessBar items={freshness} />
       </div>
-      <Card size="small">
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Space wrap>
-            {TYPE_TOGGLES.map((item) => {
-              const active = selectedTypes.includes(item.type);
-              return (
-                <Button
-                  key={item.type}
-                  type={active ? 'primary' : 'default'}
-                  onClick={() => toggleType(item.type)}
-                >
-                  {item.label}
-                </Button>
-              );
-            })}
-          </Space>
-          <Space wrap>
-            <Input
-              allowClear
-              placeholder="Поиск по имени…"
-              style={{ width: 360 }}
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
-            />
-            <Select
-              style={{ width: 160 }}
-              value={status}
-              options={[
-                { value: 'active', label: 'Active' },
-                { value: 'deleted', label: 'Deleted' },
-              ]}
-              onChange={(value) => setStatus(value)}
-            />
-          </Space>
-          {selectedTypes.length === 0 ? (
-            <Typography.Text type="warning">Выберите хотя бы один тип кнопок выше.</Typography.Text>
-          ) : null}
-        </Space>
-      </Card>
+      <FilterToolbar>
+        <FilterChipGroup
+          options={TYPE_TOGGLES}
+          selected={selectedTypes}
+          onToggle={toggleType}
+        />
+        <FilterSep />
+        <Input
+          allowClear
+          size="small"
+          placeholder="Поиск…"
+          style={{ width: 220 }}
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+        />
+        <Select
+          size="small"
+          style={{ width: 110 }}
+          value={status}
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'deleted', label: 'Deleted' },
+          ]}
+          onChange={(value) => setStatus(value)}
+        />
+        <FilterClear
+          visible={selectedTypes.length > 0 || Boolean(q.trim())}
+          onClick={() => {
+            setSelectedTypes([]);
+            setQ('');
+          }}
+        />
+      </FilterToolbar>
       <Table
         rowKey="id"
         loading={loading}

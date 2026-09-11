@@ -18,6 +18,7 @@ def view_of(
     base_table: str,
     *,
     database: str = "dwh",
+    base_schema: str | None = None,
 ) -> dict:
     """View derived from a table (VIEW DERIVED_FROM TABLE — not WRITES_TO)."""
     return {
@@ -25,5 +26,5 @@ def view_of(
         "database": database,
         "schema": schema,
         "name": view_name,
-        "derived_from": table(schema, base_table, database=database),
+        "derived_from": table(base_schema or schema, base_table, database=database),
     }

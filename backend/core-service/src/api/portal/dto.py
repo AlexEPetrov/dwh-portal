@@ -40,6 +40,11 @@ class ChangeSummaryItem(BaseModel):
     change_type: str
     detected_at: datetime.datetime
     details: dict[str, Any] = Field(default_factory=dict)
+    asset_type: str | None = None
+    display_name: str | None = None
+    qualified_name: str | None = None
+    name: str | None = None
+    status: str | None = None
 
 
 class RecentChanges(BaseModel):
@@ -262,13 +267,24 @@ def column_item(column: AssetColumn) -> ColumnItem:
     )
 
 
-def change_item(event: ChangeEvent) -> ChangeSummaryItem:
+def change_item(event: ChangeEvent, asset: Asset | None = None) -> ChangeSummaryItem:
+    details = dict(event.details or {})
+    if asset is not None:
+        details.setdefault("name", asset.name)
+        details.setdefault("qualified_name", asset.qualified_name)
+        details.setdefault("asset_type", asset.asset_type.value)
+        details.setdefault("display_name", display_name_for(asset))
     return ChangeSummaryItem(
         id=event.id,
         asset_id=event.asset_id,
         change_type=event.change_type.value,
         detected_at=event.detected_at,
-        details=event.details,
+        details=details,
+        asset_type=asset.asset_type.value if asset else None,
+        display_name=display_name_for(asset) if asset else None,
+        qualified_name=asset.qualified_name if asset else None,
+        name=asset.name if asset else None,
+        status=asset.status.value if asset else None,
     )
 
 

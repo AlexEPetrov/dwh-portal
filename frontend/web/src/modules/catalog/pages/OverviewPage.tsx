@@ -93,10 +93,20 @@ const OverviewPage = () => {
               locale={{ emptyText: 'Нет изменений' }}
               renderItem={(item) => (
                 <List.Item onClick={() => navigate(`/objects/${item.asset_id}`)} style={{ cursor: 'pointer' }}>
-                  <Space>
-                    <Tag>{changeGlyph(item.change_type)}</Tag>
-                    <Typography.Text>{item.change_type}</Typography.Text>
-                    <Typography.Text type="secondary">{item.asset_id.slice(0, 8)}</Typography.Text>
+                  <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                    <Space wrap>
+                      <Tag>{changeGlyph(item.change_type)}</Tag>
+                      <Typography.Text>{item.change_type}</Typography.Text>
+                      {item.asset_type ? <Tag>{item.asset_type}</Tag> : null}
+                      <Typography.Text strong>
+                        {item.name || item.display_name || item.qualified_name || item.asset_id.slice(0, 8)}
+                      </Typography.Text>
+                    </Space>
+                    {item.qualified_name ? (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {item.qualified_name}
+                      </Typography.Text>
+                    ) : null}
                   </Space>
                 </List.Item>
               )}

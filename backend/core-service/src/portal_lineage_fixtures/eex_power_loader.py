@@ -9,5 +9,12 @@ def get_metadata() -> dict:
         "writes_to": [
             table("src_eex", "eex_power_spot"),
             view_of("src_eex", "v_eex_power_spot_latest", "eex_power_spot"),
+            # Multi-source demo view (also declared from CME CL loader).
+            view_of(
+                "src_market",
+                "v_cross_source_prices",
+                "eex_power_spot",
+                base_schema="src_eex",
+            ),
         ],
     }

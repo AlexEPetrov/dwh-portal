@@ -57,7 +57,17 @@ class ChangeCollector:
         created = 0
         if previous is None and asset.deleted_at is None:
             if not any(event.change_type == ChangeType.ADDED for event in existing):
-                self._emit(asset.id, now, ChangeType.ADDED, {"summary": f"New {asset.asset_type.value.lower()}"})
+                self._emit(
+                    asset.id,
+                    now,
+                    ChangeType.ADDED,
+                    {
+                        "summary": f"New {asset.asset_type.value.lower()}: {asset.name}",
+                        "name": asset.name,
+                        "qualified_name": asset.qualified_name,
+                        "asset_type": asset.asset_type.value,
+                    },
+                )
                 created += 1
         if asset.deleted_at is not None:
             if not any(event.change_type == ChangeType.REMOVED for event in existing):
@@ -65,7 +75,12 @@ class ChangeCollector:
                     asset.id,
                     now,
                     ChangeType.REMOVED,
-                    {"summary": "Object is no longer present in the catalog"},
+                    {
+                        "summary": f"Removed {asset.asset_type.value.lower()}: {asset.name}",
+                        "name": asset.name,
+                        "qualified_name": asset.qualified_name,
+                        "asset_type": asset.asset_type.value,
+                    },
                 )
                 created += 1
             return created

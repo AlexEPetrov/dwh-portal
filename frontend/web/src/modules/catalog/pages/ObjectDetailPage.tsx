@@ -145,7 +145,12 @@ const ObjectDetailPage = () => {
                 <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/lineage/${asset.id}`)}>
                   Открыть на странице Lineage
                 </Button>
-                <LineageGraph nodes={lineage.nodes} edges={lineage.edges} fillHeight={false} />
+                <LineageGraph
+                  nodes={lineage.nodes}
+                  edges={lineage.edges}
+                  selectedAssetId={asset.id}
+                  fillHeight={false}
+                />
               </Space>
             ) : (
               <Empty />

@@ -3,20 +3,26 @@ import { Empty, Space, Tag, Typography } from 'antd';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LineageAssetChip from './LineageAssetChip';
-import { STAGE_ORDER, TYPE_COLOR, buildFlowRows } from './lineageFlow';
+import { STAGE_ORDER, TYPE_COLOR, buildFlowRows, flowLabelFor } from './lineageFlow';
 import './lineageViews.css';
 
 type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
+  selectedAssetId?: string;
+  onSelectInLineage?: (assetId: string) => void;
 };
 
 const NodeCard = ({
   node,
   actor = false,
+  selected = false,
+  onSelectInLineage,
 }: {
   node: LineageNode;
   actor?: boolean;
+  selected?: boolean;
+  onSelectInLineage?: (assetId: string) => void;
 }) => {
   const navigate = useNavigate();
   const interactive = !node.unresolved;
@@ -26,19 +32,23 @@ const NodeCard = ({
       title={node.display_name}
       unresolved={node.unresolved}
       actor={actor}
+      selected={selected}
       interactive={interactive}
-      onClick={() => interactive && navigate(`/objects/${node.id}`)}
+      onOpenObject={interactive ? () => navigate(`/objects/${node.id}`) : undefined}
+      onSelectInLineage={
+        interactive && onSelectInLineage ? () => onSelectInLineage(node.id) : undefined
+      }
     />
   );
 };
 
 const Arrow = ({ label }: { label: string }) => (
-  <Typography.Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+  <Typography.Text type="secondary" style={{ whiteSpace: 'nowrap', flex: '0 0 auto' }}>
     — {label} →
   </Typography.Text>
 );
 
-const LineageListView = ({ nodes, edges }: Props) => {
+const LineageListView = ({ nodes, edges, selectedAssetId, onSelectInLineage }: Props) => {
   const stages = useMemo(() => {
     const present = new Set(nodes.map((node) => node.asset_type));
     return STAGE_ORDER.filter((type) => present.has(type));
@@ -67,23 +77,36 @@ const LineageListView = ({ nodes, edges }: Props) => {
         ))}
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        DATA_SOURCE предоставляет EXTRACTION_SOURCE. PROCESS — актор посередине (source → process →
-        target). View: table → view.
+        Иконка прицела на чипе — выбрать объект в Lineage (остаётесь здесь). Стрелка наружу — карточка
+        объекта. VIEW может порождаться несколькими TABLE.
       </Typography.Paragraph>
       {rows.map((row) => (
-        <Space key={row.key} align="center" wrap size="middle">
-          <NodeCard node={row.left} />
+        <div key={row.key} className="lineage-list-hop">
+          <NodeCard
+            node={row.left}
+            selected={row.left.id === selectedAssetId}
+            onSelectInLineage={onSelectInLineage}
+          />
           {row.actor ? (
             <>
-              <Arrow label="из" />
-              <NodeCard node={row.actor} actor />
+              <Arrow label={row.inLabel ?? flowLabelFor('READS_FROM')} />
+              <NodeCard
+                node={row.actor}
+                actor
+                selected={row.actor.id === selectedAssetId}
+                onSelectInLineage={onSelectInLineage}
+              />
               <Arrow label={row.flowLabel} />
             </>
           ) : (
             <Arrow label={row.flowLabel} />
           )}
-          <NodeCard node={row.right} />
-        </Space>
+          <NodeCard
+            node={row.right}
+            selected={row.right.id === selectedAssetId}
+            onSelectInLineage={onSelectInLineage}
+          />
+        </div>
       ))}
     </Space>
   );

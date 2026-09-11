@@ -37,8 +37,9 @@ def list_changes(
     )
     added = sum(1 for item in items if item.change_type == ChangeType.ADDED)
     removed = sum(1 for item in items if item.change_type == ChangeType.REMOVED)
+    store = get_portal_store()
     return ChangeListResponse(
-        items=[change_item(item) for item in items],
+        items=[change_item(item, store.get_asset(item.asset_id)) for item in items],
         total=total,
         page=page,
         page_size=page_size,

@@ -47,7 +47,10 @@ export type FlowRow = {
   left: LineageNode;
   actor?: LineageNode;
   right: LineageNode;
+  /** Outgoing hop label (left→right, or actor→right). Always from flowLabelFor. */
   flowLabel: string;
+  /** Incoming hop label when PROCESS is the middle actor (left→actor). */
+  inLabel?: string;
 };
 
 export const flowEndpoints = (
@@ -94,6 +97,7 @@ export const flowLabelFor = (
 /**
  * Left→right data-flow rows for the list view.
  * PROCESS sits in the middle when both READS_FROM and WRITES_TO exist.
+ * Never leave PROCESS as a dead-end when WRITES_TO edges exist in the payload.
  */
 export const buildFlowRows = (nodes: LineageNode[], edges: LineageEdge[]): FlowRow[] => {
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -114,16 +118,15 @@ export const buildFlowRows = (nodes: LineageNode[], edges: LineageEdge[]): FlowR
     const sources = reads
       .map((edge) => byId.get(edge.to_asset_id))
       .filter((node): node is LineageNode => Boolean(node));
-    const lefts = sources.length ? sources : [null];
+    const lefts: Array<LineageNode | null> = sources.length ? sources : [null];
+    let emittedWrite = false;
     for (const write of writes) {
       const target = byId.get(write.to_asset_id);
       if (!target) {
         continue;
       }
+      emittedWrite = true;
       consumed.add(write.id);
-      for (const read of reads) {
-        consumed.add(read.id);
-      }
       for (const left of lefts) {
         if (left) {
           rows.push({
@@ -131,16 +134,22 @@ export const buildFlowRows = (nodes: LineageNode[], edges: LineageEdge[]): FlowR
             left,
             actor: process,
             right: target,
-            flowLabel: 'загружает',
+            inLabel: flowLabelFor('READS_FROM', left.asset_type, process.asset_type),
+            flowLabel: flowLabelFor('WRITES_TO', process.asset_type, target.asset_type),
           });
         } else {
           rows.push({
             key: `${process.id}::${target.id}:${write.id}`,
             left: process,
             right: target,
-            flowLabel: 'пишет',
+            flowLabel: flowLabelFor('WRITES_TO', process.asset_type, target.asset_type),
           });
         }
+      }
+    }
+    if (emittedWrite) {
+      for (const read of reads) {
+        consumed.add(read.id);
       }
     }
   }
@@ -153,9 +162,19 @@ export const buildFlowRows = (nodes: LineageNode[], edges: LineageEdge[]): FlowR
     if (!ends) {
       continue;
     }
+    // Do not show STORAGE→PROCESS alone when this process also writes somewhere
+    // in the lineage payload (common when opening lineage from a VIEW).
     if (edge.relationship_type === 'READS_FROM') {
       const process = byId.get(edge.from_asset_id);
-      if (process?.asset_type === 'PROCESS' && rows.some((row) => row.actor?.id === process.id)) {
+      if (
+        process?.asset_type === 'PROCESS' &&
+        edges.some(
+          (item) =>
+            item.relationship_type === 'WRITES_TO' &&
+            item.from_asset_id === process.id &&
+            byId.has(item.to_asset_id)
+        )
+      ) {
         continue;
       }
     }

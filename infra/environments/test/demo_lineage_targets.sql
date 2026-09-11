@@ -186,4 +186,28 @@ ORDER BY product_code, assessment_date DESC;
 COMMENT ON VIEW src_argus.v_argus_products_assessments_curated IS
   'Latest curated Argus products row per product_code';
 
+-- ---------------------------------------------------------------------------
+-- Cross-source demo: one VIEW derived from tables of different sources
+-- ---------------------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS src_market;
+COMMENT ON SCHEMA src_market IS 'Demo cross-source curated market views';
+
+CREATE OR REPLACE VIEW src_market.v_cross_source_prices AS
+SELECT
+  'eex'::text AS source_system,
+  delivery_date AS price_date,
+  market_area AS symbol,
+  price_eur_mwh AS price
+FROM src_eex.eex_power_spot
+UNION ALL
+SELECT
+  'cme'::text AS source_system,
+  report_date AS price_date,
+  product_code AS symbol,
+  settlement_price AS price
+FROM src_cme.cme_cl_settlements;
+
+COMMENT ON VIEW src_market.v_cross_source_prices IS
+  'Demo unified prices from EEX power + CME CL (multi-table DERIVED_FROM)';
+
 COMMIT;
