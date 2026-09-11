@@ -1,0 +1,26 @@
+{
+  "name": "@asset-management/ui-kit",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "antd": "^5.20.1",
+    "ag-grid-community": "^31.3.2",
+    "ag-grid-react": "^31.3.2",
+    "@rjsf/utils": "^5.24.13"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.4"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./theme": "./src/theme/index.ts",
+    "./data-grid": "./src/data-grid/index.ts",
+    "./json-schema": "./src/json-schema/index.ts",
+    "./styles.css": "./src/styles.css"
+  }
+}

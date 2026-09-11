@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+from typing import Any
+
+from domains.catalog.providers.lineage import ExtractionSourceRecord, LoaderMetadata
+from domains.catalog.providers.python_metadata import resolve_python_metadata
+from domains.catalog.providers.rest_metadata import resolve_rest_metadata
+from settings.portal import DwhCollectorSettings
+
+
+class ExtractionRegistryProvider:
+    """Read sys.data_extraction_sources and resolve loader metadata contracts."""
+
+    def __init__(self, settings: DwhCollectorSettings | None = None, connection: Any | None = None):
+        self._settings = settings or DwhCollectorSettings()
+        self._connection = connection
+
+    def list_extraction_sources(self) -> list[ExtractionSourceRecord]:
+        connection = self._connection or self._connect()
+        should_close = self._connection is None
+        try:
+            return self._read_registry(connection)
+        finally:
+            if should_close:
+                connection.close()
+
+    def resolve_process_metadata(self, handler: dict[str, Any]) -> LoaderMetadata:
+        handler_type = str(handler.get("handler_type") or "")
+        name = str(handler.get("name") or handler.get("module") or handler_type or "loader")
+        if handler_type in {"Python", "PythonV0"}:
+            module_name = handler.get("module")
+            if not module_name:
+                return LoaderMetadata(
+                    schema_version="1.0",
+                    name=name,
+                    metadata_status="MISSING",
+                    diagnostic={"code": "MODULE_MISSING", "message": "Python handler has no module"},
+                )
+            return resolve_python_metadata(str(module_name), name)
+        if handler_type == "RestApi":
+            url_path = handler.get("url_path")
+            if not url_path:
+                return LoaderMetadata(
+                    schema_version="1.0",
+                    name=name,
+                    metadata_status="MISSING",
+                    diagnostic={"code": "URL_MISSING", "message": "RestApi handler has no url_path"},
+                )
+            return resolve_rest_metadata(str(url_path), name)
+        return LoaderMetadata(
+            schema_version="1.0",
+            name=name,
+            metadata_status="MISSING",
+            diagnostic={"code": "UNSUPPORTED_HANDLER", "message": handler_type},
+        )
+
+    def _connect(self):
+        import psycopg2
+
+        if not self._settings.psg_host or not self._settings.psg_db:
+            raise RuntimeError("DWH collector connection is not configured")
+        return psycopg2.connect(
+            host=self._settings.psg_host,
+            port=self._settings.psg_port,
+            user=self._settings.psg_user,
+            password=self._settings.psg_pass,
+            dbname=self._settings.psg_db,
+        )
+
+    def _read_registry(self, connection) -> list[ExtractionSourceRecord]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    s.id,
+                    s.name,
+                    s.descr,
+                    s.access_level,
+                    s.is_active,
+                    s.extract_source_type_id,
+                    s.extract_options,
+                    s.storage_options,
+                    s.load_options,
+                    s.load_schedule_id,
+                    s.data_source_id,
+                    d.name,
+                    s.tags,
+                    s.parent_id,
+                    s.comment
+                FROM sys.data_extraction_sources s
+                LEFT JOIN sys.data_source_items d ON d.id = s.data_source_id
+                """
+            )
+            rows = cursor.fetchall()
+        records = []
+        for row in rows:
+            records.append(
+                ExtractionSourceRecord(
+                    id=str(row[0]),
+                    name=row[1],
+                    descr=row[2],
+                    access_level=row[3],
+                    is_active=row[4],
+                    extract_source_type_id=row[5],
+                    extract_options=row[6] or {},
+                    storage_options=row[7] or {},
+                    load_options=row[8] or {},
+                    load_schedule_id=str(row[9]) if row[9] else None,
+                    data_source_id=str(row[10]) if row[10] else None,
+                    data_source_name=row[11],
+                    tags=row[12],
+                    parent_id=str(row[13]) if row[13] else None,
+                    comment=row[14],
+                )
+            )
+        return records

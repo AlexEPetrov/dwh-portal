@@ -1,0 +1,36 @@
+{
+  "name": "@asset-management/app-shell",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@asset-management/ui-kit": "0.1.0"
+  },
+  "peerDependencies": {
+    "@ant-design/icons": "^5.4.0",
+    "@tanstack/react-query": "^5.96.2",
+    "antd": "^5.20.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.26.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.4"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./layout": "./src/layout/index.ts",
+    "./plugin": "./src/plugin/index.ts",
+    "./routing": "./src/routing/index.ts",
+    "./styles.css": "./src/styles.css",
+    "./navigation": "./src/navigation/index.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./user": "./src/user/index.ts",
+    "./help": "./src/help/index.ts"
+  }
+}

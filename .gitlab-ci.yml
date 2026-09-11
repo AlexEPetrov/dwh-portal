@@ -1,0 +1,93 @@
+# This file is a template, and might need editing before it works on your project.
+# To contribute improvements to CI/CD templates, please follow the Development guide at:
+# https://docs.gitlab.com/ee/development/cicd/templates.html
+# This specific template is located at:
+# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Python.gitlab-ci.yml
+
+# Official language image. Look for the different tagged releases at:
+# https://hub.docker.com/r/library/python/tags/
+image: 134/redos-dev-tools-python-38:latest
+
+stages:
+  - lint
+  - test
+  - build
+
+# services:
+#   - name: docker:dind
+#     alias: docker  
+
+# Change pip's cache directory to be inside the project directory since we can
+# only cache local items.
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_HOST: unix:///var/run/docker.sock
+  #DOCKER_HOST: tcp://docker:2375/
+  DOCKER_TLS_CERTDIR: "" # Disable TLS for simplicity (not recommended for production)
+  DOCKER_DRIVER: overlay2
+
+
+# https://pip.pypa.io/en/stable/topics/caching/
+cache:
+  key: ${CI_COMMIT_REF_SLUG}  # Cache per branch
+  paths:
+    - .cache/pip  # Cache pip's download cache
+
+
+formatter:
+  stage: lint
+  allow_failure: true  
+  script:
+    - ruff format --check backend/src/
+
+
+linter:
+  stage: lint
+  allow_failure: true  
+  script:
+    - ruff check --output-format=gitlab backend/src/ > gl-code-quality-report1.json
+  artifacts:
+    # paths:
+    #   - gl-code-quality-report1.json
+    reports:
+      codequality: gl-code-quality-report1.json     
+
+
+test:
+  stage: test
+  before_script:
+    - python -V
+    - pip install -r backend/requirements.python38.txt
+    - pip install -r backend/requirements.python38.dev.txt
+  script:
+    - cd backend/
+    - pytest tests/ --cov=src/ --cov-report=html --cov-report=xml
+  coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+%)/'
+  artifacts:
+    name: htmlcoverage 
+    paths:
+      - backend/htmlcov/
+      # - backend/coverage.xml    
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/coverage.xml     
+
+
+build_image:
+  image: docker:latest 
+  stage: build
+  script: 
+    - export DATE_PART=$(echo "${CI_JOB_STARTED_AT}" | cut -d'T' -f1 | tr -d '-')
+    - export TIME_PART=$(echo "${CI_JOB_STARTED_AT}" | cut -d'T' -f2 | cut -d':' -f1,2,3 | tr -d ':')
+    - export BUILD_DATETIME="${DATE_PART}_${TIME_PART}"
+    - sh ./_build_docker_all.sh
+  # не архивируем самостоятельно, т.к. gitlab делает это в archive coordinator
+  #  - zip "build_${BUILD_DATETIME}_${CI_COMMIT_SHORT_SHA}.zip" ./_build -r 
+    - mv ./_build "./build_${BUILD_DATETIME}_${CI_COMMIT_SHORT_SHA}"
+    - ls -l
+  environment: production
+  artifacts:
+    name: "build_${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - ./build_*

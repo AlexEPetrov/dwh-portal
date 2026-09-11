@@ -1,0 +1,55 @@
+{
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "name": {
+      "description": "Наименование объекта",
+      "title": "Name",
+      "type": "string",
+      "ui:property_priority": 1
+    },
+    "slug": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Системное имя или код объекта (только английский)",
+      "title": "Slug",
+      "ui:property_priority": 2
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Описание объекта",
+      "title": "Description",
+      "ui:property_priority": 3
+    }
+  },
+  "title": "NamedObjectModel",
+  "type": "object"
+}

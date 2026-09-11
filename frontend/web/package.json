@@ -1,0 +1,58 @@
+{
+  "name": "asset-management-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "gen-api": "tsx scripts/generate-api.ts",
+    "mock": "vite --mode mock"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.4.0",
+    "@asset-management/app-shell": "0.1.0",
+    "@asset-management/ui-kit": "0.1.0",
+    "@formily/antd-v5": "^1.2.0",
+    "@formily/core": "^2.3.0",
+    "@formily/react": "^2.3.0",
+    "@rjsf/antd": "^5.24.13",
+    "@rjsf/core": "^5.24.13",
+    "@rjsf/utils": "^5.24.13",
+    "@rjsf/validator-ajv8": "^5.24.13",
+    "@tanstack/react-query": "^5.96.2",
+    "ag-grid-community": "^31.3.2",
+    "ag-grid-react": "^31.3.2",
+    "antd": "^5.20.1",
+    "axios": "^1.7.3",
+    "dayjs": "^1.11.20",
+    "msw": "^2.3.4",
+    "plotly.js-dist": "^2.33.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-plotly.js": "^2.6.0",
+    "react-router-dom": "^6.26.0",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.46.2",
+    "@types/plotly.js": "^2.12.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.1.0",
+    "@typescript-eslint/parser": "^8.1.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^9.9.0",
+    "tsx": "^4.16.5",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}

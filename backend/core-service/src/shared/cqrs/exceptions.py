@@ -1,0 +1,2 @@
+class MissingCommandResultError(Exception):
+    pass

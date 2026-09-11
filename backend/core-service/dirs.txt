@@ -1,0 +1,177 @@
+.
+├── docs
+│   ├── devguide
+│   │   └── adr
+│   │       ├── 002-core-backend
+│   │       ├── 002-management-backend
+│   │       └── 004-calc-service
+│   ├── _images
+│   ├── _modules
+│   │   └── domains
+│   │       └── management
+│   │           └── models
+│   ├── pdf
+│   │   ├── doctrees
+│   │   │   ├── devguide
+│   │   │   │   └── adr
+│   │   │   │       ├── 002-core-backend
+│   │   │   │       ├── 002-management-backend
+│   │   │   │       └── 004-calc-service
+│   │   │   └── userguide
+│   │   └── latex
+│   │       ├── _plantuml
+│   │       │   └── e3
+│   │       └── _static
+│   ├── _plantuml
+│   │   └── e3
+│   ├── _sources
+│   │   ├── devguide
+│   │   │   └── adr
+│   │   │       ├── 002-core-backend
+│   │   │       ├── 002-management-backend
+│   │   │       └── 004-calc-service
+│   │   └── userguide
+│   ├── _static
+│   │   └── contracts
+│   └── userguide
+├── duckdb_extensions
+│   └── v1.5.2
+│       └── linux_amd64
+├── examples
+├── frontend-dist
+│   └── assets
+├── htmlcov
+├── logs
+├── src
+│   ├── alembic
+│   │   ├── data
+│   │   └── versions
+│   ├── api
+│   │   ├── dependencies
+│   │   ├── management
+│   │   ├── middlewares
+│   │   ├── reporting
+│   │   ├── requests
+│   │   ├── static
+│   │   └── valuation
+│   ├── domains
+│   │   ├── ai
+│   │   │   ├── agent
+│   │   │   ├── agent_modes
+│   │   │   ├── commands
+│   │   │   ├── confirmations
+│   │   │   ├── docs
+│   │   │   ├── evals
+│   │   │   │   └── dialogs
+│   │   │   ├── llm
+│   │   │   ├── models
+│   │   │   ├── planning
+│   │   │   ├── providers
+│   │   │   ├── registry
+│   │   │   ├── rendering
+│   │   │   ├── resources
+│   │   │   │   ├── agent
+│   │   │   │   ├── execution
+│   │   │   │   ├── prompts
+│   │   │   │   ├── scenario
+│   │   │   │   ├── semantic
+│   │   │   │   └── visuals
+│   │   │   ├── routing
+│   │   │   │   └── rules
+│   │   │   ├── scenario
+│   │   │   ├── services
+│   │   │   ├── sql
+│   │   │   ├── state
+│   │   │   ├── tools
+│   │   │   └── workflows
+│   │   │       └── langgraph
+│   │   ├── common
+│   │   │   └── models
+│   │   ├── management
+│   │   │   ├── commands
+│   │   │   ├── models
+│   │   │   ├── repositories
+│   │   │   │   └── local_storage
+│   │   │   ├── requests
+│   │   │   ├── scheduling
+│   │   │   └── services
+│   │   │       ├── loaders
+│   │   │       ├── monitoring
+│   │   │       ├── office_interop
+│   │   │       ├── one_time_tools
+│   │   │       ├── processing
+│   │   │       ├── serialization
+│   │   │       │   └── xlsx
+│   │   │       └── validation
+│   │   ├── reporting
+│   │   │   ├── commands
+│   │   │   ├── data_factory
+│   │   │   │   └── in_memory
+│   │   │   ├── models
+│   │   │   ├── resources
+│   │   │   └── services
+│   │   │       └── office_interop
+│   │   ├── risk
+│   │   │   ├── commands
+│   │   │   ├── models
+│   │   │   ├── queries
+│   │   │   ├── repositories
+│   │   │   │   └── local_storage
+│   │   │   ├── services
+│   │   │   │   ├── balance
+│   │   │   │   │   ├── persistence
+│   │   │   │   │   ├── sources
+│   │   │   │   │   │   └── readers
+│   │   │   │   │   └── tree
+│   │   │   │   │       ├── application
+│   │   │   │   │       └── calculation
+│   │   │   │   └── valuation
+│   │   │   │       ├── local
+│   │   │   │       │   └── calculators
+│   │   │   │       └── remote
+│   │   │   └── workflows
+│   │   ├── simulator
+│   │   │   └── domestic_market
+│   │   └── valuation
+│   │       └── models
+│   ├── head
+│   ├── infrastructure
+│   │   ├── analytics
+│   │   ├── db
+│   │   │   └── models
+│   │   ├── files
+│   │   └── services
+│   ├── one_time_tools
+│   ├── proto
+│   ├── resources
+│   │   ├── queries
+│   │   │   ├── fwd_history
+│   │   │   └── prompts
+│   │   └── validators
+│   ├── settings
+│   ├── shared
+│   │   ├── cqrs
+│   │   ├── logging
+│   │   └── repositories
+│   └── tests
+│       └── shared
+│           └── options
+├── tests
+│   ├── integration
+│   │   └── test_management
+│   │       └── features
+│   │           └── steps
+│   └── unit
+│       ├── test_ai
+│       ├── test_api
+│       ├── test_balance
+│       ├── test_infrastructure
+│       ├── test_management
+│       ├── test_reporting
+│       └── test_valuation
+│           ├── features
+│           │   └── steps
+│           └── mocks
+└── wheels
+
+175 directories

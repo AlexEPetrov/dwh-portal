@@ -1,0 +1,16 @@
+.simulation-available-date-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.simulation-available-date-cell .ant-picker-cell-inner {
+  border: 1px solid var(--primary-color);
+  border-radius: 50%;
+  font-weight: 600;
+  background-color: rgb(37 99 235 / 0.08);
+}
+
+.ant-picker-cell-selected .simulation-available-date-cell .ant-picker-cell-inner {
+  border-color: currentColor;
+  background-color: var(--primary-color);
+}

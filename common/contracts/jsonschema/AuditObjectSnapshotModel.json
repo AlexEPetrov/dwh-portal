@@ -1,0 +1,66 @@
+{
+  "properties": {
+    "object_id": {
+      "format": "uuid",
+      "title": "Object Id",
+      "type": "string"
+    },
+    "object_type": {
+      "title": "Object Type",
+      "type": "string"
+    },
+    "object_snapshot": {
+      "title": "Object Snapshot",
+      "type": "object"
+    },
+    "version": {
+      "title": "Version",
+      "type": "integer"
+    },
+    "version_description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version Description"
+    },
+    "effective_from": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective From"
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author"
+    }
+  },
+  "required": [
+    "object_id",
+    "object_type",
+    "object_snapshot",
+    "version"
+  ],
+  "title": "AuditObjectSnapshotModel",
+  "type": "object"
+}

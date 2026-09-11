@@ -1,0 +1,20 @@
+When task complted, you have to write final report as structured Git commit text:
+line 1: <area> - <feature>: <краткое описание сделанного на английском или русском>`
+
+where
+- `<area>` — app project or module or domain (for example: backend, ui, auth, db).
+- `<feature>` — subdomain (for example: search, add-logging, api).
+
+Line 2: empty
+Line 3, etc. detailed but better short and as list - describe your changes.
+
+Example:
+backend - fix-search: Исправлена ошибка 400 Bad Request при поиске в Qdrant
+
+- Исправлено несоответствие размерности эмбеддингов в конфигурации коллекции
+- Добавлена проверка модели nomic-embed-text перед инициализацией поиска
+- Оптимизированы SQL-запросы в модуле фильтрации codebase
+
+Code changes: done
+Tests: added, run OK
+

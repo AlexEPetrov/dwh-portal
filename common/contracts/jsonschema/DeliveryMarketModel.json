@@ -1,0 +1,119 @@
+{
+  "properties": {
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 1
+    },
+    "version_description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version Description",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 2
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 3
+    },
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "is_active": {
+      "default": true,
+      "description": "Является ли объект активным (актуальным, к расчету или к использованию)",
+      "title": "Is Active",
+      "type": "boolean",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 6
+    },
+    "name": {
+      "description": "Наименование объекта",
+      "title": "Name",
+      "type": "string",
+      "ui:property_priority": 1
+    },
+    "slug": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Системное имя или код объекта (только английский)",
+      "title": "Slug",
+      "ui:property_priority": 2
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Описание объекта",
+      "title": "Description",
+      "ui:property_priority": 3
+    },
+    "type": {
+      "const": "delivery_market",
+      "default": "delivery_market",
+      "enum": [
+        "delivery_market"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "title": "DeliveryMarketModel",
+  "type": "object"
+}

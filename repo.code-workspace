@@ -1,0 +1,74 @@
+{
+	"folders": [
+		{
+			"name": "repo",
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.eol": "\n",
+		"files.trimTrailingWhitespace": true,
+		"files.insertFinalNewline": true,
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.organizeImports": "explicit",
+			"source.fixAll": "explicit"
+		},
+		"python.analysis.extraPaths": [
+			"backend/core-service/src"
+		],
+		"python.languageServer": "Pylance",
+		"python.testing.pytestEnabled": true,
+		"python.testing.unittestEnabled": false,
+		"python.testing.pytestArgs": [
+			"backend/core-service/tests"
+		],
+		"python.analysis.autoImportCompletions": true,
+		"python.analysis.inlayHints.variableTypes": true,
+		"python.analysis.inlayHints.functionReturnTypes": true,
+		"[python]": {
+			"editor.defaultFormatter": "ms-python.black-formatter"
+		},
+		"ruff.enable": true,
+		"ruff.organizeImports": true,
+		"ruff.lineLength": 120,
+		"ruff.lint.select": [
+			"E",
+			"F",
+			"B",
+			"I"
+		],
+		"ruff.lint.ignore": [
+			"D"
+		],
+		"black-formatter.args": [
+			"--line-length",
+			"100"
+		],
+		"python.analysis.typeCheckingMode": "basic",
+		"rust-analyzer.checkOnSave": true,
+		"rust-analyzer.check.command": "clippy",
+		"rust-analyzer.linkedProjects": [
+			"backend/calc-service/Cargo.toml"
+		],
+		"search.exclude": {
+			"**/.git": true,
+			"**/.venv": true,
+			"**/__pycache__": true,
+			"**/.mypy_cache": true,
+			"**/.pytest_cache": true,
+			"**/.ruff_cache": true,
+			"**/htmlcov": true,
+			"**/target": true,
+			"**/dist": true,
+			"**/build": true
+		},
+		"files.exclude": {
+			"**/__pycache__": true
+		},
+		"lldb.evaluateForHovers": false,
+		"rust-analyzer.cargo.extraEnv": {
+			"RUST_BACKTRACE": "1"
+		}
+	}
+}

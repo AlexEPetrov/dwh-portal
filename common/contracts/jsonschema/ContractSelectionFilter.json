@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "ContractAttributeFilter": {
+      "properties": {
+        "products": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "dictionary_name": "products",
+          "title": "Products",
+          "ui:col_span": 2,
+          "ui:property_priority": 1
+        },
+        "markets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "dictionary_name": "delivery_markets",
+          "title": "Markets",
+          "ui:col_span": 2,
+          "ui:property_priority": 2
+        },
+        "gl_accounts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "dictionary_name": "gl_accounts",
+          "title": "Gl Accounts",
+          "ui:col_span": 2,
+          "ui:property_priority": 3
+        }
+      },
+      "title": "ContractAttributeFilter",
+      "type": "object"
+    },
+    "ContractIdentityFilter": {
+      "properties": {
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Include",
+          "ui:col_span": 2,
+          "ui:property_priority": 1
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclude",
+          "ui:col_span": 2,
+          "ui:property_priority": 2
+        }
+      },
+      "title": "ContractIdentityFilter",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "contracts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContractIdentityFilter"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "ui:full_width": true,
+      "ui:property_priority": 1
+    },
+    "attributes": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContractAttributeFilter"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "ui:full_width": true,
+      "ui:property_priority": 2
+    }
+  },
+  "title": "ContractSelectionFilter",
+  "type": "object"
+}

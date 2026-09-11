@@ -1,0 +1,23 @@
+# Python
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/.pytest_cache/
+**/.mypy_cache/
+
+# Rust
+**/target/
+
+# Общее
+**/.git/
+**/.idea/
+**/.vscode/
+*.log
+*.img
+.DS_Store
+**/logs/
+
+# Web
+**/node_modules/
+**/dist/
+**/vendor/

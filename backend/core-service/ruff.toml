@@ -1,0 +1,6 @@
+# Указываем, что корень кода в папке src
+src = ["src"]
+
+[lint.isort]
+# Явно помечаем api как наш внутренний модуль, остальные по необходимости
+known-first-party = ["api", "domains", "shared", "infrastructure"]

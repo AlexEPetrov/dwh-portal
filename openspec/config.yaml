@@ -1,0 +1,101 @@
+schema: spec-driven
+
+context: |
+  Repository governance is canonical and must work without OpenSpec.
+
+  Pure ZooCode and pure Cursor must remain fully functional using
+  repository files only.
+
+  Canonical current behavioral authority lives under openspec/specs/**
+  according to root AGENTS.md, rules/README.md, and rules/policy.yaml.
+
+  OpenSpec artifacts under openspec/changes/** describe proposed or
+  in-progress changes. They do not by themselves override current
+  behavioral authority.
+
+  openspec/capabilities.yaml is the canonical map of allowed capability
+  paths used by OpenSpec specs.
+
+  Repository approval_policy cannot be weakened by OpenSpec.
+
+  Generated artifacts are read-only by hand.
+
+  Contract reconciliation obligations may apply even when downstream
+  paths are not yet present in the git diff.
+
+  Exact executable commands come from rules/policy.yaml.
+  Do not infer executables, rewrite cwd, substitute similar commands,
+  or invent package scripts.
+
+rules:
+
+  proposal:
+    - Identify intended changed scopes and change types.
+    - Identify applicable repository topic(s), workflow(s), and contract boundary.
+    - State the resolved approval policy.
+    - Separate business-semantic changes from mechanical changes.
+    - Identify expected downstream generated or consumer surfaces.
+    - >
+      Read openspec/capabilities.yaml and determine which declared
+      capabilities own the proposed behavioral changes.
+    - >
+      Prefer the most specific declared capability that owns the behavior.
+      A single change may affect multiple capabilities.
+    - >
+      Do not invent, rename, or extend capability paths while creating
+      a change. If no declared capability fits, record a capability-map
+      gap explicitly in the proposal.
+
+  specs:
+    - >
+      Treat delta specs under openspec/changes/** as proposed change
+      evidence, not canonical current repository authority.
+    - >
+      Use the applicable spec under openspec/specs/** as the baseline
+      for the delta. Do not modify the canonical current spec merely
+      to describe proposed behavior.
+    - >
+      Before creating a delta spec, read openspec/capabilities.yaml.
+      Every delta spec MUST use a capability path declared in that file.
+    - >
+      Write each delta to specs/<capability-path>/spec.md and preserve
+      the declared hierarchy exactly.
+    - >
+      Do not create a new capability merely because the change introduces
+      a new requirement. Extend the existing capability that owns the behavior.
+    - >
+      If no declared capability owns the behavior, do not create an
+      undeclared capability. Record the unresolved capability-map gap.
+    - Clearly mark unresolved semantics instead of choosing them autonomously.
+
+  design:
+    - Resolve applicable AGENTS.md, repository workflows, and contract reconciliation graph.
+    - Identify authoring source, published contract, generated consumers, and affected consumers.
+    - Reference verification IDs from rules/policy.yaml.
+    - Do not invent shell commands.
+    - Include required human approval checkpoints.
+
+  tasks:
+    - Include contract regeneration and downstream reconciliation tasks when applicable.
+    - Include rerouting after actual changed paths expand.
+    - Use registered verification IDs and exact invocations.
+    - Never add guessed lint, formatter, test, or virtualenv commands.
+    - Never edit generated artifacts manually.
+
+operations:
+
+  apply:
+    guidance:
+      - Read root AGENTS.md before modifying repository files.
+      - Load only applicable scoped AGENTS.md files for intended changed paths.
+      - Read rules/README.md.
+      - Resolve applicable entries from rules/policy.yaml.
+      - Load only behavioral specs relevant to the affected capabilities.
+      - Follow applicable workflows, contract reconciliation edges, and approval policies.
+      - >
+        For human_required changes, semantic implementation is blocked
+        until explicit human approval. After approval, mechanical work
+        may continue until new semantic ambiguity appears.
+      - >
+        When changed paths or change types expand, recompute applicable
+        repository routing and policy.

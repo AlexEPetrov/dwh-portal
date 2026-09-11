@@ -1,0 +1,320 @@
+{
+  "$defs": {
+    "ContractPricingMode": {
+      "description": "Модель ценообразования",
+      "enum": [
+        "price_amendments",
+        "individual_agreements"
+      ],
+      "title": "ContractPricingMode",
+      "type": "string"
+    },
+    "ContractTypeEnum": {
+      "enum": [
+        "market",
+        "accrual",
+        "transfer"
+      ],
+      "title": "ContractTypeEnum",
+      "type": "string"
+    }
+  },
+  "description": "Облегченное представление контракта для списков (без вложенных коллекций)",
+  "properties": {
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 1
+    },
+    "version_description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version Description",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 2
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 3
+    },
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "is_active": {
+      "default": true,
+      "description": "Является ли объект активным (актуальным, к расчету или к использованию)",
+      "title": "Is Active",
+      "type": "boolean",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 6
+    },
+    "tag": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Набор строковых идентификаторов (тегов), разделенных пробелом, например TTF GAS ARGUS",
+      "title": "Tag",
+      "ui:property_priority": 5
+    },
+    "category": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Дополнительная категоризация контракта или другого объекта. Обычно имеет смысл выделять категории\nпо типу продукта (Gas, oil..), стране, поставщику/покупателю или или источнику даных (Argus/TTF/spot).\nПри импорте в Excel - создаются worksheets по именам категорий.",
+      "title": "Category",
+      "ui:property_priority": 4
+    },
+    "name": {
+      "description": "Наименование объекта",
+      "title": "Name",
+      "type": "string",
+      "ui:property_priority": 1
+    },
+    "slug": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Системное имя или код объекта (только английский)",
+      "title": "Slug",
+      "ui:property_priority": 2
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Описание объекта",
+      "title": "Description",
+      "ui:property_priority": 3
+    },
+    "type": {
+      "const": "contract",
+      "default": "contract",
+      "description": "Тип объекта - контракт",
+      "enum": [
+        "contract"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "contract_type": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ContractTypeEnum"
+        }
+      ],
+      "default": "market",
+      "description": "Тип контракта"
+    },
+    "volume_uom": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Единицы измерения объема",
+      "title": "Volume Uom"
+    },
+    "pricing_uom": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Единица измерения цены",
+      "title": "Pricing Uom"
+    },
+    "pricing_mode": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContractPricingMode"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Порядок ценообразования"
+    },
+    "counterparty": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Контрагент",
+      "title": "Counterparty"
+    },
+    "reg_number": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Регистрационный номер",
+      "title": "Reg Number"
+    },
+    "country": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Страна",
+      "title": "Country"
+    },
+    "supply_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Коридор поставки",
+      "title": "Supply Path"
+    },
+    "supply_region": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Регион поставки",
+      "title": "Supply Region"
+    },
+    "delivery_market": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Рынок сбыта",
+      "title": "Delivery Market"
+    },
+    "product": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Продукт",
+      "title": "Product"
+    },
+    "gl_account": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Статья баланса",
+      "title": "Gl Account"
+    }
+  },
+  "title": "ContractListModel",
+  "type": "object"
+}

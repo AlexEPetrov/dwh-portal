@@ -1,0 +1,60 @@
+{
+  "properties": {
+    "products": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "dictionary_name": "products",
+      "title": "Products",
+      "ui:col_span": 2,
+      "ui:property_priority": 1
+    },
+    "markets": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "dictionary_name": "delivery_markets",
+      "title": "Markets",
+      "ui:col_span": 2,
+      "ui:property_priority": 2
+    },
+    "gl_accounts": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "dictionary_name": "gl_accounts",
+      "title": "Gl Accounts",
+      "ui:col_span": 2,
+      "ui:property_priority": 3
+    }
+  },
+  "title": "ContractAttributeFilter",
+  "type": "object"
+}

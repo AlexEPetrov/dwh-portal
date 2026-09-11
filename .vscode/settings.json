@@ -1,0 +1,103 @@
+{
+  // ---------- Editor defaults ----------
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit",
+    "source.fixAll": "explicit"
+  },
+
+  // ---------- Python ----------
+  // В монорепо важно указать, где искать исходники и тесты
+  "python.analysis.extraPaths": [
+    "backend/core-service/src"
+  ],
+  "python.languageServer": "Pylance",
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "backend/core-service/tests"
+  ],
+
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.inlayHints.variableTypes": true,
+  "python.analysis.inlayHints.functionReturnTypes": true,
+
+  // Если используете Ruff + Black (рекомендую)
+  "python.linting.enabled": false,
+  "python.linting.pylintEnabled": false,
+  "python.formatting.provider": "black",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "ruff.enable": true,
+  "ruff.organizeImports": true,
+
+  "ruff.lineLength": 120,
+  "ruff.lint.select": ["E", "F", "B", "I"],
+  "ruff.lint.ignore": ["D"],
+  "black-formatter.args": ["--line-length", "100"],
+
+  // Подхватывать типизацию/линт в рабочем дереве
+  "python.analysis.typeCheckingMode": "basic",
+
+  // ---------- Rust ----------
+  // Rust Analyzer: основной инструмент
+  "rust-analyzer.checkOnSave": true,
+  "rust-analyzer.cargo.targetDir": true,
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.cargo.allFeatures": true,
+  "rust-analyzer.linkedProjects": [
+    "backend/calc-service/Cargo.toml"
+  ],
+
+  "rust-analyzer.cargo.allTargets": false,
+  "rust-analyzer.check.allTargets": false,
+
+  "rust-analyzer.cargo.features": [],
+  "rust-analyzer.check.features": [],
+
+  "rust-analyzer.cachePriming.numThreads": 2,
+  "rust-analyzer.numThreads": 4,
+
+  "rust-analyzer.check.extraEnv": {
+    "CARGO_BUILD_JOBS": "2"
+  }
+
+  // Чтобы rust-analyzer работал быстрее в монорепо (опционально)
+  "rust-analyzer.files.watcherExclude": {
+    "**/target/**": true,
+    "**/.git/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true
+  },
+
+  // Форматирование Rust через rustfmt
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+
+  // ---------- Search / excludes ----------
+  "search.exclude": {
+    "**/.git": true,
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/htmlcov": true,
+    "**/target": true,
+    "**/dist": true,
+    "**/build": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+  "lldb.evaluateForHovers": false,
+  "rust-analyzer.cargo.extraEnv": {
+        "RUST_BACKTRACE": "1"
+  }
+}
+

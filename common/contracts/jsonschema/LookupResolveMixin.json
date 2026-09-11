@@ -1,0 +1,6 @@
+{
+  "description": "Миксин для всех lookup-полей:\n- При десериализации name → slug\n- JSON/dict остаётся slug",
+  "properties": {},
+  "title": "LookupResolveMixin",
+  "type": "object"
+}

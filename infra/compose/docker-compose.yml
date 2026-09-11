@@ -1,0 +1,109 @@
+services:
+  core-service:
+    restart: always
+    image: 134/pvs-core-service:1.2
+    environment:
+      APP_SCHEDULE_LOAD_CURVES: "45 17 * * *"
+      APP_SCHEDULE_LOAD_OBJECTS: ""
+      APP_SCHEDULE_RUN_VALUATION: "04 2 * * *"
+      APP_SCHEDULE_RUN_SIMULATION: "04 2 * * *"
+      APP_LOC_LOAD_FILES_PATH: "/app/loads"
+      APP_LOC_ARCHIVE_PATH: "/app/archive"
+      APP_LOC_TEMP_PATH: "/app/temp"
+      APP_LOC_REPOSITORY_PATH: "/app/local_storage"
+      APP_LOC_SIMULATION_SOURCE_ROOT: "s3://module-f"
+      APP_LOC_SIMULATION_SOURCE_PATH: "executions/mcmf/observation_date={observation_date}/operation_id={operation_id}"
+      APP_LOC_STORAGE_ROOT: "s3://module-f"
+      APP_LOC_EXECUTIONS_PATH: "executions/data"
+      APP_LOC_EXECUTION_PRESETS_PATH: "/app/local_storage/presets/commands"
+      APP_LOC_FILTER_PRESETS_PATH: "/app/local_storage/presets/valuation-scenario-filters.json"
+      APP_LOC_ENABLE_HIVE_PARQUET: "True"
+      APP_S3_ENDPOINT_URL: $APP_S3_ENDPOINT_URL
+      APP_S3_KEY: $APP_S3_KEY
+      APP_S3_SECRET: $APP_S3_SECRET
+      APP_S3_VERIFY_TLS: "False"
+      APP_S3_REGION: "us-east-1"
+      APP_DB_PSG_HOST: $APP_DB_PSG_HOST
+      APP_DB_PSG_PORT: $APP_DB_PSG_PORT
+      APP_DB_PSG_DB: $APP_DB_PSG_DB
+      APP_DB_PSG_USER: $APP_DB_PSG_USER
+      APP_DB_PSG_PASS: $APP_DB_PSG_PASS
+      APP_API_HOST: $APP_API_HOST
+      APP_API_PORT: $APP_API_PORT
+      APP_CALC_SERVICE_HOST: $APP_CALC_SERVICE_HOST
+      APP_CALC_SERVICE_HTTP_PORT: $APP_CALC_SERVICE_HTTP_PORT
+      APP_CALC_SERVICE_GRPC_SOCK: $APP_CALC_SERVICE_GRPC_SOCK
+      APP_CALC_SERVICE_API_KEY: 0
+      APP_AI_ENABLED: "True"
+      APP_AI_PROVIDER: "ollama"
+      APP_AI_BASE_URL: $APP_AI_BASE_URL_HOST
+      APP_AI_MODEL: $APP_AI_MODEL
+      APP_AI_TIMEOUT_SEC: "90"
+      PYTHONDONTWRITEBYTECODE: 1
+      LOGS_PATH: "/app/logs"
+    ports:
+      - "5012:5011"
+    volumes:
+      -  ./frontend-dist:/app/frontend-dist
+      -  $APP_LOC_LOGS_PATH_HOST:/app/logs
+      -  $APP_LOC_REPOSITORY_PATH_HOST:/app/local_storage
+      -  $APP_LOC_DATASETS_PATH_HOST:/app/datasets
+    extra_hosts:
+      -  "host.docker.internal:host-gateway"
+    healthcheck:
+      test: curl --fail http://localhost:5011/health || exit 1
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+    networks:
+      - gtrm_backend
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+
+  calc-service:
+    image: 134/pvs-calc-service:1.2
+    container_name: calc-service
+    restart: unless-stopped
+
+    environment:
+      RUST_LOG: info
+      APP_SERVER_HOST: 0.0.0.0
+      APP_SERVER_PORT: "5020"
+      APP_SERVER_GRPCPORT: "5021"
+      RUST_BACKTRACE: 0
+      APP_LOC_STORAGE_ROOT: "s3://module-f"
+      APP_LOC_EXECUTIONS_PATH: "executions/data"
+      APP_LOC_ENABLE_HIVE_PARQUET: "True"
+      APP_S3_ENDPOINT_URL: $APP_S3_ENDPOINT_URL
+      APP_S3_KEY: $APP_S3_KEY
+      APP_S3_SECRET: $APP_S3_SECRET
+      APP_S3_VERIFY_TLS: "False"
+      APP_S3_REGION: "us-east-1"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+
+    networks:
+      - gtrm_backend
+
+    expose:
+      - "5020"   # только для internal сети
+      - "5021"
+
+networks:
+  gtrm_backend:
+    name: gtrm_backend  # Принудительно задаем имя в системе
+    driver: bridge
+    # ИСПРАВЛЕНО: Явно связываем шлюз кастомной сети с хостом
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1

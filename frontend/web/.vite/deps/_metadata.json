@@ -1,0 +1,76 @@
+{
+  "hash": "e7b0e87b",
+  "configHash": "c15264b8",
+  "lockfileHash": "8a5c2ba7",
+  "browserHash": "21f252bc",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "d353b5d6",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "c16e92c3",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "b7db20a3",
+      "needsInterop": true
+    },
+    "react-router-dom": {
+      "src": "../../../node_modules/react-router-dom/dist/index.js",
+      "file": "react-router-dom.js",
+      "fileHash": "63c39fef",
+      "needsInterop": false
+    },
+    "antd": {
+      "src": "../../../node_modules/antd/es/index.js",
+      "file": "antd.js",
+      "fileHash": "3f8229ae",
+      "needsInterop": false
+    },
+    "antd/locale/ru_RU": {
+      "src": "../../../node_modules/antd/locale/ru_RU.js",
+      "file": "antd_locale_ru_RU.js",
+      "fileHash": "59b3a4a9",
+      "needsInterop": true
+    },
+    "dayjs": {
+      "src": "../../../node_modules/dayjs/dayjs.min.js",
+      "file": "dayjs.js",
+      "fileHash": "333836ad",
+      "needsInterop": true
+    },
+    "dayjs/locale/ru": {
+      "src": "../../../node_modules/dayjs/locale/ru.js",
+      "file": "dayjs_locale_ru.js",
+      "fileHash": "2d838813",
+      "needsInterop": true
+    },
+    "@tanstack/react-query": {
+      "src": "../../../node_modules/@tanstack/react-query/build/modern/index.js",
+      "file": "@tanstack_react-query.js",
+      "fileHash": "f1d1b1d0",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-BVXH3CUR": {
+      "file": "chunk-BVXH3CUR.js"
+    },
+    "chunk-BCGIGYF4": {
+      "file": "chunk-BCGIGYF4.js"
+    },
+    "chunk-AJOALKU4": {
+      "file": "chunk-AJOALKU4.js"
+    },
+    "chunk-3O7X656O": {
+      "file": "chunk-3O7X656O.js"
+    }
+  }
+}

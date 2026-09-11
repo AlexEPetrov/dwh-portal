@@ -1,0 +1,48 @@
+{
+  "description": "Команда загрузки кривых на диапазон дат",
+  "properties": {
+    "date_from": {
+      "format": "date",
+      "title": "Date From",
+      "type": "string"
+    },
+    "date_to": {
+      "format": "date",
+      "title": "Date To",
+      "type": "string"
+    },
+    "curves_pattern": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Curves Pattern"
+    },
+    "curves": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Curves"
+    }
+  },
+  "required": [
+    "date_from",
+    "date_to"
+  ],
+  "title": "CatchupCurvesCommand",
+  "type": "object"
+}

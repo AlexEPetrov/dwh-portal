@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "AveragingRuleFunction": {
+      "description": "AGG функции, применяемые к набору значений",
+      "enum": [
+        "average",
+        "sum",
+        "median",
+        "first",
+        "last"
+      ],
+      "title": "AveragingRuleFunction",
+      "type": "string"
+    },
+    "ColumnAggregationMode": {
+      "enum": [
+        "first_available",
+        "all_available",
+        "all_required"
+      ],
+      "title": "ColumnAggregationMode",
+      "type": "string"
+    }
+  },
+  "description": "Осреднение отсутствует",
+  "properties": {
+    "func": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AveragingRuleFunction"
+        }
+      ],
+      "default": "average"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "selection_mode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ColumnAggregationMode"
+        }
+      ],
+      "default": "first_available"
+    },
+    "cumulative_reset_period": {
+      "anyOf": [
+        {
+          "enum": [
+            "year",
+            "quarter",
+            "month",
+            "never"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cumulative Reset Period"
+    },
+    "carry_years": {
+      "default": 0,
+      "title": "Carry Years",
+      "type": "integer"
+    },
+    "type": {
+      "const": "none",
+      "default": "none",
+      "enum": [
+        "none"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "title": "EmptyAveragingRule",
+  "type": "object"
+}

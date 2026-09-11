@@ -1,0 +1,37 @@
+{
+  "description": "Конфигурация кумулятивной (stateful) агрегации для элемента индекса",
+  "properties": {
+    "func": {
+      "enum": [
+        "sum",
+        "average",
+        "max",
+        "min",
+        "loss_carry_forward"
+      ],
+      "title": "Func",
+      "type": "string"
+    },
+    "reset_period": {
+      "default": "year",
+      "enum": [
+        "year",
+        "quarter",
+        "month",
+        "never"
+      ],
+      "title": "Reset Period",
+      "type": "string"
+    },
+    "carry_years": {
+      "default": 0,
+      "title": "Carry Years",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "func"
+  ],
+  "title": "CumulativeRule",
+  "type": "object"
+}

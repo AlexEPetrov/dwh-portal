@@ -1,0 +1,10 @@
+capabilities:
+
+  ingestion:
+    description: Задачи наполнения каталога
+
+  catalog:
+    description: Редактирование и просмотр каталога данных
+
+
+

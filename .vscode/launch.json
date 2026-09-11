@@ -1,0 +1,177 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Core",
+            "type": "debugpy",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/backend/core-service",
+            "program": "src/api/run.py",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env.local",
+            "env": {
+                "PYTHONPATH": "src${pathSeparator}${env:PYTHONPATH}",
+                "DEBUG_DIAGNOSTIC": "0",
+                "APP_SCHEDULE_LOAD_CURVES": "45 17 * * *",
+                "APP_SCHEDULE_LOAD_OBJECTS": "",
+                "APP_SCHEDULE_RUN_VALUATION": "04 2 * * *",
+                "APP_SCHEDULE_RUN_SIMULATION": "04 2 * * *",
+                "APP_LOC_DOCUMENTS": "/app/documents",
+                "APP_LOC_LOAD_FILES_PATH": "/app/loads",
+                "APP_LOC_ARCHIVE_PATH": "/app/archive",
+                "APP_LOC_TEMP_PATH": "/app/temp",
+                "APP_LOC_REPOSITORY_PATH": "/app/local_storage",
+                "APP_LOC_SIMULATION_SOURCE_ROOT": "s3://module-f",
+                "APP_LOC_SIMULATION_SOURCE_PATH": "executions/mcmf/observation_date={observation_date}/operation_id={operation_id}",
+                "APP_LOC_STORAGE_ROOT": "s3://module-f",
+                "APP_LOC_EXECUTIONS_PATH": "executions/data",
+                "APP_LOC_ENABLE_HIVE_PARQUET": "True",
+                "APP_LOC_EXECUTION_PRESETS_PATH": "/app/local_storage/presets/commands/",
+                "APP_LOC_FILTER_PRESETS_PATH": "/app/local_storage/presets/valuation-filter-presets.json",
+                "APP_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
+                "APP_S3_KEY": "cd5Nag3nF64tAv8a6ROE",
+                "APP_S3_SECRET": "NCJKTUr7bRAZPDdeF7hbbkh5PHgYrYQGw9zOIV2b",
+                // "APP_S3_ENDPOINT_URL": "http://192.168.1.38:9009",
+                // "APP_S3_KEY": "IBPZ0KNDMNFV4Z4HF14N",
+                // "APP_S3_SECRET": "D8nJrsQUbVQYFqq9QrtkWaoeHLytX4srr+LfUNt+",
+                "APP_S3_VERIFY_TLS": "False",
+                "APP_CALC_SERVICE_HOST": "http://localhost",
+                "APP_CALC_SERVICE_HTTP_PORT": "5020",
+                "APP_CALC_SERVICE_GRPC_SOCK": "127.0.0.1:5021",
+                "APP_CALC_SERVICE_API_KEY": "0000",
+                "APP_AI_ENABLED": "False",
+                "APP_AI_PROVIDER": "openai_compatible",
+                "APP_AI_BASE_URL": "http://localhost:8080/v1",
+                //"APP_AI_MODEL": "qwen2.5-coder-3b-instruct-q4_k_m",
+                //"APP_AI_BASE_URL": "http://94.26.179.117:11439/v1",
+                //"APP_AI_API_KEY": "19451949",
+                //"APP_AI_MODEL": "qwen3-coder:30b",
+                //"APP_AI_MODEL": "qwen2.5-coder:32b",
+                "APP_AI_MODEL": "qwen2.5-coder:14b",
+                //"APP_AI_MODEL": "deepseek-coder-v2:16b",
+                //"APP_AI_MODEL": "mistral-small:14b",
+                //"APP_AI_MODEL": "gpt-oss:20b",
+                "APP_AI_TIMEOUT_SEC": "600",
+                "APP_DB_PSG_HOST": "localhost",
+                "APP_DB_PSG_PORT": "5432",
+                "APP_DB_PSG_DB": "dwh",
+                "APP_DB_PSG_USER": "postgres",
+                "APP_DB_PSG_PASS": "postgres",
+                "APP_API_PORT": "5021",
+                "APP_API_HOST": "localhost"
+            }
+        },
+        {
+            "name": "Debug Core (AI Local Ollama)",
+            "type": "debugpy",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/backend/core-service",
+            "program": "src/api/run.py",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env.local",
+            "env": {
+                "PYTHONPATH": "src${pathSeparator}${env:PYTHONPATH}",
+                "DEBUG_DIAGNOSTIC": "0",
+                "APP_SCHEDULE_LOAD_CURVES": "45 17 * * *",
+                "APP_SCHEDULE_LOAD_OBJECTS": "",
+                "APP_SCHEDULE_RUN_VALUATION": "04 2 * * *",
+                "APP_SCHEDULE_RUN_SIMULATION": "04 2 * * *",
+                "APP_LOC_DOCUMENTS": "/app/documents",
+                "APP_LOC_LOAD_FILES_PATH": "/app/loads",
+                "APP_LOC_ARCHIVE_PATH": "/app/archive",
+                "APP_LOC_TEMP_PATH": "/app/temp",
+                "APP_LOC_REPOSITORY_PATH": "/app/local_storage",
+                "APP_LOC_SIMULATION_SOURCE_ROOT": "s3://module-f",
+                "APP_LOC_SIMULATION_SOURCE_PATH": "executions/mcmf/observation_date={observation_date}/operation_id={operation_id}",
+                "APP_LOC_STORAGE_ROOT": "s3://module-f",
+                "APP_LOC_EXECUTIONS_PATH": "executions/data",
+                "APP_LOC_ENABLE_HIVE_PARQUET": "True",
+                "APP_LOC_EXECUTION_PRESETS_PATH": "/app/local_storage/presets/commands/",
+                "APP_LOC_FILTER_PRESETS_PATH": "/app/local_storage/presets/valuation-filter-presets.json",
+                "APP_S3_ENDPOINT_URL": "http://0.0.0.0:9000",
+                "APP_S3_KEY": "cd5Nag3nF64tAv8a6ROE",
+                "APP_S3_SECRET": "NCJKTUr7bRAZPDdeF7hbbkh5PHgYrYQGw9zOIV2b",
+                // "APP_S3_ENDPOINT_URL": "http://192.168.1.38:9009",
+                // "APP_S3_KEY": "IBPZ0KNDMNFV4Z4HF14N",
+                // "APP_S3_SECRET": "D8nJrsQUbVQYFqq9QrtkWaoeHLytX4srr+LfUNt+",
+                "APP_S3_VERIFY_TLS": "False",
+                "APP_CALC_SERVICE_HOST": "http://localhost",
+                "APP_CALC_SERVICE_HTTP_PORT": "5020",
+                "APP_CALC_SERVICE_GRPC_SOCK": "127.0.0.1:5021",
+                "APP_CALC_SERVICE_API_KEY": "0000",
+                "APP_AI_ENABLED": "True",
+                "APP_AI_PROVIDER": "openai_compatible",
+                "APP_AI_BASE_URL": "http://localhost:8080/v1",
+                "APP_AI_MODEL": "qwen2.5-coder-3b-instruct-q4_k_m",
+                //"APP_AI_BASE_URL": "http://94.26.179.117:11439/v1",
+                //"APP_AI_API_KEY": "19451949",
+                //"APP_AI_MODEL": "qwen3-coder:30b",
+                //"APP_AI_MODEL": "qwen2.5-coder:32b",
+                //"APP_AI_MODEL": "qwen2.5-coder:14b",
+                //"APP_AI_MODEL": "deepseek-coder-v2:16b",
+                //"APP_AI_MODEL": "mistral-small:14b",
+                //"APP_AI_MODEL": "gpt-oss:20b",
+                "APP_AI_TIMEOUT_SEC": "600",
+                "APP_DB_PSG_HOST": "localhost",
+                "APP_DB_PSG_PORT": "5432",
+                "APP_DB_PSG_DB": "dwh",
+                "APP_DB_PSG_USER": "postgres",
+                "APP_DB_PSG_PASS": "postgres",
+                "APP_API_PORT": "5021",
+                "APP_API_HOST": "localhost"
+            }
+        },
+        {
+            "name": "Debug Frontend",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:3010",
+            "webRoot": "${workspaceFolder}/frontend/web/src",
+            "preLaunchTask": "npm: dev"
+        },
+        {
+            "name": "Frontend (no debug)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "cwd": "${workspaceFolder}/frontend/web",
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full Stack (Core + Frontend)",
+            "configurations": [
+                "Debug Core (AI Local Ollama)",
+                "Debug Frontend"
+            ],
+            "presentation": {
+                "hidden": false,
+                "group": "fullstack",
+                "order": 1
+            }
+        },
+        {
+            "name": "Full Stack Release (Core + Frontend)",
+            "configurations": [
+                "Debug Core (AI Local Ollama)",
+                "Debug Frontend"
+            ],
+            "presentation": {
+                "hidden": false,
+                "group": "fullstack",
+                "order": 1
+            }
+        }
+    ]
+}

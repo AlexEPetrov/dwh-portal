@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "AveragingRuleFunction": {
+      "description": "AGG функции, применяемые к набору значений",
+      "enum": [
+        "average",
+        "sum",
+        "median",
+        "first",
+        "last"
+      ],
+      "title": "AveragingRuleFunction",
+      "type": "string"
+    },
+    "ColumnAggregationMode": {
+      "enum": [
+        "first_available",
+        "all_available",
+        "all_required"
+      ],
+      "title": "ColumnAggregationMode",
+      "type": "string"
+    },
+    "OffsetUnit": {
+      "description": "Варианты сдвига по дате",
+      "enum": [
+        "calendar_day",
+        "business_day",
+        "month",
+        "quarter",
+        "year"
+      ],
+      "title": "OffsetUnit",
+      "type": "string"
+    }
+  },
+  "description": "Осреднение со сдвигом относительно даты оценки",
+  "properties": {
+    "func": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/AveragingRuleFunction"
+        }
+      ],
+      "default": "average"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "selection_mode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ColumnAggregationMode"
+        }
+      ],
+      "default": "first_available"
+    },
+    "cumulative_reset_period": {
+      "anyOf": [
+        {
+          "enum": [
+            "year",
+            "quarter",
+            "month",
+            "never"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cumulative Reset Period"
+    },
+    "carry_years": {
+      "default": 0,
+      "title": "Carry Years",
+      "type": "integer"
+    },
+    "type": {
+      "const": "offset",
+      "default": "offset",
+      "enum": [
+        "offset"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "offset_unit": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/OffsetUnit"
+        }
+      ],
+      "default": "month"
+    },
+    "offset_from": {
+      "default": -3,
+      "title": "Offset From",
+      "type": "integer"
+    },
+    "offset_to": {
+      "default": -1,
+      "title": "Offset To",
+      "type": "integer"
+    },
+    "offset_point": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "valuation_date",
+      "title": "Offset Point"
+    }
+  },
+  "title": "OffsetAveragingRule",
+  "type": "object"
+}

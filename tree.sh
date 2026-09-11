@@ -1,0 +1,1 @@
+tree -d -I __pycache__ -I target -I vendor -I build -I .build -I node_modules > dirs.txt

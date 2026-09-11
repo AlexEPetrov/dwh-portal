@@ -1,0 +1,40 @@
+{
+  "properties": {
+    "include": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Include",
+      "ui:col_span": 2,
+      "ui:property_priority": 1
+    },
+    "exclude": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exclude",
+      "ui:col_span": 2,
+      "ui:property_priority": 2
+    }
+  },
+  "title": "ContractIdentityFilter",
+  "type": "object"
+}

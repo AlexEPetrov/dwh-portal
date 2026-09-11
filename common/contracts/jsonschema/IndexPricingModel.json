@@ -1,0 +1,118 @@
+{
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Описание правила и его применения",
+      "title": "Description"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Наименование контракта или доп. соглашения.",
+      "title": "Name"
+    },
+    "scenario": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "В каком сценарии действует",
+      "title": "Scenario"
+    },
+    "multiplier": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Множитель (пересчитывается из дисконта/премии), применяемый к базовой\nрасчетной цене (индексу или введенному фикс. значению)",
+      "title": "Multiplier"
+    },
+    "volume_to": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Диапазон действия цены по объему",
+      "title": "Volume To"
+    },
+    "date_from": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "НАчиная с какой даты действует (включительно)",
+      "title": "Date From"
+    },
+    "type": {
+      "const": "index",
+      "default": "index",
+      "description": "Ценообразование на основе индекса (index) или фиксированной цены (fixed)",
+      "enum": [
+        "index"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "index": {
+      "description": "Наименование используемого индекса",
+      "title": "Index",
+      "type": "string"
+    }
+  },
+  "required": [
+    "index"
+  ],
+  "title": "IndexPricingModel",
+  "type": "object"
+}

@@ -1,0 +1,5 @@
+services:
+  core-service:
+    volumes:
+      - $APP_LOC_SRC_HOST:/app/src
+      - $APP_LOC_WHEELS_HOST:/wheels

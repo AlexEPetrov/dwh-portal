@@ -1,0 +1,487 @@
+{
+  "$defs": {
+    "CurveAvailabilityModeEnum": {
+      "enum": [
+        "rolling_days_with_interval_floor",
+        "point_dates_only"
+      ],
+      "title": "CurveAvailabilityModeEnum",
+      "type": "string"
+    },
+    "CurveDefinitionModel": {
+      "properties": {
+        "version": {
+          "default": 1,
+          "title": "Version",
+          "type": "integer",
+          "ui:group": {
+            "name": "Версия",
+            "priority": 100
+          },
+          "ui:property_priority": 1
+        },
+        "version_description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Description",
+          "ui:group": {
+            "name": "Версия",
+            "priority": 100
+          },
+          "ui:property_priority": 2
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author",
+          "ui:group": {
+            "name": "Версия",
+            "priority": 100
+          },
+          "ui:property_priority": 3
+        },
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Идентификатор объекта",
+          "title": "Id",
+          "ui:hidden": true
+        },
+        "tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Набор строковых идентификаторов (тегов), разделенных пробелом, например TTF GAS ARGUS",
+          "title": "Tag",
+          "ui:property_priority": 5
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Дополнительная категоризация контракта или другого объекта. Обычно имеет смысл выделять категории\nпо типу продукта (Gas, oil..), стране, поставщику/покупателю или или источнику даных (Argus/TTF/spot).\nПри импорте в Excel - создаются worksheets по именам категорий.",
+          "title": "Category",
+          "ui:property_priority": 4
+        },
+        "name": {
+          "description": "Наименование объекта",
+          "title": "Name",
+          "type": "string",
+          "ui:property_priority": 1
+        },
+        "slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Системное имя или код объекта (только английский)",
+          "title": "Slug",
+          "ui:property_priority": 2
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Описание объекта",
+          "title": "Description",
+          "ui:property_priority": 3
+        },
+        "type": {
+          "const": "curve",
+          "default": "curve",
+          "description": "Тип объекта",
+          "enum": [
+            "curve"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "curve_type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/CurveTypeEnum"
+            }
+          ],
+          "default": "spot",
+          "description": "Тип кривой - spot, forward, spotfx, forwardfx, volume, const"
+        },
+        "point_interval": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/CurvePointIntervalEnum"
+            }
+          ],
+          "default": "business_day",
+          "description": "Ожидаемый интервал поступления данных (каждый день, каждый рабочий день, каждый месяц, и т.д.).\nДля использования значения кривой, поступающей нерегулярно на ежедневной основе -\nсм. свойства report_date_aheads, observ_date_aheads."
+        },
+        "dwh_data_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Источник данных. Имя ресурса, содержащего SQL-запрос / шаблон.\nРесурс ищется в Python resource files.\nМожет содержать плейсхолдеры {param_name} для подстановки из dwh_data_params.\n\nВ зависимости от dwh_data_source_type, может быть:\n- наименование DB view\n- полный путь к ресурсу (queries/xxx.sql)",
+          "title": "Dwh Data Source"
+        },
+        "dwh_data_source_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Опциональный. Может использоваться для UI-подсказок.\nНЕ управляет логикой — логика определяется наличием новых полей (data_source_id, data_set_id).",
+          "title": "Dwh Data Source Type"
+        },
+        "dwh_data_params": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Параметры для подстановки в SQL-шаблон.\nМожет быть dict с параметрами или JSON-строка.",
+          "title": "Dwh Data Params"
+        },
+        "datasource": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ссылка на DataSourceModel (slug). Если указан, запрос из ресурса выполняется\nв контексте этого подключения (с выполнением DataSource.init_sql при создании сессии).\nЕсли НЕ указан — используется подключение по умолчанию (основное DWH).",
+          "title": "Datasource"
+        },
+        "dataset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ссылка на DataSetModel (slug). Если указан, то:\n- datasource может быть опущен (тогда берётся из DataSet.datasource);\n- В SQL-шаблон ресурса автоматически добавляется плейсхолдер {dataset_source},\n  который заменяется на read_parquet('...'), read_csv_auto('...') или имя таблицы.",
+          "title": "Dataset"
+        },
+        "query_timeout_seconds": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Таймаут выполнения запроса (секунды). Переопределяет DataSource.connection_ttl_seconds.",
+          "title": "Query Timeout Seconds"
+        },
+        "cache_enabled": {
+          "default": true,
+          "description": "Разрешено ли кеширование результатов для этой кривой.",
+          "title": "Cache Enabled",
+          "type": "boolean"
+        },
+        "report_date_aheads": {
+          "default": 0,
+          "description": "Report date - при значениях > 0, позволяет использовать данные за предидущие <report_date_aheads> дней",
+          "title": "Report Date Aheads",
+          "type": "integer"
+        },
+        "observ_date_aheads": {
+          "default": 0,
+          "description": "Возможность использования данных, наблюдаемых (обычно == \"загруженных\") в указанный интервал дней ранее",
+          "title": "Observ Date Aheads",
+          "type": "integer"
+        },
+        "availability_mode": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/CurveAvailabilityModeEnum"
+            }
+          ],
+          "default": "rolling_days_with_interval_floor",
+          "description": "Политика доступности значений кривой по report_date/interval"
+        },
+        "uom": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Единица измерения (см. справочник)",
+          "title": "Uom"
+        },
+        "data_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Наименование оригинального источника данных (platts, moex, etc.)",
+          "title": "Data Source"
+        },
+        "ticker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Код тикера/продукта (если применимо), например PUAAK03",
+          "title": "Ticker"
+        },
+        "calendar": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Календарь источника данных",
+          "title": "Calendar"
+        }
+      },
+      "title": "CurveDefinitionModel",
+      "type": "object"
+    },
+    "CurvePointIntervalEnum": {
+      "enum": [
+        "business_day",
+        "calendar_day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ],
+      "title": "CurvePointIntervalEnum",
+      "type": "string"
+    },
+    "CurvePointModel": {
+      "properties": {
+        "observation_date": {
+          "format": "date",
+          "title": "Observation Date",
+          "type": "string"
+        },
+        "report_date": {
+          "format": "date",
+          "title": "Report Date",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "extra_info": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extra Info"
+        }
+      },
+      "required": [
+        "observation_date",
+        "report_date",
+        "value"
+      ],
+      "title": "CurvePointModel",
+      "type": "object"
+    },
+    "CurveTypeEnum": {
+      "enum": [
+        "spot",
+        "spotfx",
+        "forward",
+        "forwardfx",
+        "volume",
+        "const"
+      ],
+      "title": "CurveTypeEnum",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "scenario": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Сценарий. Для дополнительного сценария можно определить настраиваемые объемы поставки или\nпараметры ценообразования.\nУдаление соответствующего свойства приведет к использованию параметров базового сценария.",
+      "title": "Scenario"
+    },
+    "type": {
+      "const": "curve_data",
+      "default": "curve_data",
+      "description": "Тип объекта",
+      "enum": [
+        "curve_data"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "curve": {
+      "$ref": "#/$defs/CurveDefinitionModel"
+    },
+    "load_time": {
+      "format": "date-time",
+      "title": "Load Time",
+      "type": "string"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    },
+    "values": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CurvePointModel"
+      },
+      "title": "Values",
+      "type": "array"
+    },
+    "data_source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Data Source"
+    }
+  },
+  "required": [
+    "curve",
+    "load_time"
+  ],
+  "title": "CurveModel",
+  "type": "object"
+}

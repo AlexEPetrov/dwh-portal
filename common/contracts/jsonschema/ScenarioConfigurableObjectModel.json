@@ -1,0 +1,34 @@
+{
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "scenario": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Сценарий. Для дополнительного сценария можно определить настраиваемые объемы поставки или\nпараметры ценообразования.\nУдаление соответствующего свойства приведет к использованию параметров базового сценария.",
+      "title": "Scenario"
+    }
+  },
+  "title": "ScenarioConfigurableObjectModel",
+  "type": "object"
+}

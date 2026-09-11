@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "category": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Дополнительная категоризация контракта или другого объекта. Обычно имеет смысл выделять категории\nпо типу продукта (Gas, oil..), стране, поставщику/покупателю или или источнику даных (Argus/TTF/spot).\nПри импорте в Excel - создаются worksheets по именам категорий.",
+      "title": "Category",
+      "ui:property_priority": 4
+    }
+  },
+  "title": "CategorizedObjectModel",
+  "type": "object"
+}

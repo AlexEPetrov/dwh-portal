@@ -1,0 +1,17 @@
+{
+  "name": "asset-management-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "web",
+    "ui-kit",
+    "app-shell"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=asset-management-web",
+    "build": "npm run build --workspace=asset-management-web",
+    "preview": "npm run preview --workspace=asset-management-web",
+    "mock": "npm run mock --workspace=asset-management-web",
+    "gen-api": "npm run gen-api --workspace=asset-management-web"
+  }
+}

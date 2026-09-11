@@ -1,0 +1,532 @@
+{
+  "$defs": {
+    "ContractAttributeFilter": {
+      "properties": {
+        "products": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "dictionary_name": "products",
+          "title": "Products",
+          "ui:col_span": 2,
+          "ui:property_priority": 1
+        },
+        "markets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "dictionary_name": "delivery_markets",
+          "title": "Markets",
+          "ui:col_span": 2,
+          "ui:property_priority": 2
+        },
+        "gl_accounts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "dictionary_name": "gl_accounts",
+          "title": "Gl Accounts",
+          "ui:col_span": 2,
+          "ui:property_priority": 3
+        }
+      },
+      "title": "ContractAttributeFilter",
+      "type": "object"
+    },
+    "ContractIdentityFilter": {
+      "properties": {
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Include",
+          "ui:col_span": 2,
+          "ui:property_priority": 1
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclude",
+          "ui:col_span": 2,
+          "ui:property_priority": 2
+        }
+      },
+      "title": "ContractIdentityFilter",
+      "type": "object"
+    },
+    "ContractSelectionFilter": {
+      "properties": {
+        "contracts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContractIdentityFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "ui:full_width": true,
+          "ui:property_priority": 1
+        },
+        "attributes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContractAttributeFilter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "ui:full_width": true,
+          "ui:property_priority": 2
+        }
+      },
+      "title": "ContractSelectionFilter",
+      "type": "object"
+    },
+    "FileFormatEnum": {
+      "enum": [
+        "json",
+        "csv"
+      ],
+      "title": "FileFormatEnum",
+      "type": "string"
+    },
+    "ReportingOptions": {
+      "properties": {
+        "min_date": {
+          "format": "date",
+          "title": "Min Date",
+          "type": "string"
+        },
+        "max_date": {
+          "format": "date",
+          "title": "Max Date",
+          "type": "string"
+        },
+        "date_column": {
+          "title": "Date Column",
+          "type": "string"
+        },
+        "units": {
+          "items": {
+            "$ref": "#/$defs/UnitOptions"
+          },
+          "title": "Units",
+          "type": "array"
+        },
+        "ammendments": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ammendments"
+        }
+      },
+      "required": [
+        "min_date",
+        "max_date",
+        "date_column"
+      ],
+      "title": "ReportingOptions",
+      "type": "object"
+    },
+    "UnitOptions": {
+      "properties": {
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "price_uom": {
+          "title": "Price Uom",
+          "type": "string"
+        },
+        "volume_uom": {
+          "title": "Volume Uom",
+          "type": "string"
+        }
+      },
+      "required": [
+        "currency",
+        "price_uom",
+        "volume_uom"
+      ],
+      "title": "UnitOptions",
+      "type": "object"
+    },
+    "ValuationOverride": {
+      "properties": {
+        "name_pattern": {
+          "title": "Name Pattern",
+          "type": "string"
+        },
+        "valuation_begin": {
+          "format": "date",
+          "title": "Valuation Begin",
+          "type": "string"
+        },
+        "valuation_end": {
+          "format": "date",
+          "title": "Valuation End",
+          "type": "string"
+        },
+        "observation_date": {
+          "format": "date",
+          "title": "Observation Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name_pattern",
+        "valuation_begin",
+        "valuation_end",
+        "observation_date"
+      ],
+      "title": "ValuationOverride",
+      "type": "object"
+    }
+  },
+  "description": "Параметры запуска в режиме симуляций",
+  "properties": {
+    "scenarios": {
+      "dictionary_name": "scenarios",
+      "items": {
+        "type": "string"
+      },
+      "title": "Scenarios",
+      "type": "array",
+      "ui:group": {
+        "name": "calculation_params",
+        "priority": 1,
+        "title": "Параметры расчёта"
+      },
+      "ui:property_priority": 2
+    },
+    "contract_filter": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContractSelectionFilter"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "ui:full_width": true,
+      "ui:group": {
+        "name": "calculation_scope",
+        "priority": 2,
+        "title": "Скоуп расчёта"
+      },
+      "ui:property_priority": 1
+    },
+    "valuation_start_date": {
+      "format": "date",
+      "title": "Valuation Start Date",
+      "type": "string",
+      "ui:group": {
+        "name": "dates",
+        "priority": 1,
+        "title": "Даты"
+      },
+      "ui:property_priority": 1
+    },
+    "valuation_end_date": {
+      "format": "date",
+      "title": "Valuation End Date",
+      "type": "string",
+      "ui:group": {
+        "name": "dates",
+        "priority": 1,
+        "title": "Даты"
+      },
+      "ui:property_priority": 2
+    },
+    "observation_date": {
+      "format": "date",
+      "title": "Observation Date",
+      "type": "string",
+      "ui:group": {
+        "name": "dates",
+        "priority": 1,
+        "title": "Даты"
+      },
+      "ui:property_priority": 3
+    },
+    "debug_mode": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "title": "Debug Mode",
+      "ui:group": {
+        "name": "debug",
+        "priority": 10,
+        "title": "Отладка"
+      },
+      "ui:property_priority": 1
+    },
+    "debug_pricing_dates": {
+      "anyOf": [
+        {
+          "items": {
+            "format": "date",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Debug Pricing Dates",
+      "ui:group": {
+        "name": "debug",
+        "priority": 10,
+        "title": "Отладка"
+      },
+      "ui:property_priority": 1
+    },
+    "operation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id",
+      "ui:group": {
+        "name": "calculation_params",
+        "priority": 1,
+        "title": "Параметры расчёта"
+      },
+      "ui:property_priority": 3
+    },
+    "tags": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Tags",
+      "ui:group": {
+        "name": "metadata",
+        "priority": 5,
+        "title": "Описание и метаданные"
+      },
+      "ui:property_priority": 2
+    },
+    "reporting": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ReportingOptions"
+        }
+      ],
+      "ui:full_width": true,
+      "ui:group": {
+        "name": "reporting",
+        "priority": 8,
+        "title": "Отчеты"
+      },
+      "ui:property_priority": 1
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Description",
+      "ui:group": {
+        "name": "metadata",
+        "priority": 5,
+        "title": "Описание и метаданные"
+      },
+      "ui:property_priority": 1
+    },
+    "curve_overrides": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ValuationOverride"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Curve Overrides",
+      "ui:full_width": true,
+      "ui:group": {
+        "name": "overrides",
+        "priority": 9,
+        "title": "Перегрузка (override) кривых"
+      },
+      "ui:property_priority": 1
+    },
+    "engine": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "python",
+      "title": "Engine",
+      "ui:group": {
+        "name": "technical",
+        "priority": 99,
+        "title": "Служебные"
+      },
+      "ui:property_priority": 1
+    },
+    "valuation_type": {
+      "description": "Тип запуска: 'daily', 'eom', 'eoy', UUID, 'forecast'",
+      "title": "Valuation Type",
+      "type": "string",
+      "ui:group": {
+        "name": "calculation_params",
+        "priority": 1,
+        "title": "Параметры расчёта"
+      },
+      "ui:property_priority": 1
+    },
+    "samples_count": {
+      "default": 5000,
+      "title": "Samples Count",
+      "type": "integer",
+      "ui:group": {
+        "name": "simulation",
+        "priority": 4,
+        "title": "Параметры симуляции"
+      },
+      "ui:property_priority": 1
+    },
+    "samples_from": {
+      "default": 0,
+      "title": "Samples From",
+      "type": "integer",
+      "ui:group": {
+        "name": "simulation",
+        "priority": 4,
+        "title": "Параметры симуляции"
+      },
+      "ui:property_priority": 2
+    },
+    "parallel_processes_count": {
+      "default": 5,
+      "title": "Parallel Processes Count",
+      "type": "integer",
+      "ui:group": {
+        "name": "simulation",
+        "priority": 4,
+        "title": "Параметры симуляции"
+      },
+      "ui:property_priority": 3
+    },
+    "format": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FileFormatEnum"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "csv",
+      "ui:group": {
+        "name": "simulation",
+        "priority": 4,
+        "title": "Параметры симуляции"
+      },
+      "ui:property_priority": 4
+    }
+  },
+  "required": [
+    "scenarios",
+    "valuation_start_date",
+    "valuation_end_date",
+    "observation_date",
+    "debug_pricing_dates",
+    "tags",
+    "reporting",
+    "description",
+    "curve_overrides",
+    "valuation_type"
+  ],
+  "title": "RunMonteCarloValuationCommand",
+  "type": "object"
+}

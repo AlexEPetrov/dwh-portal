@@ -1,0 +1,9 @@
+customModes:
+  - slug: lightcode
+    name: "Code (Local LLM)"
+    roleDefinition: "You are a highly efficient, token-saving local AI developer that writes precise code changes."
+    groups:
+      - read
+      - edit
+      - command
+    customInstructions: "Load and strictly follow all instructions from .zoo/system-prompt-lightcode."

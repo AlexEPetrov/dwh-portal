@@ -1,0 +1,156 @@
+{
+  "$defs": {
+    "CumulativeRule": {
+      "description": "Конфигурация кумулятивной (stateful) агрегации для элемента индекса",
+      "properties": {
+        "func": {
+          "enum": [
+            "sum",
+            "average",
+            "max",
+            "min",
+            "loss_carry_forward"
+          ],
+          "title": "Func",
+          "type": "string"
+        },
+        "reset_period": {
+          "default": "year",
+          "enum": [
+            "year",
+            "quarter",
+            "month",
+            "never"
+          ],
+          "title": "Reset Period",
+          "type": "string"
+        },
+        "carry_years": {
+          "default": 0,
+          "title": "Carry Years",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "func"
+      ],
+      "title": "CumulativeRule",
+      "type": "object"
+    }
+  },
+  "description": "\"Элемент индекса - на основе значений кривой",
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "name": {
+      "default": "",
+      "title": "Name",
+      "type": "string"
+    },
+    "slug": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Системное имя или код объекта (только английский)",
+      "title": "Slug",
+      "ui:property_priority": 2
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "uom": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Единицы измерения",
+      "title": "Uom"
+    },
+    "cumulative": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CumulativeRule"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "опциональная кумулятивная агрегация. Для налогов. Пока не реализовываем."
+    },
+    "type": {
+      "const": "contractref",
+      "default": "contractref",
+      "description": "Тип элемента формулы - значение на основе источника PNL значений",
+      "enum": [
+        "contractref"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "filter": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ODAta-like фильтр для контрактов, которые будут возвращены данным элементом",
+      "title": "Filter"
+    },
+    "property": {
+      "default": "value",
+      "description": "Свойство контракта, которое будет использовано.\nПо умолчанию - value (выручка). Варианты: payment, payment_usd, payment_rub",
+      "enum": [
+        "value",
+        "value_rub",
+        "value_usd",
+        "payment_amount",
+        "payment_amount_rub",
+        "payment_amount_usd",
+        "payment_volume",
+        "volume"
+      ],
+      "title": "Property",
+      "type": "string"
+    }
+  },
+  "title": "ContractElementModel",
+  "type": "object"
+}

@@ -1,0 +1,3 @@
+- DO NOT read or index VS Code logs, environment files, or terminal session history.
+- NEVER scan or analyze the `.vscode/` or `.git/` directories.
+- Keep your tool responses as concise as possible to save context window tokens.

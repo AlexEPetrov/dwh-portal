@@ -1,0 +1,1037 @@
+{
+  "$defs": {
+    "ContractPricingMode": {
+      "description": "Модель ценообразования",
+      "enum": [
+        "price_amendments",
+        "individual_agreements"
+      ],
+      "title": "ContractPricingMode",
+      "type": "string"
+    },
+    "ContractTypeEnum": {
+      "enum": [
+        "market",
+        "accrual",
+        "transfer"
+      ],
+      "title": "ContractTypeEnum",
+      "type": "string"
+    },
+    "DeliveryModel": {
+      "description": "Описание поставок. Описываем пункт поставки и откуда берем данные",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Идентификатор объекта",
+          "title": "Id",
+          "ui:hidden": true
+        },
+        "delivery_point": {
+          "description": "Точка поставки (из списка)",
+          "title": "Delivery Point",
+          "type": "string"
+        },
+        "volume_index": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Наименование индекса с данными поставки. Индекс при необходимости используется в формулах.\nПри сохранении нового контракта - инициилизируется автоматически на основе CONTRACT SLUG",
+          "title": "Volume Index"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Наименование поставки в исодных документах. Используется для поиска\nобъемов поставки в указанную точку поставки.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Описание поставки (свободная форма)",
+          "title": "Description"
+        },
+        "spot_data_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Пока не заполнять",
+          "title": "Spot Data Source"
+        },
+        "spot_data_source_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Пока не заполнять",
+          "title": "Spot Data Source Type"
+        },
+        "spot_data_params": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Пока не заполнять",
+          "title": "Spot Data Params"
+        },
+        "fwd_data_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Пока не заполнять",
+          "title": "Fwd Data Source"
+        },
+        "fwd_data_source_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Пока не заполнять",
+          "title": "Fwd Data Source Type"
+        },
+        "fwd_data_params": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Пока не заполнять",
+          "title": "Fwd Data Params"
+        }
+      },
+      "required": [
+        "delivery_point"
+      ],
+      "title": "DeliveryModel",
+      "type": "object"
+    },
+    "FixedPricingModel": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Идентификатор объекта",
+          "title": "Id",
+          "ui:hidden": true
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Описание правила и его применения",
+          "title": "Description"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Наименование контракта или доп. соглашения.",
+          "title": "Name"
+        },
+        "scenario": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "В каком сценарии действует",
+          "title": "Scenario"
+        },
+        "multiplier": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Множитель (пересчитывается из дисконта/премии), применяемый к базовой\nрасчетной цене (индексу или введенному фикс. значению)",
+          "title": "Multiplier"
+        },
+        "volume_to": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Диапазон действия цены по объему",
+          "title": "Volume To"
+        },
+        "date_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "НАчиная с какой даты действует (включительно)",
+          "title": "Date From"
+        },
+        "type": {
+          "const": "fixed",
+          "default": "fixed",
+          "description": "Ценообразование на основе индекса (index) или фиксированной цены (fixed)",
+          "enum": [
+            "fixed"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "fixed_price": {
+          "description": "Фиксированная цена",
+          "title": "Fixed Price",
+          "type": "number"
+        }
+      },
+      "required": [
+        "fixed_price"
+      ],
+      "title": "FixedPricingModel",
+      "type": "object"
+    },
+    "IndexPricingModel": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Идентификатор объекта",
+          "title": "Id",
+          "ui:hidden": true
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Описание правила и его применения",
+          "title": "Description"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Наименование контракта или доп. соглашения.",
+          "title": "Name"
+        },
+        "scenario": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "В каком сценарии действует",
+          "title": "Scenario"
+        },
+        "multiplier": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Множитель (пересчитывается из дисконта/премии), применяемый к базовой\nрасчетной цене (индексу или введенному фикс. значению)",
+          "title": "Multiplier"
+        },
+        "volume_to": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Диапазон действия цены по объему",
+          "title": "Volume To"
+        },
+        "date_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "НАчиная с какой даты действует (включительно)",
+          "title": "Date From"
+        },
+        "type": {
+          "const": "index",
+          "default": "index",
+          "description": "Ценообразование на основе индекса (index) или фиксированной цены (fixed)",
+          "enum": [
+            "index"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "description": "Наименование используемого индекса",
+          "title": "Index",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "IndexPricingModel",
+      "type": "object"
+    },
+    "IndividualContractPricingModel": {
+      "description": "Ценообразование индивидуального контракта, заключаемого в рамках генерального соглашения (трейдинг)",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Идентификатор объекта",
+          "title": "Id",
+          "ui:hidden": true
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Описание правила и его применения",
+          "title": "Description"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Наименование контракта или доп. соглашения.",
+          "title": "Name"
+        },
+        "scenario": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "В каком сценарии действует",
+          "title": "Scenario"
+        },
+        "multiplier": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Множитель (пересчитывается из дисконта/премии), применяемый к базовой\nрасчетной цене (индексу или введенному фикс. значению)",
+          "title": "Multiplier"
+        },
+        "type": {
+          "const": "individual_agreement",
+          "default": "individual_agreement",
+          "enum": [
+            "individual_agreement"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "fixed_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Фиксированная цена",
+          "title": "Fixed Price"
+        },
+        "index": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Наименование используемого индекса",
+          "title": "Index"
+        },
+        "dcq": {
+          "title": "Dcq",
+          "type": "number"
+        },
+        "mdcq": {
+          "title": "Mdcq",
+          "type": "number"
+        },
+        "tcq": {
+          "title": "Tcq",
+          "type": "number"
+        },
+        "mtcq": {
+          "title": "Mtcq",
+          "type": "number"
+        },
+        "date_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Окончание действия",
+          "title": "Date To"
+        },
+        "date_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Начало действия",
+          "title": "Date From"
+        },
+        "delivery_point": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Точка поставки по данному соглашению",
+          "title": "Delivery Point"
+        },
+        "trade_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trade Date"
+        }
+      },
+      "required": [
+        "dcq",
+        "mdcq",
+        "tcq",
+        "mtcq"
+      ],
+      "title": "IndividualContractPricingModel",
+      "type": "object"
+    },
+    "OffsetUnit": {
+      "description": "Варианты сдвига по дате",
+      "enum": [
+        "calendar_day",
+        "business_day",
+        "month",
+        "quarter",
+        "year"
+      ],
+      "title": "OffsetUnit",
+      "type": "string"
+    },
+    "PaymentAmountType": {
+      "description": "Как вводим amount - фикс сумма или процент или как-то еще (на будущее - остаток и т.д.)",
+      "enum": [
+        "fixed",
+        "percentage"
+      ],
+      "title": "PaymentAmountType",
+      "type": "string"
+    },
+    "PaymentTermAnchorDate": {
+      "description": "Anchor date периода ценообразования",
+      "enum": [
+        "payment_period_start",
+        "payment_period_end"
+      ],
+      "title": "PaymentTermAnchorDate",
+      "type": "string"
+    },
+    "PaymentTermModel": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Идентификатор объекта",
+          "title": "Id",
+          "ui:hidden": true
+        },
+        "payment_period": {
+          "default": "month",
+          "title": "Payment Period",
+          "type": "string"
+        },
+        "date_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date Offset"
+        },
+        "date_offset_unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OffsetUnit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "amount": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 100,
+          "title": "Amount"
+        },
+        "amount_type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PaymentAmountType"
+            }
+          ],
+          "default": "percentage"
+        },
+        "anchor_date": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PaymentTermAnchorDate"
+            }
+          ],
+          "default": "payment_period_end"
+        }
+      },
+      "title": "PaymentTermModel",
+      "type": "object"
+    }
+  },
+  "description": "Описание конракта. Инофрмация о ценообразовании (см pricing) и\nобъемах поставки (deliveries) может быть кастомизирована в отдельныъ сценариях",
+  "properties": {
+    "payment_terms": {
+      "description": "Условия платежа",
+      "items": {
+        "$ref": "#/$defs/PaymentTermModel"
+      },
+      "title": "Payment Terms",
+      "type": "array",
+      "ui:tab": true
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 1
+    },
+    "version_description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version Description",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 2
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 3
+    },
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Идентификатор объекта",
+      "title": "Id",
+      "ui:hidden": true
+    },
+    "is_active": {
+      "default": true,
+      "description": "Является ли объект активным (актуальным, к расчету или к использованию)",
+      "title": "Is Active",
+      "type": "boolean",
+      "ui:group": {
+        "name": "Версия",
+        "priority": 100
+      },
+      "ui:property_priority": 6
+    },
+    "tag": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Набор строковых идентификаторов (тегов), разделенных пробелом, например TTF GAS ARGUS",
+      "title": "Tag",
+      "ui:property_priority": 5
+    },
+    "category": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Дополнительная категоризация контракта или другого объекта. Обычно имеет смысл выделять категории\nпо типу продукта (Gas, oil..), стране, поставщику/покупателю или или источнику даных (Argus/TTF/spot).\nПри импорте в Excel - создаются worksheets по именам категорий.",
+      "title": "Category",
+      "ui:property_priority": 4
+    },
+    "name": {
+      "description": "Наименование объекта",
+      "title": "Name",
+      "type": "string",
+      "ui:property_priority": 1
+    },
+    "slug": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Системное имя или код объекта (только английский)",
+      "title": "Slug",
+      "ui:property_priority": 2
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Описание объекта",
+      "title": "Description",
+      "ui:property_priority": 3
+    },
+    "type": {
+      "const": "contract",
+      "default": "contract",
+      "description": "Тип объекта - контракт. Обязательно для заполнения в форме объекта.",
+      "enum": [
+        "contract"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "contract_type": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ContractTypeEnum"
+        }
+      ],
+      "default": "market",
+      "description": "Тип контракта (Единицы расчета) - контракт рынка, расчет начислений или transfer"
+    },
+    "deliveries": {
+      "description": "Список точек поставок и условий поставки",
+      "items": {
+        "$ref": "#/$defs/DeliveryModel"
+      },
+      "title": "Deliveries",
+      "type": "array",
+      "ui:tab": true
+    },
+    "volume_uom": {
+      "description": "Единицы измерения объема поставок по контракту (см. справочник Единицы объема)",
+      "title": "Volume Uom",
+      "type": "string",
+      "ui:group": {
+        "name": "Единицы измерения",
+        "priority": 1
+      },
+      "ui:property_priority": 1
+    },
+    "pricing_uom": {
+      "description": "Единица измерения цены контракта (См справочник Единицы цены)",
+      "title": "Pricing Uom",
+      "type": "string",
+      "ui:group": {
+        "name": "Единицы измерения",
+        "priority": 2
+      },
+      "ui:property_priority": 2
+    },
+    "pricing": {
+      "description": "Условия ценообразования",
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "fixed": "#/$defs/FixedPricingModel",
+            "index": "#/$defs/IndexPricingModel",
+            "individual_agreement": "#/$defs/IndividualContractPricingModel"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/IndexPricingModel"
+          },
+          {
+            "$ref": "#/$defs/FixedPricingModel"
+          },
+          {
+            "$ref": "#/$defs/IndividualContractPricingModel"
+          }
+        ]
+      },
+      "title": "Pricing",
+      "type": "array",
+      "ui:tab": true
+    },
+    "pricing_mode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ContractPricingMode"
+        }
+      ],
+      "default": "price_amendments",
+      "description": "Порядок действия правил ценообразования.\nА) AMENDMENTS - Начальные и доп. соглашения по цене и на объем сверх стандартного,\nБ) INDIVIDUAL_CONTRACTS - независимые подконтракты (для контрактов трейдинга, EFET)"
+    },
+    "counterparty": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Контрагент (См. справочник Контрагенты)",
+      "dictionary_name": "counterparties",
+      "title": "Counterparty"
+    },
+    "reg_number": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Регистрационный номер контракта",
+      "title": "Reg Number"
+    },
+    "country": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Страна поставки (см. справочник стран)",
+      "dictionary_name": "countries",
+      "title": "Country"
+    },
+    "supply_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Коридор поставки",
+      "dictionary_name": "supply_paths",
+      "title": "Supply Path"
+    },
+    "supply_region": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Регион поставки. Пока не используется.",
+      "title": "Supply Region"
+    },
+    "delivery_market": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Рынок сбыта (ДЗ БЗ).",
+      "dictionary_name": "delivery_markets",
+      "title": "Delivery Market"
+    },
+    "product": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Наименование продукта (из справочника)",
+      "dictionary_name": "products",
+      "title": "Product"
+    },
+    "gl_account": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Наименование статьи баланса (из справочника)",
+      "dictionary_name": "gl_accounts",
+      "title": "Gl Account"
+    }
+  },
+  "title": "ContractModel",
+  "type": "object"
+}

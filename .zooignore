@@ -1,0 +1,23 @@
+# Исключаем тяжелые текстовые и сгенерированные файлы
+*.package-lock.json
+*.pnpm-lock.yaml
+*.yarn.lock
+*.map
+*.csv
+*.svg
+
+# Исключаем папки сборщиков и кэша
+.next/
+.nuxt/
+out/
+dist/
+build/
+.build/
+.cache/
+vendor/
+*.log
+*.json
+
+.venv/
+venv/
+__pycache__/

@@ -1,0 +1,1 @@
+tree -d -I __pycache__ > dirs.txt

@@ -1,0 +1,203 @@
+version: 1
+approval:
+  autonomous:
+    rank: 10
+  workflow_allowed:
+    rank: 20
+  human_required:
+    rank: 30
+resolution:
+  effective_policy: max(change_class, topic, contract)
+  escalation_only_during_task: true
+  missing_required_evidence: MISSING_EVIDENCE
+change_classes:
+  presentation_only:
+    approval: autonomous
+    when:
+    - no_business_semantic_change
+    - no_public_contract_change
+  documentation_nonsemantic:
+    approval: autonomous
+    when:
+    - no_authority_or_semantic_change
+  mechanical_refactor:
+    approval: workflow_allowed
+    when:
+    - behavior_preserved
+  generated_regeneration:
+    approval: workflow_allowed
+    when:
+    - authoring_source_approved_or_unchanged
+  public_api_semantic:
+    approval: human_required
+  shared_python_rust_semantic:
+    approval: human_required
+  business_or_contract_semantic:
+    approval: human_required
+topics:
+  catalog:
+    paths:
+    - backend/core-service/src/domains/catalog/**
+    - backend/core-service/src/api/portal/**
+    - frontend/web/src/modules/catalog/**
+    spec: openspec/specs/catalog/spec.md
+    approval: workflow_allowed
+    workflow: api-contract
+    contract: http-api
+    escalate_if: public_api_shape_or_semantic_change
+    escalate_to: human_required
+  ingestion:
+    paths:
+    - backend/core-service/src/domains/catalog/collectors/**
+    - backend/core-service/src/domains/catalog/providers/**
+    spec: openspec/specs/ingestion/spec.md
+    approval: workflow_allowed
+    escalate_if: business_semantic_change
+    escalate_to: human_required
+  market-data-products:
+    paths:
+    - frontend/web/src/modules/market-data/**
+    spec: openspec/specs/market-data-dual-tabs/spec.md
+    approval: autonomous
+    spec_optional_until_created: true
+  curve-availability:
+    paths:
+    - backend/core-service/src/domains/risk/repositories/curve_data.py
+    - backend/core-service/src/domains/risk/repositories/calendar_data.py
+    - backend/core-service/src/domains/risk/services/valuation/local/calculators/curve_calculator.py
+    - backend/core-service/src/domains/risk/services/valuation/local/calculators/index_calculator.py
+    - backend/calc-service/src/services/calculators/curve_calculator.rs
+    spec: openspec/specs/curve-availability/spec.md
+    approval: workflow_allowed
+    workflow: high-risk-semantics
+    legacy_evidence:
+    - docs/design/business/curve-availability-policy.md
+    spec_optional_until_created: true
+    escalate_if: business_semantic_change
+    escalate_to: human_required
+  valuation-contract-filters:
+    paths:
+    - backend/core-service/src/domains/risk/commands/mappings.py
+    - backend/core-service/src/api/valuation/**
+    - frontend/web/src/modules/valuations/**
+    spec: openspec/specs/valuation-contract-filters/spec.md
+    approval: workflow_allowed
+    workflow: high-risk-semantics
+    legacy_evidence:
+    - docs/design/adr/active/api/valuation-contracts-filter.md
+    spec_optional_until_created: true
+    escalate_if: business_semantic_change
+    escalate_to: human_required
+  dependency-ordering:
+    paths:
+    - backend/core-service/src/domains/risk/commands/mappings.py
+    - backend/calc-service/src/services/preparation/contract_dependency_service.rs
+    spec: openspec/specs/dependency-ordering/spec.md
+    approval: workflow_allowed
+    workflow: high-risk-semantics
+    spec_optional_until_created: true
+    escalate_if: business_semantic_change
+    escalate_to: human_required
+  python-rust-transport:
+    paths:
+    - common/contracts/proto/**
+    - backend/core-service/src/proto/**
+    - backend/calc-service/proto/**
+    - backend/calc-service/src/generated/**
+    spec: openspec/specs/python-rust-transport/spec.md
+    approval: workflow_allowed
+    workflow: shared-proto
+    escalate_if: business_semantic_change
+    escalate_to: human_required
+    spec_optional_until_created: true
+  excel-compatibility:
+    paths:
+    - backend/core-service/src/domains/management/services/office_interop/**
+    spec: openspec/specs/excel-compatibility/spec.md
+    approval: workflow_allowed
+    workflow: excel-compatibility
+    escalate_if: semantic_or_compatibility_change
+    escalate_to: human_required
+    spec_optional_until_created: true
+  http-api-contract:
+    paths:
+    - backend/core-service/src/api/**
+    - common/contracts/openapi/**
+    - frontend/web/src/shared/api/generated/**
+    spec: openspec/specs/http-api-contract/spec.md
+    approval: workflow_allowed
+    workflow: api-contract
+    contract: http-api
+    spec_optional_until_created: true
+    escalate_if: public_api_shape_or_semantic_change
+    escalate_to: human_required
+contracts:
+  http-api:
+    approval: workflow_allowed
+    workflow: api-contract
+    chain:
+    - role: authoring_source
+      paths:
+      - backend/core-service/src/api/**
+    - role: published_contract
+      paths:
+      - common/contracts/openapi/openapi.json
+      read_only_by_hand: true
+    - role: generated_consumer
+      paths:
+      - frontend/web/src/shared/api/generated/**
+      read_only_by_hand: true
+    - role: consumer
+      paths:
+      - frontend/web/**
+    reconciliation:
+    - when:
+      - api_authoring_source_changed
+      verification: OPENAPI-EXPORT
+    - when:
+      - public_api_shape_changed
+      - published_openapi_changed
+      verification: FRONTEND-GEN-API
+    - when:
+      - frontend_generated_api_changed
+      - frontend_consumer_changed
+      verification: FRONTEND-BUILD
+    escalate_if: public_api_shape_or_semantic_change
+    escalate_to: human_required
+  shared-proto:
+    approval: workflow_allowed
+    workflow: shared-proto
+    paths:
+    - common/contracts/proto/**
+    - backend/core-service/src/proto/**
+    - backend/calc-service/proto/**
+    - backend/calc-service/src/generated/**
+    escalate_if: business_semantic_change
+    escalate_to: human_required
+verification:
+  CORE-PYTEST-UNIT:
+    run: cd backend/core-service && PYTHONPATH=. .venv/bin/pytest tests/unit/ -v
+  CORE-PYTEST-TARGET:
+    run_template: cd backend/core-service && PYTHONPATH=. .venv/bin/pytest {test_target}
+      -v
+  OPENAPI-EXPORT:
+    run: cd infra/scripts && bash export_openapi.sh 2>&1 | tail -5
+    postconditions:
+    - common/contracts/openapi/openapi.json exists
+    - inspect expected OpenAPI diff
+  FRONTEND-GEN-API:
+    run: cd frontend/web && npm run gen-api
+  FRONTEND-BUILD:
+    run: cd frontend/web && npm run build
+  CALC-CARGO-TEST:
+    run: cd backend/calc-service && cargo test --all-features
+  CALC-CARGO-FMT:
+    run: cd backend/calc-service && cargo fmt --check
+  CALC-CARGO-CLIPPY:
+    run: cd backend/calc-service && cargo clippy --all-targets --all-features -- -D
+      warnings
+execution:
+  closed_world: true
+  exact_registered_invocations: true
+  preserve_working_tree: true
+  unregistered_verification_modalities: forbidden
