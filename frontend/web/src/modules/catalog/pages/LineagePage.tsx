@@ -134,7 +134,7 @@ const LineagePage = () => {
       ) : null}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {lineage ? (
-          <LineageGraph nodes={lineage.nodes} edges={lineage.edges} fillHeight />
+          <LineageGraph nodes={lineage.nodes} edges={lineage.edges} fillHeight syncViewInUrl />
         ) : (
           <Empty description="Выберите объект — для демо удобнее DATA_SOURCE (ICE / CME Group)" />
         )}

@@ -12,11 +12,13 @@ import {
   Handle,
   Position,
 } from '@xyflow/react';
-import { Empty, Tag, Typography } from 'antd';
+import { Empty } from 'antd';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '@xyflow/react/dist/style.css';
-import { STAGE_ORDER, TYPE_FILL, buildFlowEdges } from './lineageFlow';
+import LineageAssetChip from './LineageAssetChip';
+import { STAGE_ORDER, TYPE_ACCENT, buildFlowEdges } from './lineageFlow';
+import './lineageViews.css';
 
 type Props = {
   nodes: LineageNode[];
@@ -27,34 +29,23 @@ type AssetNodeData = {
   label: string;
   assetType: string;
   unresolved?: boolean;
-  fill: string;
+  accent: string;
 };
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 64;
 
 const AssetFlowNode = ({ data }: NodeProps<Node<AssetNodeData>>) => (
-  <div
-    style={{
-      width: NODE_WIDTH,
-      minHeight: NODE_HEIGHT,
-      padding: '8px 10px',
-      borderRadius: 8,
-      border: data.unresolved ? '1px solid #ff4d4f' : `1px solid ${data.fill}`,
-      borderStyle: data.assetType === 'PROCESS' ? 'dashed' : 'solid',
-      background: data.unresolved ? '#fff1f0' : '#fff',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-    }}
-  >
+  <>
     <Handle type="target" position={Position.Left} style={{ opacity: 0.35 }} />
-    <Tag color={data.unresolved ? 'red' : undefined} style={{ marginBottom: 4 }}>
-      <span style={{ color: data.unresolved ? undefined : data.fill }}>{data.assetType}</span>
-    </Tag>
-    <Typography.Text strong ellipsis style={{ display: 'block', maxWidth: NODE_WIDTH - 20 }}>
-      {data.label}
-    </Typography.Text>
+    <LineageAssetChip
+      assetType={data.assetType}
+      title={data.label}
+      unresolved={data.unresolved}
+      interactive={!data.unresolved}
+    />
     <Handle type="source" position={Position.Right} style={{ opacity: 0.35 }} />
-  </div>
+  </>
 );
 
 const nodeTypes = { asset: AssetFlowNode };
@@ -101,10 +92,9 @@ const LineageMapView = ({ nodes, edges }: Props) => {
         label: node.display_name,
         assetType: node.asset_type,
         unresolved: node.unresolved,
-        fill: TYPE_FILL[node.asset_type] || '#8c8c8c',
+        accent: TYPE_ACCENT[node.asset_type] || '#8c8c8c',
       },
     }));
-    // Stable vertical order within a rank: stage then name
     rfNodes.sort((a, b) => {
       const stageDiff =
         STAGE_ORDER.indexOf(a.data.assetType) - STAGE_ORDER.indexOf(b.data.assetType);
@@ -135,9 +125,7 @@ const LineageMapView = ({ nodes, edges }: Props) => {
     return <Empty description="Нет lineage для выбранного объекта" />;
   }
   if (!edges.length || !flow.edges.length) {
-    return (
-      <Empty description="У объекта нет data-flow рёбер для карты зависимостей." />
-    );
+    return <Empty description="У объекта нет data-flow рёбер для карты зависимостей." />;
   }
 
   return (
@@ -176,7 +164,7 @@ const LineageMapView = ({ nodes, edges }: Props) => {
         <MiniMap
           pannable
           zoomable
-          nodeColor={(node) => (node.data as AssetNodeData).fill || '#8c8c8c'}
+          nodeColor={(node) => (node.data as AssetNodeData).accent || '#8c8c8c'}
         />
       </ReactFlow>
     </div>

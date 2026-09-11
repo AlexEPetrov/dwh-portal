@@ -1,59 +1,115 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Tabs } from 'antd';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import LineageListView from './LineageListView';
 import LineageMapView from './LineageMapView';
 import './lineageViews.css';
+
+type ViewKey = 'list' | 'map';
 
 type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
   /** Fill parent height (Lineage page). Embedded tabs can pass false. */
   fillHeight?: boolean;
+  /**
+   * Persist list/map in `?view=list|map` so browser Back from an object card
+   * restores the same Lineage tab.
+   */
+  syncViewInUrl?: boolean;
 };
 
+const parseView = (raw: string | null): ViewKey => (raw === 'map' ? 'map' : 'list');
+
 /** Parallel lineage presentations: hop list and React Flow dependency map. */
-const LineageGraph = ({ nodes, edges, fillHeight = true }: Props) => (
-  <Tabs
-    defaultActiveKey="list"
-    className={fillHeight ? 'lineage-views-tabs fill-height' : 'lineage-views-tabs'}
-    style={
-      fillHeight
-        ? {
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-          }
-        : undefined
+const LineageGraph = ({
+  nodes,
+  edges,
+  fillHeight = true,
+  syncViewInUrl = false,
+}: Props) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [localView, setLocalView] = useState<ViewKey>('list');
+  const activeKey: ViewKey = syncViewInUrl ? parseView(searchParams.get('view')) : localView;
+
+  useEffect(() => {
+    if (!syncViewInUrl) {
+      return;
     }
-    items={[
-      {
-        key: 'list',
-        label: 'Список',
-        children: (
-          <div style={fillHeight ? { flex: 1, minHeight: 0, overflow: 'auto' } : undefined}>
-            <LineageListView nodes={nodes} edges={edges} />
-          </div>
-        ),
+    const raw = searchParams.get('view');
+    if (raw === 'list' || raw === 'map') {
+      return;
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('view', 'list');
+        return next;
       },
-      {
-        key: 'map',
-        label: 'Граф',
-        children: (
-          <div
-            style={
-              fillHeight
-                ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%' }
-                : { height: 'min(70vh, 720px)', display: 'flex', flexDirection: 'column' }
+      { replace: true }
+    );
+  }, [syncViewInUrl, searchParams, setSearchParams]);
+
+  const setView = (key: ViewKey) => {
+    if (!syncViewInUrl) {
+      setLocalView(key);
+      return;
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('view', key);
+        return next;
+      },
+      { replace: false }
+    );
+  };
+
+  return (
+    <Tabs
+      activeKey={activeKey}
+      onChange={(key) => setView(key === 'map' ? 'map' : 'list')}
+      className={fillHeight ? 'lineage-views-tabs fill-height' : 'lineage-views-tabs'}
+      style={
+        fillHeight
+          ? {
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
             }
-          >
-            <LineageMapView nodes={nodes} edges={edges} />
-          </div>
-        ),
-      },
-    ]}
-  />
-);
+          : undefined
+      }
+      items={[
+        {
+          key: 'list',
+          label: 'Список',
+          children: (
+            <div style={fillHeight ? { flex: 1, minHeight: 0, overflow: 'auto' } : undefined}>
+              <LineageListView nodes={nodes} edges={edges} />
+            </div>
+          ),
+        },
+        {
+          key: 'map',
+          label: 'Граф',
+          children: (
+            <div
+              style={
+                fillHeight
+                  ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%' }
+                  : { height: 'min(70vh, 720px)', display: 'flex', flexDirection: 'column' }
+              }
+            >
+              <LineageMapView nodes={nodes} edges={edges} />
+            </div>
+          ),
+        },
+      ]}
+    />
+  );
+};
 
 export default LineageGraph;

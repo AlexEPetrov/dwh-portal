@@ -1,12 +1,10 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
-import { Card, Empty, Space, Tag, Typography } from 'antd';
+import { Empty, Space, Tag, Typography } from 'antd';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  STAGE_ORDER,
-  TYPE_COLOR,
-  buildFlowRows,
-} from './lineageFlow';
+import LineageAssetChip from './LineageAssetChip';
+import { STAGE_ORDER, TYPE_COLOR, buildFlowRows } from './lineageFlow';
+import './lineageViews.css';
 
 type Props = {
   nodes: LineageNode[];
@@ -21,33 +19,16 @@ const NodeCard = ({
   actor?: boolean;
 }) => {
   const navigate = useNavigate();
+  const interactive = !node.unresolved;
   return (
-    <Card
-      size="small"
-      hoverable={!node.unresolved}
-      onClick={() => !node.unresolved && navigate(`/objects/${node.id}`)}
-      style={
-        actor
-          ? {
-              borderStyle: 'dashed',
-              borderColor: '#13c2c2',
-              background: 'rgba(19, 194, 194, 0.06)',
-              minWidth: 140,
-              maxWidth: 220,
-            }
-          : { minWidth: 160, maxWidth: 280 }
-      }
-    >
-      <Space direction="vertical" size={2}>
-        <Tag color={node.unresolved ? 'red' : TYPE_COLOR[node.asset_type]}>
-          {actor ? 'PROCESS · actor' : node.asset_type}
-        </Tag>
-        <Typography.Text strong ellipsis style={{ maxWidth: actor ? 200 : 260 }}>
-          {node.display_name}
-        </Typography.Text>
-        {node.unresolved ? <Typography.Text type="danger">unresolved</Typography.Text> : null}
-      </Space>
-    </Card>
+    <LineageAssetChip
+      assetType={node.asset_type}
+      title={node.display_name}
+      unresolved={node.unresolved}
+      actor={actor}
+      interactive={interactive}
+      onClick={() => interactive && navigate(`/objects/${node.id}`)}
+    />
   );
 };
 

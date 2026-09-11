@@ -10,16 +10,24 @@ export const TYPE_COLOR: Record<string, string> = {
   MATERIALIZED_VIEW: 'green',
 };
 
-/** Hex fills for React Flow nodes (aligned with Ant Tag colors). */
-export const TYPE_FILL: Record<string, string> = {
+/** Accent / border colors shared by list chips and graph nodes. */
+export const TYPE_ACCENT: Record<string, string> = {
   DATA_SOURCE: '#722ed1',
   EXTRACTION_SOURCE: '#1677ff',
-  STORAGE_LOCATION: '#faad14',
-  PROCESS: '#13c2c2',
-  TABLE: '#52c41a',
+  STORAGE_LOCATION: '#d48806',
+  PROCESS: '#08979c',
+  TABLE: '#389e0d',
   VIEW: '#389e0d',
   MATERIALIZED_VIEW: '#237804',
 };
+
+/** Soft wash behind PROCESS / actor chips (same in list and graph). */
+export const TYPE_WASH: Record<string, string> = {
+  PROCESS: 'rgba(8, 151, 156, 0.06)',
+};
+
+/** @deprecated use TYPE_ACCENT */
+export const TYPE_FILL = TYPE_ACCENT;
 
 export const STAGE_ORDER = [
   'DATA_SOURCE',
