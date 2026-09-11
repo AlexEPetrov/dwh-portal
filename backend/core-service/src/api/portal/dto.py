@@ -213,7 +213,13 @@ def freshness_items(rows: list[dict]) -> list[FreshnessItem]:
 
 
 def display_name_for(asset: Asset) -> str:
-    return str(asset.attributes.get("display_name") or asset.qualified_name)
+    """Prefer human-readable name over technical qualified_name (often contains UUIDs)."""
+    attr_name = asset.attributes.get("display_name")
+    if attr_name:
+        return str(attr_name)
+    if asset.name and asset.name.strip():
+        return asset.name
+    return asset.qualified_name
 
 
 def snapshot_metrics(snapshot: AssetSnapshot | None) -> SnapshotMetrics:

@@ -11,7 +11,6 @@ const menuItems: MenuItem[] = [
   { path: '/storage', label: 'Хранение', icon: <FundOutlined /> },
   { path: '/lineage', label: 'Lineage', icon: <ApartmentOutlined /> },
   { path: '/changes', label: 'Изменения', icon: <DiffOutlined /> },
-  { path: '/changes', label: 'Admin', icon: <DiffOutlined /> },
 ];
 
 export default menuItems;

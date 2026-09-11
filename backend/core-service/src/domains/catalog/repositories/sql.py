@@ -38,7 +38,7 @@ from infrastructure.db.session_management import SessionProvider
 
 
 class SqlPortalStore:
-    """Portal snapshot store backed by the application DB schema `portal`."""
+    """Portal snapshot store backed by app DB schema `sol_dwh_portal` (portal_* tables)."""
 
     def __init__(self, session_factory: Callable[[], Session] | None = None) -> None:
         self._session_factory = session_factory or SessionProvider.create_session

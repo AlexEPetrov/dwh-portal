@@ -5,12 +5,29 @@ import type {
   ColumnItem,
   LineageResponse,
 } from '@shared/api/generated';
-import { Card, Descriptions, Empty, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { Button, Card, Descriptions, Empty, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import FreshnessBar from '../components/FreshnessBar';
 import LineageGraph from '../components/LineageGraph';
 import { changeGlyph, formatBytes, formatDateTime, formatRows } from '../format';
+
+const nextStepHint = (assetType: string): string => {
+  switch (assetType) {
+    case 'DATA_SOURCE':
+      return 'Дальше: откройте Lineage — увидите extraction sources и путь до таблиц.';
+    case 'EXTRACTION_SOURCE':
+      return 'Дальше: Lineage покажет storage и PROCESS; в Objects можно открыть связанный loader.';
+    case 'PROCESS':
+      return 'Дальше: Lineage — READS_FROM storage и WRITES_TO table (если get_metadata отработал).';
+    case 'TABLE':
+    case 'VIEW':
+    case 'MATERIALIZED_VIEW':
+      return 'Дальше: Lineage вверх по цепочке — откуда пришли данные.';
+    default:
+      return 'Дальше: карточка соседних объектов или Lineage, если есть data-flow рёбра.';
+  }
+};
 
 const ObjectDetailPage = () => {
   const { assetId } = useParams<{ assetId: string }>();
@@ -51,15 +68,22 @@ const ObjectDetailPage = () => {
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <div>
-        <Space align="center">
+        <Space align="center" wrap>
           <Typography.Title level={2} style={{ margin: 0 }}>
             {asset.display_name}
           </Typography.Title>
           <Tag>{asset.asset_type}</Tag>
           <Tag color={asset.status === 'deleted' ? 'red' : 'green'}>{asset.status}</Tag>
+          <Button type="primary" onClick={() => navigate(`/lineage/${asset.id}`)}>
+            Открыть Lineage
+          </Button>
+          <Button onClick={() => navigate('/objects')}>К списку</Button>
         </Space>
-        <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+        <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 4 }}>
           {asset.description || 'Описание отсутствует'}
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+          {nextStepHint(asset.asset_type)}
         </Typography.Paragraph>
         <FreshnessBar items={asset.collector_freshness} />
       </div>
@@ -70,6 +94,9 @@ const ObjectDetailPage = () => {
             label: 'Overview',
             children: (
               <Descriptions bordered column={2} size="small">
+                <Descriptions.Item label="Описание" span={2}>
+                  {asset.description || '—'}
+                </Descriptions.Item>
                 <Descriptions.Item label="Database">{asset.database || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Schema">{asset.schema_name || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Size">{formatBytes(asset.metrics.total_bytes)}</Descriptions.Item>
@@ -94,8 +121,18 @@ const ObjectDetailPage = () => {
                   { title: '#', dataIndex: 'ordinal', width: 60 },
                   { title: 'Name', dataIndex: 'name' },
                   { title: 'Type', dataIndex: 'data_type', width: 180 },
-                  { title: 'Nullable', dataIndex: 'nullable', width: 100, render: (value) => (value ? 'yes' : 'no') },
-                  { title: 'Description', dataIndex: 'description' },
+                  {
+                    title: 'Nullable',
+                    dataIndex: 'nullable',
+                    width: 100,
+                    render: (value) => (value ? 'yes' : 'no'),
+                  },
+                  {
+                    title: 'Описание',
+                    dataIndex: 'description',
+                    ellipsis: true,
+                    render: (value) => value || '—',
+                  },
                 ]}
               />
             ),
@@ -104,7 +141,12 @@ const ObjectDetailPage = () => {
             key: 'lineage',
             label: 'Lineage',
             children: lineage ? (
-              <LineageGraph nodes={lineage.nodes} edges={lineage.edges} />
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/lineage/${asset.id}`)}>
+                  Открыть на странице Lineage
+                </Button>
+                <LineageGraph nodes={lineage.nodes} edges={lineage.edges} />
+              </Space>
             ) : (
               <Empty />
             ),
@@ -130,7 +172,10 @@ const ObjectDetailPage = () => {
                 size="small"
                 pagination={false}
                 dataSource={changes}
-                onRow={(row) => ({ onClick: () => navigate(`/objects/${row.asset_id}`), style: { cursor: 'pointer' } })}
+                onRow={(row) => ({
+                  onClick: () => navigate(`/objects/${row.asset_id}`),
+                  style: { cursor: 'pointer' },
+                })}
                 columns={[
                   {
                     title: 'Type',

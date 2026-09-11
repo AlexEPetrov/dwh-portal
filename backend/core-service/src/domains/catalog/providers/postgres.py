@@ -51,13 +51,35 @@ class DirectPostgresMetadataProvider:
 
     def _read_catalog(self, connection) -> list[CatalogObject]:
         database = self._settings.psg_db or "dwh"
+        database_description: str | None = None
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT shobj_description(d.oid, 'pg_database')
+                FROM pg_database d
+                WHERE d.datname = current_database()
+                """
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                database_description = str(row[0]).strip() or None
+
         objects: list[CatalogObject] = [
-            CatalogObject(asset_type=AssetType.DATABASE, database=database, schema=None, name=database)
+            CatalogObject(
+                asset_type=AssetType.DATABASE,
+                database=database,
+                schema=None,
+                name=database,
+                description=database_description,
+            )
         ]
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT n.oid, n.nspname, obj_description(n.oid, 'pg_namespace')
+                SELECT
+                    n.oid,
+                    n.nspname,
+                    NULLIF(BTRIM(obj_description(n.oid, 'pg_namespace')), '')
                 FROM pg_namespace n
                 WHERE n.nspname NOT LIKE 'pg_%'
                   AND n.nspname <> 'information_schema'
@@ -84,7 +106,7 @@ class DirectPostgresMetadataProvider:
                     n.nspname,
                     c.relname,
                     c.relkind,
-                    obj_description(c.oid, 'pg_class'),
+                    NULLIF(BTRIM(obj_description(c.oid, 'pg_class')), ''),
                     pg_relation_size(c.oid),
                     pg_indexes_size(c.oid),
                     pg_total_relation_size(c.oid),
@@ -106,7 +128,7 @@ class DirectPostgresMetadataProvider:
                     a.attname,
                     pg_catalog.format_type(a.atttypid, a.atttypmod),
                     NOT a.attnotnull,
-                    col_description(c.oid, a.attnum)
+                    NULLIF(BTRIM(col_description(c.oid, a.attnum)), '')
                 FROM pg_attribute a
                 JOIN pg_class c ON c.oid = a.attrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace

@@ -1,5 +1,6 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Card, Empty, Space, Tag, Typography } from 'antd';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const TYPE_COLOR: Record<string, string> = {
@@ -12,6 +13,16 @@ const TYPE_COLOR: Record<string, string> = {
   MATERIALIZED_VIEW: 'green',
 };
 
+const STAGE_ORDER = [
+  'DATA_SOURCE',
+  'EXTRACTION_SOURCE',
+  'STORAGE_LOCATION',
+  'PROCESS',
+  'TABLE',
+  'VIEW',
+  'MATERIALIZED_VIEW',
+];
+
 type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
@@ -19,12 +30,32 @@ type Props = {
 
 const LineageGraph = ({ nodes, edges }: Props) => {
   const navigate = useNavigate();
+  const stages = useMemo(() => {
+    const present = new Set(nodes.map((node) => node.asset_type));
+    return STAGE_ORDER.filter((type) => present.has(type));
+  }, [nodes]);
+
   if (!nodes.length) {
     return <Empty description="Нет lineage для выбранного объекта" />;
   }
+  if (!edges.length) {
+    return (
+      <Empty description="У объекта нет data-flow рёбер (EXTRACTS_TO / READS_FROM / WRITES_TO). Выберите DATA_SOURCE или EXTRACTION_SOURCE." />
+    );
+  }
+
   const byId = new Map(nodes.map((node) => [node.id, node]));
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space wrap size={4}>
+        <Typography.Text type="secondary">Стадии в графе:</Typography.Text>
+        {stages.map((type, index) => (
+          <span key={type}>
+            <Tag color={TYPE_COLOR[type]}>{type}</Tag>
+            {index < stages.length - 1 ? <Typography.Text type="secondary"> → </Typography.Text> : null}
+          </span>
+        ))}
+      </Space>
       {edges.map((edge) => {
         const from = byId.get(edge.from_asset_id);
         const to = byId.get(edge.to_asset_id);

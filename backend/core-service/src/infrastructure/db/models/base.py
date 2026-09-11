@@ -6,7 +6,7 @@ from typing import Any, Dict
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
 
-DB_SCHEMA = "sol_gtrm"
+DB_SCHEMA = "sol_dwh_portal"
 DEFAULT_TABLE_ARGS = {"schema": f"{DB_SCHEMA}"}
 
 

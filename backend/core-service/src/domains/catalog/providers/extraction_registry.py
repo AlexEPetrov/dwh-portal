@@ -68,25 +68,37 @@ class ExtractionRegistryProvider:
         )
 
     def _read_registry(self, connection) -> list[ExtractionSourceRecord]:
+        # Live DWH columns drift between environments (descr vs description,
+        # load_schedule_id vs schedule_id). Resolve against information_schema.
+        columns = self._table_columns(connection, "sys", "data_extraction_sources")
+        descr_expr = self._first_existing(columns, "descr", "description")
+        schedule_expr = self._first_existing(columns, "load_schedule_id", "schedule_id")
+        access_expr = "s.access_level" if "access_level" in columns else "NULL"
+        active_expr = "s.is_active" if "is_active" in columns else "TRUE"
+        type_expr = (
+            "s.extract_source_type_id" if "extract_source_type_id" in columns else "NULL"
+        )
+        tags_expr = "s.tags" if "tags" in columns else "NULL"
+        comment_expr = "s.comment" if "comment" in columns else "NULL"
         with connection.cursor() as cursor:
             cursor.execute(
-                """
+                f"""
                 SELECT
                     s.id,
                     s.name,
-                    s.descr,
-                    s.access_level,
-                    s.is_active,
-                    s.extract_source_type_id,
+                    {descr_expr},
+                    {access_expr},
+                    {active_expr},
+                    {type_expr},
                     s.extract_options,
                     s.storage_options,
                     s.load_options,
-                    s.load_schedule_id,
+                    {schedule_expr},
                     s.data_source_id,
-                    d.name,
-                    s.tags,
+                    COALESCE(d.name_eng, d.name_rus, d.slug),
+                    {tags_expr},
                     s.parent_id,
-                    s.comment
+                    {comment_expr}
                 FROM sys.data_extraction_sources s
                 LEFT JOIN sys.data_source_items d ON d.id = s.data_source_id
                 """
@@ -100,7 +112,7 @@ class ExtractionRegistryProvider:
                     name=row[1],
                     descr=row[2],
                     access_level=row[3],
-                    is_active=row[4],
+                    is_active=row[4] if row[4] is not None else True,
                     extract_source_type_id=row[5],
                     extract_options=row[6] or {},
                     storage_options=row[7] or {},
@@ -114,3 +126,23 @@ class ExtractionRegistryProvider:
                 )
             )
         return records
+
+    @staticmethod
+    def _table_columns(connection, schema: str, table: str) -> set[str]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = %s
+                """,
+                (schema, table),
+            )
+            return {str(row[0]) for row in cursor.fetchall()}
+
+    @staticmethod
+    def _first_existing(columns: set[str], *names: str, table_alias: str = "s") -> str:
+        for name in names:
+            if name in columns:
+                return f"{table_alias}.{name}"
+        return "NULL"

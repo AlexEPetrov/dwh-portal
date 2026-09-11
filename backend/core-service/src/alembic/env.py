@@ -50,7 +50,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_schemas=True,
-        version_table_schema="sol_gtrm",
+        version_table_schema="sol_dwh_portal",
         include_object=include_object,
         include_name=include_name,
     )
@@ -61,14 +61,14 @@ def run_migrations_offline() -> None:
 
 def include_object(object, name, type_, reflected, compare_to):
     schema = getattr(object, "schema", None)
-    if type_ == "table" and schema not in {"sol_gtrm", "portal"}:
+    if type_ == "table" and schema not in {"sol_dwh_portal"}:
         return False
     return True
 
 
 def include_name(name, type_, parent_names):
     if type_ == "schema":
-        return name in ["sol_gtrm", "portal"]
+        return name in ["sol_dwh_portal"]
     return True
 
 
@@ -86,8 +86,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        connection.execute(CreateSchema("sol_gtrm", if_not_exists=True))
-        connection.execute(CreateSchema("portal", if_not_exists=True))
+        connection.execute(CreateSchema("sol_dwh_portal", if_not_exists=True))
         connection.commit() 
 
     with connectable.connect() as connection:
@@ -96,7 +95,7 @@ def run_migrations_online() -> None:
             connection=connection, 
             target_metadata=target_metadata,
             include_schemas=True,
-            version_table_schema="sol_gtrm",
+            version_table_schema="sol_dwh_portal",
             include_object=include_object,
             include_name=include_name
         )

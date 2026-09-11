@@ -60,6 +60,13 @@
                 "APP_DB_PSG_DB": "dwh",
                 "APP_DB_PSG_USER": "postgres",
                 "APP_DB_PSG_PASS": "postgres",
+                "APP_PORTAL_STORE": "sql",
+                "APP_PORTAL_SEED_DEMO": "false",
+                "APP_DWH_PSG_HOST": "localhost",
+                "APP_DWH_PSG_PORT": "5432",
+                "APP_DWH_PSG_DB": "dwh",
+                "APP_DWH_PSG_USER": "postgres",
+                "APP_DWH_PSG_PASS": "postgres",
                 "APP_API_PORT": "5021",
                 "APP_API_HOST": "localhost"
             }
@@ -120,6 +127,13 @@
                 "APP_DB_PSG_DB": "dwh",
                 "APP_DB_PSG_USER": "postgres",
                 "APP_DB_PSG_PASS": "postgres",
+                "APP_PORTAL_STORE": "sql",
+                "APP_PORTAL_SEED_DEMO": "false",
+                "APP_DWH_PSG_HOST": "localhost",
+                "APP_DWH_PSG_PORT": "5432",
+                "APP_DWH_PSG_DB": "dwh",
+                "APP_DWH_PSG_USER": "postgres",
+                "APP_DWH_PSG_PASS": "postgres",
                 "APP_API_PORT": "5021",
                 "APP_API_HOST": "localhost"
             }
