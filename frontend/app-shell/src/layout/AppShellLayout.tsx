@@ -201,7 +201,7 @@ export function AppShellLayout({
           style={{
             margin: 0,
             background: token.colorBgLayout,
-            padding: '0px',
+            padding: token.paddingLG,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'auto',
