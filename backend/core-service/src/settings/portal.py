@@ -4,7 +4,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class PortalSettings(BaseSettings):
-    """Runtime options for the DWH Portal snapshot store."""
+    """Runtime options for the DWH Portal snapshot store.
+
+    Target production path: APP_PORTAL_STORE=sql (schema `portal` in app DB).
+    `seed_demo` applies only to the in-memory store; SQL never auto-seeds.
+    """
 
     model_config = SettingsConfigDict(env_prefix="APP_PORTAL_")
 

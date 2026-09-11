@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from domains.catalog.repositories.memory import InMemoryPortalStore
 from domains.catalog.repositories.ports import PortalStore
+from domains.catalog.repositories.sql import SqlPortalStore
 from domains.catalog.seed import seed_demo_catalog
 from domains.catalog.services.asset_service import AssetService
 from domains.catalog.services.change_service import ChangeService
@@ -28,13 +29,21 @@ def get_portal_settings() -> PortalSettings:
     return PortalSettings()
 
 
+def create_portal_store(settings: PortalSettings | None = None) -> PortalStore:
+    """Build a PortalStore for the given settings (or current env)."""
+    settings = settings or get_portal_settings()
+    if settings.store == "sql":
+        return SqlPortalStore()
+    store: PortalStore = InMemoryPortalStore()
+    if settings.seed_demo:
+        seed_demo_catalog(store)
+    return store
+
+
 def get_portal_store() -> PortalStore:
     global _store
     if _store is None:
-        settings = get_portal_settings()
-        _store = InMemoryPortalStore()
-        if settings.seed_demo:
-            seed_demo_catalog(_store)
+        _store = create_portal_store()
     return _store
 
 

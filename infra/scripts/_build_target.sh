@@ -11,14 +11,6 @@ rm -rf ./.build/$CI_ENVIRONMENT
 mkdir -p ./.build/$CI_ENVIRONMENT
 mkdir -p ./.build/$CI_ENVIRONMENT/migrations
 
-# сборка помощи и копирование результата в образ core-service
-
-cd ./docs
-./build_docs.sh
-rm ./../backend/core-service/docs/* -r
-cp ./build/* ./../backend/core-service/docs -r
-cd ..
-
 # сборка фронта
 
 cd ./frontend
