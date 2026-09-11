@@ -152,6 +152,78 @@ def test_unresolved_target_is_kept_and_does_not_fail_run(store, now):
     assert unresolved[0].qualified_name.startswith("unresolved:")
 
 
+def test_writes_to_table_and_storage_view_is_derived_from(store, now):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    view_obj = CatalogObject(
+        asset_type=AssetType.VIEW,
+        database="dwh",
+        schema="raw",
+        name="v_ice_brent_latest",
+        native_id="124",
+        columns=[],
+    )
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects() + [view_obj])).run(now)
+    record = ExtractionSourceRecord(
+        id="src-3",
+        name="Brent",
+        descr=None,
+        access_level=None,
+        is_active=True,
+        extract_source_type_id=1,
+        extract_options={},
+        storage_options={"path": "landing/ice/brent"},
+        load_options={"handlers": [{"handler_type": "Python", "name": "brent_py", "module": "ok.loader"}]},
+        load_schedule_id=None,
+        data_source_id="ice",
+        data_source_name="ICE",
+        tags=None,
+        parent_id=None,
+        comment=None,
+    )
+    base = LoaderTarget(type="table", database="dwh", schema="raw", name="ice_brent")
+    metadata = LoaderMetadata(
+        schema_version="1.0",
+        name="ok.loader",
+        writes_to=[
+            base,
+            LoaderTarget(type="s3", path="s3://bucket/ice/brent/"),
+            LoaderTarget(
+                type="view",
+                database="dwh",
+                schema="raw",
+                name="v_ice_brent_latest",
+                derived_from=base,
+            ),
+        ],
+    )
+    run = ExtractionRegistryCollector(
+        store, FakeLineageProvider([record], {"ok.loader": metadata})
+    ).run(now)
+    assert run.status == CollectorStatus.SUCCESS
+    from domains.catalog.models import RelationshipType
+
+    process = next(item for item in store.assets.values() if item.asset_type == AssetType.PROCESS)
+    table = store.find_by_qualified_name("dwh.raw.ice_brent")
+    view = store.find_by_qualified_name("dwh.raw.v_ice_brent_latest")
+    assert table and view
+    edges = store.list_relationships(asset_id=process.id)
+    writes = [
+        e
+        for e in edges
+        if e.relationship_type == RelationshipType.WRITES_TO and e.from_asset_id == process.id
+    ]
+    write_types = {store.get_asset(e.to_asset_id).asset_type for e in writes}
+    assert write_types == {AssetType.TABLE, AssetType.STORAGE_LOCATION}
+    derived = [
+        e
+        for e in store.list_relationships(asset_id=view.id)
+        if e.relationship_type == RelationshipType.DERIVED_FROM
+    ]
+    assert len(derived) == 1
+    assert derived[0].from_asset_id == view.id
+    assert derived[0].to_asset_id == table.id
+
+
 def test_change_detector_emits_added_and_structure_change(store, now):
     CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
     ChangeCollector(store).run(now)

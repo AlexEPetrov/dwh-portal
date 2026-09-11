@@ -1,4 +1,4 @@
-from portal_lineage_fixtures._targets import table, view
+from portal_lineage_fixtures._targets import table, view_of
 
 
 def get_metadata() -> dict:
@@ -8,6 +8,6 @@ def get_metadata() -> dict:
         "description": "Loads CME NG (Henry Hub) futures settlements",
         "writes_to": [
             table("src_cme", "cme_ng_settlements"),
-            view("src_cme", "v_cme_ng_settlements_latest"),
+            view_of("src_cme", "v_cme_ng_settlements_latest", "cme_ng_settlements"),
         ],
     }

@@ -1,4 +1,4 @@
-from portal_lineage_fixtures._targets import table, view
+from portal_lineage_fixtures._targets import table, view_of
 
 
 def get_metadata() -> dict:
@@ -8,6 +8,6 @@ def get_metadata() -> dict:
         "description": "Loads Argus crude price assessments",
         "writes_to": [
             table("src_argus", "argus_crude_assessments"),
-            view("src_argus", "v_argus_crude_assessments_latest"),
+            view_of("src_argus", "v_argus_crude_assessments_latest", "argus_crude_assessments"),
         ],
     }

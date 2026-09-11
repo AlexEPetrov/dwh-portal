@@ -3,7 +3,11 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from domains.catalog.providers.lineage import LoaderMetadata, LoaderTarget
+from domains.catalog.providers.lineage import (
+    STORAGE_TARGET_TYPES,
+    LoaderMetadata,
+    LoaderTarget,
+)
 
 
 def parse_loader_metadata(payload: dict[str, Any], *, default_name: str) -> LoaderMetadata:
@@ -19,16 +23,28 @@ def parse_loader_metadata(payload: dict[str, Any], *, default_name: str) -> Load
     )
 
 
-def _parse_target(item: Any) -> LoaderTarget | None:
+def _parse_target(item: Any, *, allow_derived_from: bool = True) -> LoaderTarget | None:
     if not isinstance(item, dict):
         return None
+    target_type = str(item.get("type") or "table").lower()
+    if target_type in STORAGE_TARGET_TYPES:
+        path = item.get("path") or item.get("name")
+        if not path:
+            return None
+        return LoaderTarget(type=target_type, path=str(path))
+
     if not item.get("database") or not item.get("schema") or not item.get("name"):
         return None
+    derived_from = None
+    raw_derived = item.get("derived_from") if allow_derived_from else None
+    if isinstance(raw_derived, dict):
+        derived_from = _parse_target(raw_derived, allow_derived_from=False)
     return LoaderTarget(
-        type=str(item.get("type") or "table"),
+        type=target_type,
         database=str(item["database"]),
         schema=str(item["schema"]),
         name=str(item["name"]),
+        derived_from=derived_from,
     )
 
 

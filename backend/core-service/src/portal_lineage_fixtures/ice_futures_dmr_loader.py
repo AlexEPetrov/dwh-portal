@@ -1,4 +1,4 @@
-from portal_lineage_fixtures._targets import table, view
+from portal_lineage_fixtures._targets import table, view_of
 
 
 def get_metadata() -> dict:
@@ -8,6 +8,10 @@ def get_metadata() -> dict:
         "description": "Loads ICE futures daily market reports",
         "writes_to": [
             table("src_ice", "ice_futures_daily_market_reports"),
-            view("src_ice", "v_ice_futures_daily_market_reports_latest"),
+            view_of(
+                "src_ice",
+                "v_ice_futures_daily_market_reports_latest",
+                "ice_futures_daily_market_reports",
+            ),
         ],
     }

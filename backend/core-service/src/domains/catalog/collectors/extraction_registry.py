@@ -24,14 +24,28 @@ from domains.catalog.models import (
     RelationshipType,
 )
 from domains.catalog.providers.lineage import (
+    STORAGE_TARGET_TYPES,
+    VIEW_TARGET_TYPES,
+    WRITE_RELATION_TYPES,
     ExtractionSourceRecord,
     LoaderMetadata,
     LineageProvider,
+    LoaderTarget,
 )
 from domains.catalog.repositories.ports import PortalStore
 from settings.portal import DwhCollectorSettings
 
 PROVIDER = "extraction_registry"
+
+
+def _is_derived_view_target(target: LoaderTarget) -> bool:
+    """Views are not PROCESS write targets; they DERIVED_FROM a base table."""
+    return str(target.type).lower() in VIEW_TARGET_TYPES
+
+
+def _is_storage_write_target(target: LoaderTarget) -> bool:
+    """PROCESS may WRITES_TO S3 / file / object-store locations."""
+    return str(target.type).lower() in STORAGE_TARGET_TYPES
 
 
 class ExtractionRegistryCollector:
@@ -136,22 +150,27 @@ class ExtractionRegistryCollector:
             return
 
         unresolved = 0
-        for target in metadata.writes_to:
-            connection = self._settings.connection_identity
-            _qualified, identity_key = relation_identity(
-                connection, target.database, target.schema, target.name
-            )
-            table = self._store.find_by_identity("postgres", identity_key)
-            if table is None:
-                table = self._unresolved_target(target.database, target.schema, target.name, now)
+        write_targets = [t for t in metadata.writes_to if not _is_derived_view_target(t)]
+        derived_targets = [t for t in metadata.writes_to if _is_derived_view_target(t)]
+        for target in write_targets:
+            if _is_storage_write_target(target):
+                dest = self._resolve_storage_write_target(target, process.id, now, details)
+            else:
+                dest = self._resolve_relation_write_target(target, process.id, now, details)
+            if dest.attributes.get("unresolved"):
                 unresolved += 1
-                details["unresolved"] += 1
+            self._rel(process.id, dest.id, RelationshipType.WRITES_TO)
+        for target in derived_targets:
+            if target.derived_from is None:
                 self._diagnostic(
                     process.id,
                     now,
                     {
-                        "code": "TARGET_UNRESOLVED",
-                        "message": f"{target.database}.{target.schema}.{target.name} was not found",
+                        "code": "VIEW_DERIVED_FROM_MISSING",
+                        "message": (
+                            f"{target.database}.{target.schema}.{target.name} is a view; "
+                            "set derived_from to the base table (PROCESS must not WRITES_TO a view)"
+                        ),
                         "target_ref": {
                             "type": target.type,
                             "database": target.database,
@@ -161,7 +180,14 @@ class ExtractionRegistryCollector:
                     },
                 )
                 details["diagnostics"] += 1
-            self._rel(process.id, table.id, RelationshipType.WRITES_TO)
+                unresolved += 1
+                continue
+            view_asset = self._resolve_relation_target(target, process.id, now, details)
+            base_asset = self._resolve_relation_target(target.derived_from, process.id, now, details)
+            if view_asset.attributes.get("unresolved") or base_asset.attributes.get("unresolved"):
+                unresolved += 1
+            # VIEW DERIVED_FROM → TABLE
+            self._rel(view_asset.id, base_asset.id, RelationshipType.DERIVED_FROM)
         attributes["lineage_status"] = (
             LineageStatus.UNRESOLVED
             if unresolved and not metadata.writes_to
@@ -169,10 +195,145 @@ class ExtractionRegistryCollector:
             if unresolved
             else LineageStatus.RESOLVED
         )
-        if not metadata.writes_to:
+        if not write_targets:
             attributes["lineage_status"] = LineageStatus.UNRESOLVED
         process.attributes = attributes
         self._store.upsert_asset(process)
+
+    def _resolve_storage_write_target(
+        self,
+        target: LoaderTarget,
+        process_id: uuid.UUID,
+        now: datetime.datetime,
+        details: dict,
+    ) -> Asset:
+        path = (target.path or target.name or "").strip()
+        if not path:
+            details["unresolved"] += 1
+            details["diagnostics"] += 1
+            self._diagnostic(
+                process_id,
+                now,
+                {
+                    "code": "TARGET_UNRESOLVED",
+                    "message": "storage writes_to target requires path",
+                    "target_ref": {"type": target.type},
+                },
+            )
+            return self._unresolved_storage_target(target.type, now)
+        qualified_name, identity_key = storage_location_identity(path)
+        existing = self._store.find_by_identity(PROVIDER, identity_key)
+        if existing is not None:
+            existing.last_seen_at = now
+            existing.deleted_at = None
+            attrs = dict(existing.attributes or {})
+            attrs["storage_kind"] = target.type
+            attrs["path"] = path
+            existing.attributes = attrs
+            return self._store.upsert_asset(existing)
+        return self._store.upsert_asset(
+            Asset(
+                asset_type=AssetType.STORAGE_LOCATION,
+                qualified_name=qualified_name,
+                name=path,
+                source_provider=PROVIDER,
+                identity_key=identity_key,
+                first_seen_at=now,
+                last_seen_at=now,
+                attributes={"path": path, "storage_kind": target.type},
+            )
+        )
+
+    def _resolve_relation_write_target(
+        self,
+        target: LoaderTarget,
+        process_id: uuid.UUID,
+        now: datetime.datetime,
+        details: dict,
+    ) -> Asset:
+        kind = str(target.type).lower() or "table"
+        if kind not in WRITE_RELATION_TYPES:
+            # Unknown relation write kind — still try resolve, but flag.
+            self._diagnostic(
+                process_id,
+                now,
+                {
+                    "code": "WRITE_TARGET_KIND_UNEXPECTED",
+                    "message": (
+                        f"writes_to type={target.type!r} is not table/materialized_view/storage; "
+                        "resolving as relation"
+                    ),
+                    "target_ref": {
+                        "type": target.type,
+                        "database": target.database,
+                        "schema": target.schema,
+                        "name": target.name,
+                    },
+                },
+            )
+            details["diagnostics"] += 1
+        return self._resolve_relation_target(target, process_id, now, details)
+
+    def _resolve_relation_target(
+        self,
+        target: LoaderTarget,
+        process_id: uuid.UUID,
+        now: datetime.datetime,
+        details: dict,
+    ) -> Asset:
+        if not target.database or not target.schema or not target.name:
+            details["unresolved"] += 1
+            details["diagnostics"] += 1
+            self._diagnostic(
+                process_id,
+                now,
+                {
+                    "code": "TARGET_UNRESOLVED",
+                    "message": "relation target requires database, schema, name",
+                    "target_ref": {"type": target.type},
+                },
+            )
+            return self._unresolved_target("?", "?", "?", now)
+        connection = self._settings.connection_identity
+        _qualified, identity_key = relation_identity(
+            connection, target.database, target.schema, target.name
+        )
+        asset = self._store.find_by_identity("postgres", identity_key)
+        if asset is not None:
+            return asset
+        details["unresolved"] += 1
+        self._diagnostic(
+            process_id,
+            now,
+            {
+                "code": "TARGET_UNRESOLVED",
+                "message": f"{target.database}.{target.schema}.{target.name} was not found",
+                "target_ref": {
+                    "type": target.type,
+                    "database": target.database,
+                    "schema": target.schema,
+                    "name": target.name,
+                },
+            },
+        )
+        details["diagnostics"] += 1
+        return self._unresolved_target(target.database, target.schema, target.name, now)
+
+    def _unresolved_storage_target(self, kind: str, now: datetime.datetime) -> Asset:
+        label = f"unresolved-storage:{kind}"
+        qualified_name, identity_key = unresolved_target_identity("_", "_", label)
+        return self._store.upsert_asset(
+            Asset(
+                asset_type=AssetType.STORAGE_LOCATION,
+                qualified_name=qualified_name,
+                name=label,
+                source_provider=PROVIDER,
+                identity_key=identity_key,
+                first_seen_at=now,
+                last_seen_at=now,
+                attributes={"unresolved": True, "storage_kind": kind},
+            )
+        )
 
     def _upsert_extraction(self, record: ExtractionSourceRecord, now: datetime.datetime) -> Asset:
         qualified_name, identity_key = extraction_source_identity(record.id)

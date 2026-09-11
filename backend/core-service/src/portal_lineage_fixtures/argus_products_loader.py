@@ -1,4 +1,4 @@
-from portal_lineage_fixtures._targets import table, view
+from portal_lineage_fixtures._targets import storage, table, view_of
 
 
 def get_metadata() -> dict:
@@ -8,6 +8,11 @@ def get_metadata() -> dict:
         "description": "Loads Argus refined products assessments (primary Python handler)",
         "writes_to": [
             table("src_argus", "argus_products_assessments"),
-            view("src_argus", "v_argus_products_assessments_latest"),
+            storage("file://landing/argus/products/", kind="file"),
+            view_of(
+                "src_argus",
+                "v_argus_products_assessments_latest",
+                "argus_products_assessments",
+            ),
         ],
     }
