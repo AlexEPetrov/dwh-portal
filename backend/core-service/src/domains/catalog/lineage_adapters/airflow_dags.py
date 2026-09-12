@@ -173,6 +173,7 @@ class AirflowDagsLineageAdapter:
                         _relative_sources([path_ref.source_path], resolved_root),
                         started,
                     )
+                    self._rel(extraction.id, storage.id, RelationshipType.EXTRACTS_TO)
                     self._rel(process.id, storage.id, RelationshipType.READS_FROM)
                     details["storages"] += 1
                 if module_name not in seen_processes:

@@ -444,6 +444,14 @@ def load_data():
     assert storage.attributes.get("source_files") == ["platts_egd/paths.py"]
     reads = store.list_relationships(asset_id=process.id, types={RelationshipType.READS_FROM})
     assert reads[0].to_asset_id == storage.id
+    extraction = store.find_by_identity(
+        "airflow_dags", airflow_extraction_identity("load_platts_egd")[1]
+    )
+    assert extraction is not None
+    extracts = store.list_relationships(
+        asset_id=extraction.id, types={RelationshipType.EXTRACTS_TO}
+    )
+    assert {edge.to_asset_id for edge in extracts} >= {process.id, storage.id}
 
 
 def test_airflow_code_mode_ignores_unimported_paths_file(store, now, tmp_path):
@@ -472,6 +480,66 @@ def load_data():
     assert run.status == CollectorStatus.SUCCESS
     assert run.details.get("storages", 0) == 0
     assert store.find_by_qualified_name("storage:/data/landing/platts/egd") is None
+
+
+def test_airflow_code_mode_ignores_main_block_paths_and_writes(store, now, tmp_path):
+    (tmp_path / "load_gassco.py").write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(dag_id="load_gassco", description="Gassco")
+
+def load_data():
+    sql = "INSERT INTO src_gassco.gassco_flows VALUES (1)"
+
+if __name__ == "__main__":
+    LANDING = "/data/landing/should_ignore"
+    sql = "INSERT INTO src_ignore.ignored VALUES (1)"
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("writes", 0) == 1
+    assert run.details.get("storages", 0) == 0
+    process = store.find_by_identity("airflow_dags", airflow_process_identity("load_gassco")[1])
+    assert process is not None
+    writes = store.list_relationships(asset_id=process.id, types={RelationshipType.WRITES_TO})
+    table = store.get_asset(writes[0].to_asset_id)
+    assert table is not None
+    assert table.name == "gassco_flows"
+    assert store.find_by_qualified_name("storage:/data/landing/should_ignore") is None
+    assert store.find_by_qualified_name("unresolved:dwh.src_ignore.ignored") is None
+
+
+def test_airflow_code_mode_ignores_web_asset_paths(store, now, tmp_path):
+    (tmp_path / "load_epdk.py").write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(dag_id="load_epdk", description="EPDK")
+WORD_ICON = "/Content/img/word.png"
+ROUTE = "/Detay/DownloadDocument?id=1"
+
+def filter_uloaded_files(html_filename):
+    images = soup.find_all("img")
+    word_imgs = [img for img in images if img.attrs["src"] == "/Content/img/word.png"]
+    sql = "INSERT INTO src_epdk.docs VALUES (1)"
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("storages", 0) == 0
+    assert store.find_by_qualified_name("storage:/Content/img/word.png") is None
+    process = store.find_by_identity("airflow_dags", airflow_process_identity("load_epdk")[1])
+    assert process is not None
 
 
 def test_airflow_adapter_ignores_pandas_merge(store, now, tmp_path):

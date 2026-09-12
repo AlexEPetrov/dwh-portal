@@ -145,6 +145,44 @@ def _parse_source(text: str, filename: str) -> ast.AST:
         return ast.parse(text, filename=filename)
 
 
+def _is_name_eq_main(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+        return False
+    if not isinstance(node.ops[0], ast.Eq) or len(node.comparators) != 1:
+        return False
+    left, right = node.left, node.comparators[0]
+
+    def is_name(item: ast.AST) -> bool:
+        return isinstance(item, ast.Name) and item.id == "__name__"
+
+    def is_main(item: ast.AST) -> bool:
+        return isinstance(item, ast.Constant) and item.value == "__main__"
+
+    return (is_name(left) and is_main(right)) or (is_main(left) and is_name(right))
+
+
+def _is_main_guard(test: ast.AST) -> bool:
+    if _is_name_eq_main(test):
+        return True
+    if isinstance(test, ast.BoolOp):
+        return any(_is_name_eq_main(value) for value in test.values)
+    return False
+
+
+def _walk_code(tree: ast.AST):
+    """Walk the module AST, skipping `if __name__ == '__main__'` and its body."""
+    skipped: set[int] = set()
+    body = tree.body if isinstance(tree, ast.Module) else []
+    for stmt in body:
+        if isinstance(stmt, ast.If) and _is_main_guard(stmt.test):
+            for child in ast.walk(stmt):
+                skipped.add(id(child))
+    for node in ast.walk(tree):
+        if id(node) in skipped:
+            continue
+        yield node
+
+
 def parse_module(path: Path, text: str) -> ModuleFacts | None:
     try:
         tree = _parse_source(text, str(path))
@@ -415,7 +453,7 @@ def _assign_constants(tree: ast.AST) -> dict[str, str]:
 
 
 def _scan_imports(tree: ast.AST, facts: ModuleFacts) -> None:
-    for node in ast.walk(tree):
+    for node in _walk_code(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 facts.import_modules.append(alias.name)
@@ -462,7 +500,7 @@ def _schema_from_table_args(node: ast.AST, constants: dict[str, str]) -> str | N
 
 
 def _scan_adapter_assigns(tree: ast.AST, facts: ModuleFacts) -> None:
-    for node in ast.walk(tree):
+    for node in _walk_code(tree):
         if not isinstance(node, ast.Assign):
             continue
         root = node.value
@@ -485,7 +523,7 @@ def _scan_adapter_assigns(tree: ast.AST, facts: ModuleFacts) -> None:
 def _scan_writes(tree: ast.AST, facts: ModuleFacts) -> None:
     constructors: set[str] = set()
     known = set(facts.classes) | set(facts.imported_names)
-    for node in ast.walk(tree):
+    for node in _walk_code(tree):
         if not isinstance(node, ast.Call):
             continue
         func_name = _call_name(node.func)
@@ -524,7 +562,7 @@ def _is_session_owner(name: str | None) -> bool:
 
 
 def _scan_sql_literals(tree: ast.AST, facts: ModuleFacts) -> None:
-    for node in ast.walk(tree):
+    for node in _walk_code(tree):
         text: str | None = None
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             text = node.value
@@ -577,6 +615,86 @@ _HTTP_URL = re.compile(r"(?i)^https?://")
 _SQL_START = re.compile(r"(?i)^\s*(?:SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|MERGE|COPY|ALTER)\b")
 _STORAGE_URI = re.compile(r"(?i)^(?:s3|gs|abfss|wasbs|file|hdfs)://")
 _WIN_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+_WEB_PREFIXES = (
+    "/content/",
+    "/static/",
+    "/assets/",
+    "/img/",
+    "/images/",
+    "/css/",
+    "/js/",
+    "/media/",
+    "/fonts/",
+    "/public/",
+    "/dist/",
+    "/build/",
+    "/favicon",
+    "/scripts/",
+    "/styles/",
+    "/vendor/",
+)
+_WEB_EXT = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".webp",
+    ".css",
+    ".js",
+    ".mjs",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".map",
+    ".html",
+    ".htm",
+}
+_DATA_EXT = {
+    ".csv",
+    ".parquet",
+    ".json",
+    ".jsonl",
+    ".ndjson",
+    ".xml",
+    ".xlsx",
+    ".xls",
+    ".zip",
+    ".gz",
+    ".tsv",
+    ".txt",
+    ".orc",
+    ".avro",
+    ".pkl",
+    ".feather",
+}
+_POSIX_ROOTS = (
+    "/data/",
+    "/mnt/",
+    "/opt/",
+    "/var/",
+    "/tmp/",
+    "/home/",
+    "/app/",
+    "/srv/",
+    "/warehouse/",
+    "/datalake/",
+)
+_DATA_HINTS = (
+    "landing",
+    "airflow_files",
+    "warehouse",
+    "datalake",
+    "/raw/",
+    "/staging/",
+    "/bronze/",
+    "/silver/",
+    "/extract",
+    "/inbox",
+    "/outbox",
+)
 
 
 def _looks_like_storage_path(text: str) -> bool:
@@ -585,13 +703,28 @@ def _looks_like_storage_path(text: str) -> bool:
         return False
     if _HTTP_URL.match(value) or _SQL_START.match(value):
         return False
-    if "\n" in value:
+    if "\n" in value or "?" in value or "#" in value:
         return False
-    if _STORAGE_URI.match(value) or _WIN_PATH.match(value) or value.startswith("\\\\"):
+    lowered = value.lower().replace("\\", "/")
+    if any(lowered.startswith(prefix) or lowered.startswith(prefix.rstrip("/")) for prefix in _WEB_PREFIXES):
+        return False
+    first_seg = "/" + lowered.lstrip("/").split("/", 1)[0] + "/"
+    if first_seg in _WEB_PREFIXES:
+        return False
+    ext = Path(value.split("?")[0]).suffix.lower()
+    if _STORAGE_URI.match(value):
         return True
-    if value.startswith("/") and value.count("/") >= 2:
+    if _WIN_PATH.match(value) or value.startswith("\\\\"):
+        return any(hint in lowered for hint in _DATA_HINTS) or ext in _DATA_EXT
+    if not value.startswith("/"):
+        return False
+    if ext in _WEB_EXT:
+        return False
+    if any(lowered.startswith(root) for root in _POSIX_ROOTS):
         return True
-    return False
+    if any(hint in lowered for hint in _DATA_HINTS):
+        return True
+    return ext in _DATA_EXT and value.count("/") >= 2
 
 
 def _class_from_arg(node: ast.AST | None) -> str | None:
@@ -640,7 +773,7 @@ def _resolve_str(node: ast.AST | None, constants: dict[str, str]) -> str | None:
 
 
 def _is_dag_module(tree: ast.AST) -> bool:
-    for node in ast.walk(tree):
+    for node in _walk_code(tree):
         if isinstance(node, ast.Call) and _call_name(node.func) in {"DAG", "dag"}:
             return True
         if isinstance(node, ast.FunctionDef):
@@ -653,7 +786,7 @@ def _is_dag_module(tree: ast.AST) -> bool:
 
 
 def _dag_meta_from_ast(tree: ast.AST) -> DagMeta:
-    for node in ast.walk(tree):
+    for node in _walk_code(tree):
         if not isinstance(node, ast.Call) or _call_name(node.func) not in {"DAG", "dag"}:
             continue
         dag_id = None

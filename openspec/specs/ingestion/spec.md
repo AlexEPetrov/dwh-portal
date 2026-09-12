@@ -241,12 +241,17 @@ code
 объект разобран. Это MUST относиться к `PROCESS`, `EXTRACTION_SOURCE`,
 unresolved `TABLE` и `STORAGE_LOCATION`.
 
-В режиме `code` path-литералы в замыкании импортов (`/data/...`,
-`s3://...`, Windows-путь) MUST материализоваться как `STORAGE_LOCATION`
-с `source_files` файла, где литерал найден, и ребро `PROCESS`
-`READS_FROM` эту локацию. Неимпортированный соседний файл MUST NOT
-порождать `STORAGE_LOCATION`. HTTP-константы MUST NOT становиться
-`DATA_SOURCE`.
+В режиме `code` path-литералы в замыкании импортов MUST материализоваться
+как `STORAGE_LOCATION` только если это landing/object-store путь
+(`s3://`, `/data/...`, Windows-путь с landing/airflow_files), а не
+веб-ресурс (`/Content/img/...`, `/static/...`, `.png`/`.css`/`.js` на
+POSIX-пути). Такой `STORAGE_LOCATION` MUST порождаться из
+`EXTRACTION_SOURCE` (`EXTRACTS_TO`) и MUST NOT быть корневым родителем
+цепочки. `PROCESS` MAY иметь `READS_FROM` на эту локацию. Неимпортированный
+соседний файл MUST NOT порождать `STORAGE_LOCATION`. Блок
+`if __name__ == "__main__"` MUST игнорироваться целиком: пути, SQL и
+прочие объекты внутри него MUST NOT попадать в каталог.
+HTTP-константы MUST NOT становиться `DATA_SOURCE`.
 
 В режиме `catalog` адаптер MUST NOT создавать `DATA_SOURCE` и MUST NOT
 создавать `STORAGE_LOCATION`. Цепочка Airflow MUST быть:
@@ -258,6 +263,7 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE
 В режиме `code` цепочка MAY включать storage:
 
 ```text
+EXTRACTION_SOURCE -> STORAGE_LOCATION
 EXTRACTION_SOURCE -> PROCESS -> TABLE
 PROCESS -> STORAGE_LOCATION
 ```
@@ -358,7 +364,23 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
 - WHEN выполняется адаптер `airflow_dags`
 - THEN создаётся `STORAGE_LOCATION` для этого пути
 - AND `source_files` содержит `paths.py`
+- AND `EXTRACTION_SOURCE` имеет `EXTRACTS_TO` на storage
 - AND есть ребро `READS_FROM` от процесса
+
+#### Scenario: Блок __main__ не порождает объекты
+
+- GIVEN режим `code`
+- AND после `if __name__ == "__main__"` есть `/data/landing/x` и `INSERT`
+- AND вне блока есть запись в другую таблицу
+- WHEN выполняется адаптер
+- THEN объекты из `__main__` не создаются
+
+#### Scenario: Веб-путь не становится STORAGE_LOCATION
+
+- GIVEN режим `code`
+- AND в DAG есть `"/Content/img/word.png"`
+- WHEN выполняется адаптер
+- THEN `STORAGE_LOCATION` для этого пути нет
 
 #### Scenario: Корень DAG не задан
 
