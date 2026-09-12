@@ -38,6 +38,36 @@ def test_lineage_walks_source_to_table_and_keeps_data_flow_only(seeded_store):
     assert {"ICE", "Brent Settlement", "landing/ice/brent", "ice_brent", "market_prices"} <= names
 
 
+def test_lineage_roots_are_data_sources_and_orphan_extractions(seeded_store):
+    import datetime
+
+    from domains.catalog.identity import extraction_source_identity
+    from domains.catalog.models import Asset
+
+    now = datetime.datetime(2026, 9, 6, 2, 15, tzinfo=datetime.timezone.utc)
+    qualified_name, identity_key = extraction_source_identity("airflow-dag")
+    seeded_store.upsert_asset(
+        Asset(
+            asset_type=AssetType.EXTRACTION_SOURCE,
+            qualified_name=qualified_name,
+            name="platts_egd",
+            identity_key=identity_key,
+            source_provider="airflow_dags",
+            native_id="airflow-dag",
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+    )
+    payload = LineageService(seeded_store).list_roots()
+    names = {node.name for node in payload["nodes"]}
+    types = {node.asset_type for node in payload["nodes"]}
+    assert payload["edges"] == []
+    assert AssetType.DATA_SOURCE in types
+    assert "ICE" in names
+    assert "platts_egd" in names
+    assert "Brent Settlement" not in names
+
+
 def test_overview_and_storage_read_snapshots_only(seeded_store):
     overview = OverviewService(seeded_store).get_overview()
     storage = StorageService(seeded_store).current()

@@ -96,7 +96,15 @@ contains write evidence. HTTP in `scrapers/` is not a `DATA_SOURCE`.
 `POST /api/v1/collect` runs the same sequence as the CLI so a DAG can
 pass `reset` and `airflow_lineage_mode`. UI pages must not call it.
 
-### 7. Human approval checkpoint
+### 7. Registry load log is live and paged
+
+`sys.log_files` stays in the scanned DWH. Registry
+`EXTRACTION_SOURCE` cards read it through
+`GET /api/v1/assets/{id}/loads` ordered by load time DESC. Airflow
+extraction sources do not query it. Missing table → empty
+`available=false`.
+
+### 8. Human approval checkpoint
 
 Intended semantics were given by the product request: adapter/plugin
 architecture, SQL-only lineage without extraction sources, reverse
@@ -116,6 +124,8 @@ re-opens the gate.
   are acceptable; graph may be incomplete.
 - [Dynamic `importlib` of `module:Class`] → trusted operator config
   only; same trust model as Python loader `get_metadata()` modules.
+- [Live `sys.log_files` on page load] → paged by `extraction_source_id`
+  only; missing table is empty; files are not lineage nodes.
 
 ## Migration Plan
 
@@ -134,7 +144,8 @@ re-opens the gate.
 
 - `CORE-PYTEST-TARGET` for `tests/unit/test_catalog`
 - `OPENAPI-EXPORT` then `FRONTEND-GEN-API` because `POST /api/v1/collect`
-  changes the public HTTP shape. `FRONTEND-BUILD` if generated client files change.
+  and `GET /api/v1/assets/{id}/loads` change the public HTTP shape.
+  `FRONTEND-BUILD` if generated client files change.
 
 ## Open Questions
 

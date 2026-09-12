@@ -18,3 +18,15 @@
 - [x] 3.2 Update current `openspec/specs/catalog` and `openspec/specs/ingestion` to the approved adapter behavior
 - [x] 3.3 `CORE-PYTEST-TARGET` for `tests/unit/test_catalog` via `cd backend/core-service && PYTHONPATH=. .venv/bin/pytest tests/unit/test_catalog -v`
 - [x] 3.4 Add `POST /api/v1/collect` with `reset` and `airflow_lineage_mode` for Airflow DAG triggers; reconcile OpenAPI/frontend client
+
+## 4. Registry extraction load log
+
+- [x] 4.1 Read `sys.log_files` by `extraction_source_id`, newest first, paged; missing table is empty not FAILED
+- [x] 4.2 Add `GET /api/v1/assets/{id}/loads` for registry `EXTRACTION_SOURCE` only; Airflow sources return `available=false`
+- [x] 4.3 Show «Загрузки» tab on the object card and Lineage page with server paging
+- [x] 4.4 `CORE-PYTEST-TARGET` for catalog tests; `OPENAPI-EXPORT` and `FRONTEND-GEN-API`
+
+## 5. Lineage roots overview
+
+- [x] 5.1 `GET /api/v1/lineage/roots`: all DATA_SOURCE plus EXTRACTION_SOURCE without a parent DATA_SOURCE
+- [x] 5.2 `/lineage` with no selection shows those roots; picking one opens the existing bounded walk

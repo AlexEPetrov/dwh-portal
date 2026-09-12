@@ -10,6 +10,7 @@ from domains.catalog.services.asset_service import AssetService
 from domains.catalog.services.change_service import ChangeService
 from domains.catalog.services.collection_service import CollectionService
 from domains.catalog.services.collection_status_service import CollectionStatusService
+from domains.catalog.services.extraction_load_service import ExtractionLoadService
 from domains.catalog.services.lineage_service import LineageService
 from domains.catalog.services.overview_service import OverviewService
 from domains.catalog.services.storage_service import StorageService
@@ -58,6 +59,10 @@ def get_storage_service() -> StorageService:
 
 def get_lineage_service() -> LineageService:
     return LineageService(get_portal_store(), max_depth=get_portal_settings().lineage_max_depth)
+
+
+def get_extraction_load_service() -> ExtractionLoadService:
+    return ExtractionLoadService(get_portal_store())
 
 
 def get_change_service() -> ChangeService:

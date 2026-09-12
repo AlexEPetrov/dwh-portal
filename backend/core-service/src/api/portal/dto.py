@@ -128,6 +128,25 @@ class ColumnListResponse(BaseModel):
     items: list[ColumnItem]
 
 
+class LoadFileItem(BaseModel):
+    id: str
+    file_name: str
+    loaded_at: datetime.datetime | None = None
+    status: int | None = None
+    file_size: int | None = None
+    checksum: str | None = None
+    load_duration_sec: float | None = None
+    doc_date_actual: datetime.datetime | None = None
+
+
+class LoadFileListResponse(BaseModel):
+    items: list[LoadFileItem]
+    total: int
+    page: int
+    page_size: int
+    available: bool
+
+
 class LineageNode(BaseModel):
     id: uuid.UUID
     asset_type: str
@@ -152,6 +171,13 @@ class UnresolvedTarget(BaseModel):
 
 class LineageResponse(BaseModel):
     asset_id: uuid.UUID
+    nodes: list[LineageNode]
+    edges: list[LineageEdge]
+    unresolved_targets: list[UnresolvedTarget]
+    collector_freshness: list[FreshnessItem]
+
+
+class LineageRootsResponse(BaseModel):
     nodes: list[LineageNode]
     edges: list[LineageEdge]
     unresolved_targets: list[UnresolvedTarget]

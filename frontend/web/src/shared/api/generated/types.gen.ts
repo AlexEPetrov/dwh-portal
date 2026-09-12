@@ -198,6 +198,32 @@ export type LineageResponse = {
     collector_freshness: Array<FreshnessItem>;
 };
 
+export type LineageRootsResponse = {
+    nodes: Array<LineageNode>;
+    edges: Array<LineageEdge>;
+    unresolved_targets: Array<UnresolvedTarget>;
+    collector_freshness: Array<FreshnessItem>;
+};
+
+export type LoadFileItem = {
+    id: string;
+    file_name: string;
+    loaded_at?: string | null;
+    status?: number | null;
+    file_size?: number | null;
+    checksum?: string | null;
+    load_duration_sec?: number | null;
+    doc_date_actual?: string | null;
+};
+
+export type LoadFileListResponse = {
+    items: Array<LoadFileItem>;
+    total: number;
+    page: number;
+    page_size: number;
+    available: boolean;
+};
+
 export type LoginRequest = {
     username: string;
     password: string;
@@ -352,6 +378,8 @@ export type GetVersionApiSystemVersionGetResponse = string;
 
 export type GetOverviewResponse = OverviewResponse;
 
+export type ListLineageRootsResponse = LineageRootsResponse;
+
 export type ListAssetsData = {
     changedSince?: string | null;
     database?: string | null;
@@ -384,6 +412,14 @@ export type GetAssetLineageData = {
 };
 
 export type GetAssetLineageResponse = LineageResponse;
+
+export type ListAssetLoadsData = {
+    assetId: string;
+    page?: number;
+    pageSize?: number | null;
+};
+
+export type ListAssetLoadsResponse = LoadFileListResponse;
 
 export type GetStorageResponse = StorageResponse;
 
@@ -552,6 +588,16 @@ export type $OpenApiTs = {
             };
         };
     };
+    '/api/v1/lineage/roots': {
+        get: {
+            res: {
+                /**
+                 * Successful Response
+                 */
+                200: LineageRootsResponse;
+            };
+        };
+    };
     '/api/v1/assets': {
         get: {
             req: ListAssetsData;
@@ -605,6 +651,21 @@ export type $OpenApiTs = {
                  * Successful Response
                  */
                 200: LineageResponse;
+                /**
+                 * Validation Error
+                 */
+                422: HTTPValidationError;
+            };
+        };
+    };
+    '/api/v1/assets/{asset_id}/loads': {
+        get: {
+            req: ListAssetLoadsData;
+            res: {
+                /**
+                 * Successful Response
+                 */
+                200: LoadFileListResponse;
                 /**
                  * Validation Error
                  */

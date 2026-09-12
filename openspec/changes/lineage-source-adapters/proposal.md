@@ -29,10 +29,14 @@
   `POST /api/v1/collect`.
 - `POST /api/v1/collect` запускает тот же сбор, что CLI, с флагами
   `reset` и `airflow_lineage_mode` (вызов из Airflow DAG).
+- Для `EXTRACTION_SOURCE` из таблицы реестра (не DAG) Portal API
+  постранично читает фактически загруженные файлы из `sys.log_files`.
+  Каталог и lineage-граф по-прежнему из снимков; файлы не становятся
+  узлами графа. UI — вкладка «Загрузки».
 - Каноническая модель, Portal API чтения lineage и UI не меняют форму
   контракта чтения: новые рёбра вливаются в уже существующие типы
   `DERIVED_FROM` / `READS_FROM` / `WRITES_TO`. Collect HTTP — аддитивный
-  операторский метод.
+  операторский метод; `/loads` — аддитивное live-чтение журнала.
 
 Нет **BREAKING** изменений публичного HTTP API.
 
@@ -49,7 +53,8 @@
   registry не является отказом всего lineage; SQL-зависимости и
   Airflow reverse reconstruction.
 - `catalog`: lineage на карточке MUST отображаться и без extraction
-  sources, если есть рёбра tables/views (и опционально Airflow).
+  sources, если есть рёбра tables/views (и опционально Airflow);
+  registry extraction source MUST показывать постраничные загрузки.
 
 ## Impact
 
@@ -77,7 +82,8 @@ collection-status уже произвольный по `collector_name`.
 
 - `business_or_contract_semantic` — новые источники lineage, режимы
   Airflow `catalog`/`code` и правило «реестр необязателен»
-- `public_api_semantic` — аддитивный `POST /api/v1/collect`
+- `public_api_semantic` — аддитивный `POST /api/v1/collect` и
+  `GET /api/v1/assets/{id}/loads`
 
 ## Applicable routing
 
@@ -91,10 +97,12 @@ collection-status уже произвольный по `collector_name`.
 
 Пользователь явно поручил два переключаемых режима Airflow lineage
 (`catalog` / `code`) и HTTP-метод collect с этими флагами для вызова
-из DAG.
+из DAG. Затем поручил вкладку «Загрузки» с paging по `sys.log_files`
+для extraction source из реестра (не DAG).
 
 ## Downstream
 
 Generated OpenAPI/frontend client входят в цепочку из-за
-`POST /api/v1/collect`. Verification: `CORE-PYTEST-TARGET` для
-`tests/unit/test_catalog`, затем `OPENAPI-EXPORT` и `FRONTEND-GEN-API`.
+`POST /api/v1/collect` и `GET /api/v1/assets/{id}/loads`.
+Verification: `CORE-PYTEST-TARGET` для `tests/unit/test_catalog`,
+затем `OPENAPI-EXPORT` и `FRONTEND-GEN-API`.

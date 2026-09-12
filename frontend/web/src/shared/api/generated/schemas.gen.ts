@@ -878,6 +878,157 @@ export const $LineageResponse = {
     title: 'LineageResponse'
 } as const;
 
+export const $LineageRootsResponse = {
+    properties: {
+        nodes: {
+            items: {
+                '$ref': '#/components/schemas/LineageNode'
+            },
+            type: 'array',
+            title: 'Nodes'
+        },
+        edges: {
+            items: {
+                '$ref': '#/components/schemas/LineageEdge'
+            },
+            type: 'array',
+            title: 'Edges'
+        },
+        unresolved_targets: {
+            items: {
+                '$ref': '#/components/schemas/UnresolvedTarget'
+            },
+            type: 'array',
+            title: 'Unresolved Targets'
+        },
+        collector_freshness: {
+            items: {
+                '$ref': '#/components/schemas/FreshnessItem'
+            },
+            type: 'array',
+            title: 'Collector Freshness'
+        }
+    },
+    type: 'object',
+    required: ['nodes', 'edges', 'unresolved_targets', 'collector_freshness'],
+    title: 'LineageRootsResponse'
+} as const;
+
+export const $LoadFileItem = {
+    properties: {
+        id: {
+            type: 'string',
+            title: 'Id'
+        },
+        file_name: {
+            type: 'string',
+            title: 'File Name'
+        },
+        loaded_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Loaded At'
+        },
+        status: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Status'
+        },
+        file_size: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'File Size'
+        },
+        checksum: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Checksum'
+        },
+        load_duration_sec: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Load Duration Sec'
+        },
+        doc_date_actual: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Doc Date Actual'
+        }
+    },
+    type: 'object',
+    required: ['id', 'file_name'],
+    title: 'LoadFileItem'
+} as const;
+
+export const $LoadFileListResponse = {
+    properties: {
+        items: {
+            items: {
+                '$ref': '#/components/schemas/LoadFileItem'
+            },
+            type: 'array',
+            title: 'Items'
+        },
+        total: {
+            type: 'integer',
+            title: 'Total'
+        },
+        page: {
+            type: 'integer',
+            title: 'Page'
+        },
+        page_size: {
+            type: 'integer',
+            title: 'Page Size'
+        },
+        available: {
+            type: 'boolean',
+            title: 'Available'
+        }
+    },
+    type: 'object',
+    required: ['items', 'total', 'page', 'page_size', 'available'],
+    title: 'LoadFileListResponse'
+} as const;
+
 export const $LoginRequest = {
     properties: {
         username: {

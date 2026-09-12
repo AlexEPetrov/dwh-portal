@@ -245,3 +245,16 @@ runtime payload.
 - WHEN адаптер `extraction_registry` запускается
 - THEN статус прогона `SUCCESS` со `skipped`
 - AND остальные адаптеры lineage продолжают работу
+
+### Requirement: Журнал загрузок не входит в снимок
+
+Коллекторы MUST NOT копировать `sys.log_files` в Portal DB. Фактически
+загруженные файлы registry `EXTRACTION_SOURCE` читаются live через
+`GET /api/v1/assets/{asset_id}/loads`.
+
+#### Scenario: Сбор не материализует log_files
+
+- GIVEN в DWH есть строки `sys.log_files`
+- WHEN коллектор lineage завершается
+- THEN в каталоге нет отдельных asset на каждый файл
+- AND журнал доступен только через `/loads`

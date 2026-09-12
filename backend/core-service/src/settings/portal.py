@@ -22,7 +22,7 @@ class PortalSettings(BaseSettings):
 
 
 class DwhCollectorSettings(BaseSettings):
-    """Read-only DWH connection used only by collectors."""
+    """Read-only DWH connection used by collectors and live extraction load logs."""
 
     model_config = SettingsConfigDict(env_prefix="APP_DWH_")
 

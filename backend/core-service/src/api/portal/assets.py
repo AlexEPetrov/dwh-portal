@@ -10,6 +10,9 @@ from api.portal.dto import (
     AssetListResponse,
     ColumnListResponse,
     LineageResponse,
+    LineageRootsResponse,
+    LoadFileItem,
+    LoadFileListResponse,
     UnresolvedTarget,
     asset_list_item,
     column_item,
@@ -24,15 +27,31 @@ from domains.catalog.models import AssetQuery, AssetStatus, AssetType
 from domains.catalog.runtime import (
     get_asset_service,
     get_collection_status_service,
+    get_extraction_load_service,
     get_lineage_service,
     get_portal_settings,
     get_portal_store,
 )
 from domains.catalog.services.asset_service import AssetService
 from domains.catalog.services.collection_status_service import CollectionStatusService
+from domains.catalog.services.extraction_load_service import ExtractionLoadService
 from domains.catalog.services.lineage_service import LineageService
 
 assets_router = APIRouter()
+
+
+@assets_router.get("/lineage/roots", response_model=LineageRootsResponse, operation_id="listLineageRoots")
+def list_lineage_roots(
+    service: LineageService = Depends(get_lineage_service),
+    status_service: CollectionStatusService = Depends(get_collection_status_service),
+) -> LineageRootsResponse:
+    payload = service.list_roots()
+    return LineageRootsResponse(
+        nodes=[lineage_node(node) for node in payload["nodes"]],
+        edges=[lineage_edge(edge) for edge in payload["edges"]],
+        unresolved_targets=[UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]],
+        collector_freshness=freshness_items(status_service.list_status()),
+    )
 
 
 @assets_router.get("/assets", response_model=AssetListResponse, operation_id="listAssets")
@@ -143,4 +162,39 @@ def get_asset_lineage(
         edges=[lineage_edge(edge) for edge in payload["edges"]],
         unresolved_targets=[UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]],
         collector_freshness=freshness_items(status_service.list_status()),
+    )
+
+
+@assets_router.get(
+    "/assets/{asset_id}/loads", response_model=LoadFileListResponse, operation_id="listAssetLoads"
+)
+def list_asset_loads(
+    asset_id: uuid.UUID,
+    page: int = Query(default=1, ge=1),
+    page_size: int | None = Query(default=None, ge=1),
+    service: ExtractionLoadService = Depends(get_extraction_load_service),
+) -> LoadFileListResponse:
+    settings = get_portal_settings()
+    resolved_page_size = min(page_size or settings.default_page_size, settings.max_page_size)
+    payload = service.list_loads(asset_id, page, resolved_page_size)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return LoadFileListResponse(
+        items=[
+            LoadFileItem(
+                id=item.id,
+                file_name=item.file_name,
+                loaded_at=item.loaded_at,
+                status=item.status,
+                file_size=item.file_size,
+                checksum=item.checksum,
+                load_duration_sec=item.load_duration_sec,
+                doc_date_actual=item.doc_date_actual,
+            )
+            for item in payload.items
+        ],
+        total=payload.total,
+        page=page,
+        page_size=resolved_page_size,
+        available=payload.available,
     )

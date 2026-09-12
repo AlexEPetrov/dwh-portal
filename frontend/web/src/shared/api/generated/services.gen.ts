@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { GetScenariosListApiManagementScenariosGetResponse, GetReportStatusApiRequestsRequestIdGetData, GetReportStatusApiRequestsRequestIdGetResponse, GetRequestsApiRequestsApiRequestsGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse, RunPortalCollectData, RunPortalCollectResponse } from './types.gen';
+import type { GetScenariosListApiManagementScenariosGetResponse, GetReportStatusApiRequestsRequestIdGetData, GetReportStatusApiRequestsRequestIdGetResponse, GetRequestsApiRequestsApiRequestsGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListLineageRootsResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, ListAssetLoadsData, ListAssetLoadsResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse, RunPortalCollectData, RunPortalCollectResponse } from './types.gen';
 
 /**
  * Get Scenarios List
@@ -147,6 +147,16 @@ export const getOverview = (): CancelablePromise<GetOverviewResponse> => { retur
 }); };
 
 /**
+ * List Lineage Roots
+ * @returns LineageRootsResponse Successful Response
+ * @throws ApiError
+ */
+export const listLineageRoots = (): CancelablePromise<ListLineageRootsResponse> => { return __request(OpenAPI, {
+    method: 'GET',
+    url: '/api/v1/lineage/roots'
+}); };
+
+/**
  * List Assets
  * @param data The data for the request.
  * @param data.q
@@ -230,6 +240,30 @@ export const getAssetLineage = (data: GetAssetLineageData): CancelablePromise<Ge
     url: '/api/v1/assets/{asset_id}/lineage',
     path: {
         asset_id: data.assetId
+    },
+    errors: {
+        422: 'Validation Error'
+    }
+}); };
+
+/**
+ * List Asset Loads
+ * @param data The data for the request.
+ * @param data.assetId
+ * @param data.page
+ * @param data.pageSize
+ * @returns LoadFileListResponse Successful Response
+ * @throws ApiError
+ */
+export const listAssetLoads = (data: ListAssetLoadsData): CancelablePromise<ListAssetLoadsResponse> => { return __request(OpenAPI, {
+    method: 'GET',
+    url: '/api/v1/assets/{asset_id}/loads',
+    path: {
+        asset_id: data.assetId
+    },
+    query: {
+        page: data.page,
+        page_size: data.pageSize
     },
     errors: {
         422: 'Validation Error'

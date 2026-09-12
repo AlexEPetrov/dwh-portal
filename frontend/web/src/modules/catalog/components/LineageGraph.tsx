@@ -20,6 +20,8 @@ type Props = {
    * restores the same Lineage tab.
    */
   syncViewInUrl?: boolean;
+  /** Isolated DATA_SOURCE / orphan EXTRACTION_SOURCE overview (no edges). */
+  rootsOverview?: boolean;
 };
 
 const parseView = (raw: string | null): ViewKey => (raw === 'map' ? 'map' : 'list');
@@ -31,6 +33,7 @@ const LineageGraph = ({
   selectedAssetId,
   fillHeight = true,
   syncViewInUrl = false,
+  rootsOverview = false,
 }: Props) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -105,6 +108,7 @@ const LineageGraph = ({
                 edges={edges}
                 selectedAssetId={selectedAssetId}
                 onSelectInLineage={onSelectInLineage}
+                rootsOverview={rootsOverview}
               />
             </div>
           ),
@@ -125,6 +129,7 @@ const LineageGraph = ({
                 edges={edges}
                 selectedAssetId={selectedAssetId}
                 onSelectInLineage={onSelectInLineage}
+                rootsOverview={rootsOverview}
               />
             </div>
           ),

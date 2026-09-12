@@ -1,8 +1,15 @@
+import datetime
+import uuid
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.portal import portal_router
-from domains.catalog.runtime import get_collection_service, reset_portal_store
+from domains.catalog.runtime import (
+    get_collection_service,
+    get_extraction_load_service,
+    reset_portal_store,
+)
 from domains.catalog.services.collection_service import (
     CollectOptions,
     CollectResult,
@@ -36,6 +43,10 @@ def test_overview_and_assets_use_canonical_payload():
     lineage = client.get(f"/api/v1/assets/{item['id']}/lineage").json()
     assert lineage["nodes"]
     assert all(edge["relationship_type"] != "CONTAINS" for edge in lineage["edges"])
+    roots = client.get("/api/v1/lineage/roots").json()
+    assert roots["edges"] == []
+    assert any(node["name"] == "ICE" and node["asset_type"] == "DATA_SOURCE" for node in roots["nodes"])
+    assert all(node["name"] != "Brent Settlement" for node in roots["nodes"])
 
 
 def test_storage_changes_and_collection_status():
@@ -127,3 +138,54 @@ def test_collect_endpoint_returns_500_when_a_collector_failed():
     assert response.status_code == 500
     assert response.json()["failed"] is True
     assert response.json()["runs"]["catalog"]["status"] == "FAILED"
+
+
+class _FakeLoadService:
+    def __init__(self, pages: dict):
+        self.pages = pages
+
+    def list_loads(self, asset_id, page: int, page_size: int):
+        from domains.catalog.providers.log_files import LoadFilePage, LoadFileRecord
+
+        if asset_id not in self.pages:
+            return None
+        items = self.pages[asset_id]
+        start = (page - 1) * page_size
+        return LoadFilePage(items=items[start : start + page_size], total=len(items), available=True)
+
+
+def test_asset_loads_are_paged_for_registry_extraction():
+    from domains.catalog.providers.log_files import LoadFileRecord
+
+    reset_portal_store()
+    extraction_id = uuid.UUID("44444444-4444-4444-4444-444444444402")
+    items = [
+        LoadFileRecord(id="2", file_name="new.xlsx", loaded_at=datetime.datetime(2026, 1, 3, tzinfo=datetime.timezone.utc)),
+        LoadFileRecord(id="1", file_name="old.xlsx", loaded_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)),
+    ]
+    app = FastAPI()
+    app.include_router(portal_router)
+    app.dependency_overrides[get_extraction_load_service] = lambda: _FakeLoadService({extraction_id: items})
+    client = TestClient(app)
+
+    response = client.get(f"/api/v1/assets/{extraction_id}/loads", params={"page": 1, "page_size": 1})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["available"] is True
+    assert body["total"] == 2
+    assert body["page_size"] == 1
+    assert body["items"][0]["file_name"] == "new.xlsx"
+
+    missing = client.get(f"/api/v1/assets/{uuid.uuid4()}/loads")
+    assert missing.status_code == 404
+
+
+def test_demo_table_loads_are_unavailable_without_dwh_query():
+    client = _client()
+    assets = client.get("/api/v1/assets", params={"q": "ice_brent", "type": "TABLE"}).json()
+    table_id = assets["items"][0]["id"]
+    body = client.get(f"/api/v1/assets/{table_id}/loads").json()
+    assert body["available"] is False
+    assert body["items"] == []
+    assert body["total"] == 0
+

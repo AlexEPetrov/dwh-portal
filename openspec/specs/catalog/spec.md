@@ -5,8 +5,10 @@
 DWH Portal даёт аналитику и инженерам единый каталог объектов хранилища:
 поиск таблиц и представлений, карточка объекта с описанием колонок,
 оценкой размера, происхождением данных и историей структурных изменений.
-Каталог читает только нормализованные снимки Portal API и не сканирует DWH
-в момент открытия страницы.
+Каталог читает нормализованные снимки Portal API и не выполняет
+metadata-сканирование DWH при открытии страницы. Исключение: вкладка
+«Загрузки» у `EXTRACTION_SOURCE` из реестра отдаёт постраничный live-журнал
+`sys.log_files` через Portal API.
 
 ## Requirements
 
@@ -140,6 +142,24 @@ MUST всё равно показывать SQL-зависимости `DERIVED_
 - THEN в ответе есть `EXTRACTION_SOURCE`, `PROCESS`, `TABLE` и `VIEW`
 - AND `DATA_SOURCE` и `STORAGE_LOCATION` отсутствуют
 
+### Requirement: Корень lineage по умолчанию
+
+`GET /api/v1/lineage/roots` MUST возвращать активные корневые объекты
+lineage: все `DATA_SOURCE` и те `EXTRACTION_SOURCE`, у которых нет
+родительского `DATA_SOURCE` по ребру `EXTRACTS_TO`.
+
+Страница `/lineage` без выбранного объекта MUST показывать этот набор.
+Выбор объекта MUST открывать его обычный ограниченный обход.
+
+#### Scenario: Обзор корней на /lineage
+
+- GIVEN есть `DATA_SOURCE` ICE, связанный с extraction source из реестра
+- AND есть `EXTRACTION_SOURCE` из Airflow DAG без `DATA_SOURCE`
+- WHEN клиент вызывает `GET /api/v1/lineage/roots`
+- THEN в узлах есть ICE и Airflow extraction source
+- AND extraction source из реестра отсутствует
+- AND рёбер нет
+
 ### Requirement: Обзор, хранение и изменения
 
 `GET /api/v1/overview` MUST возвращать число объектов, итоги хранения,
@@ -161,11 +181,43 @@ MUST всё равно показывать SQL-зависимости `DERIVED_
 - WHEN клиент вызывает `GET /api/v1/overview`
 - THEN ответ собирается только из снимков Portal DB
 
+### Requirement: Загрузки EXTRACTION_SOURCE из реестра
+
+Для `EXTRACTION_SOURCE` с `source_provider=extraction_registry`
+`GET /api/v1/assets/{asset_id}/loads` MUST возвращать постраничный список
+фактически загруженных файлов из `sys.log_files` по `extraction_source_id`
+(= `native_id` объекта), сортировка по времени загрузки DESC.
+
+Это live-чтение журнала загрузок, не metadata-сканирование каталога и не
+замена снимков. Overview, storage и список объектов по-прежнему из снимков.
+Файлы MUST NOT становиться узлами lineage-графа.
+
+Эндпоинт MUST поддерживать `page` / `page_size`. Если объекта нет — 404.
+Для `EXTRACTION_SOURCE` из Airflow DAG, для других типов объектов и если
+`sys.log_files` отсутствует, ответ MUST быть пустым списком с
+`available=false`, а не 500.
+
+UI MUST показывать вкладку «Загрузки» на карточке registry extraction source
+и на странице Lineage при выборе такого объекта.
+
+#### Scenario: Страница загрузок постранично
+
+- GIVEN extraction source из реестра с несколькими строками в `sys.log_files`
+- WHEN клиент запрашивает `GET /api/v1/assets/{id}/loads?page=1&page_size=50`
+- THEN ответ содержит не более 50 файлов, `total` и `available=true`
+- AND строки отсортированы по времени загрузки по убыванию
+
+#### Scenario: Airflow extraction source без журнала загрузок
+
+- GIVEN `EXTRACTION_SOURCE` с `source_provider=airflow_dags`
+- WHEN клиент запрашивает `/loads`
+- THEN `items` пустой и `available=false`
+
 ### Requirement: Браузер говорит только с Portal API
 
-Веб-приложение MUST читать каталог, хранение, lineage и изменения
-только через `/api/v1/*`. UI MUST NOT выполнять metadata-сканирование DWH
-и MUST NOT вызывать `POST /api/v1/collect`. Операторский сбор запускает
+Веб-приложение MUST читать каталог, хранение, lineage, изменения и журнал
+загрузок только через `/api/v1/*`. UI MUST NOT выполнять metadata-сканирование
+DWH и MUST NOT вызывать `POST /api/v1/collect`. Операторский сбор запускает
 Airflow или CLI.
 
 #### Scenario: Страница объектов использует канонический список

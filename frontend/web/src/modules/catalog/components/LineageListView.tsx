@@ -11,6 +11,7 @@ type Props = {
   edges: LineageEdge[];
   selectedAssetId?: string;
   onSelectInLineage?: (assetId: string) => void;
+  rootsOverview?: boolean;
 };
 
 const NodeCard = ({
@@ -48,7 +49,13 @@ const Arrow = ({ label }: { label: string }) => (
   </Typography.Text>
 );
 
-const LineageListView = ({ nodes, edges, selectedAssetId, onSelectInLineage }: Props) => {
+const LineageListView = ({
+  nodes,
+  edges,
+  selectedAssetId,
+  onSelectInLineage,
+  rootsOverview = false,
+}: Props) => {
   const stages = useMemo(() => {
     const present = new Set(nodes.map((node) => node.asset_type));
     return STAGE_ORDER.filter((type) => present.has(type));
@@ -57,7 +64,40 @@ const LineageListView = ({ nodes, edges, selectedAssetId, onSelectInLineage }: P
   const rows = useMemo(() => buildFlowRows(nodes, edges), [nodes, edges]);
 
   if (!nodes.length) {
-    return <Empty description="Нет lineage для выбранного объекта" />;
+    return (
+      <Empty
+        description={
+          rootsOverview ? 'Нет корневых объектов lineage' : 'Нет lineage для выбранного объекта'
+        }
+      />
+    );
+  }
+  if (rootsOverview) {
+    return (
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Корневые объекты: DATA_SOURCE и EXTRACTION_SOURCE без родительского источника. Нажмите
+          прицел, чтобы открыть цепочку.
+        </Typography.Paragraph>
+        {stages.map((type) => (
+          <Space key={type} direction="vertical" size={8} style={{ width: '100%' }}>
+            <Tag color={TYPE_COLOR[type]}>{type}</Tag>
+            <Space wrap size={8}>
+              {nodes
+                .filter((node) => node.asset_type === type)
+                .map((node) => (
+                  <NodeCard
+                    key={node.id}
+                    node={node}
+                    selected={node.id === selectedAssetId}
+                    onSelectInLineage={onSelectInLineage}
+                  />
+                ))}
+            </Space>
+          </Space>
+        ))}
+      </Space>
+    );
   }
   if (!edges.length || !rows.length) {
     return (

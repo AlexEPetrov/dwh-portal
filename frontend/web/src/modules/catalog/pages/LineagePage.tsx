@@ -1,8 +1,9 @@
-import { getAssetLineage, listAssets } from '@shared/api/generated';
-import type { AssetListItem, LineageResponse } from '@shared/api/generated';
+import { getAssetLineage, listAssets, listLineageRoots } from '@shared/api/generated';
+import type { AssetListItem, LineageResponse, LineageRootsResponse } from '@shared/api/generated';
 import { Alert, Card, Empty, Select, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
 import FreshnessBar from '../components/FreshnessBar';
 import LineageGraph from '../components/LineageGraph';
 
@@ -21,7 +22,7 @@ const LineagePage = () => {
   const { assetId } = useParams<{ assetId: string }>();
   const navigate = useNavigate();
   const [options, setOptions] = useState<Array<{ value: string; label: string; type: string }>>([]);
-  const [lineage, setLineage] = useState<LineageResponse | null>(null);
+  const [lineage, setLineage] = useState<LineageResponse | LineageRootsResponse | null>(null);
 
   useEffect(() => {
     Promise.all(
@@ -49,12 +50,9 @@ const LineagePage = () => {
   }, []);
 
   useEffect(() => {
-    if (!assetId) {
-      setLineage(null);
-      return undefined;
-    }
     let cancelled = false;
-    getAssetLineage({ assetId }).then((payload) => {
+    const request = assetId ? getAssetLineage({ assetId }) : listLineageRoots();
+    request.then((payload) => {
       if (!cancelled) {
         setLineage(payload);
       }
@@ -65,7 +63,7 @@ const LineagePage = () => {
   }, [assetId]);
 
   const chainHint = useMemo(() => {
-    if (!lineage) {
+    if (!assetId || !lineage) {
       return null;
     }
     const types = new Set(lineage.nodes.map((node) => node.asset_type));
@@ -82,7 +80,11 @@ const LineagePage = () => {
     if (!hasProcess) missing.push('PROCESS');
     if (!hasTable) missing.push('TABLE/VIEW (нужен WRITES_TO из get_metadata())');
     return missing;
-  }, [lineage]);
+  }, [assetId, lineage]);
+
+  const selectedIsExtraction = options.some(
+    (item) => item.value === assetId && item.type === 'EXTRACTION_SOURCE'
+  );
 
   return (
     <div
@@ -100,23 +102,24 @@ const LineagePage = () => {
           Lineage
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          DATA_SOURCE предоставляет EXTRACTION_SOURCE → STORAGE → PROCESS → TABLE/VIEW. Представления:
-          список hops и граф зависимостей (React Flow).
+          По умолчанию — корневые объекты: все DATA_SOURCE и EXTRACTION_SOURCE без родительского
+          источника. Выбор объекта открывает его цепочку (список hops и граф).
         </Typography.Paragraph>
         <FreshnessBar items={lineage?.collector_freshness} />
       </div>
       <Card style={{ flex: '0 0 auto' }}>
         <Select
           showSearch
+          allowClear
           optionFilterProp="label"
-          placeholder="Выберите DATA_SOURCE / EXTRACTION / PROCESS / TABLE…"
+          placeholder="Все корни, или выберите объект…"
           style={{ width: '100%', maxWidth: 640 }}
           value={assetId}
           options={options}
-          onChange={(value) => navigate(`/lineage/${value}`)}
+          onChange={(value) => navigate(value ? `/lineage/${value}` : '/lineage')}
         />
       </Card>
-      {lineage?.unresolved_targets.length ? (
+      {assetId && lineage?.unresolved_targets.length ? (
         <Alert
           type="warning"
           showIcon
@@ -140,11 +143,15 @@ const LineagePage = () => {
             selectedAssetId={assetId}
             fillHeight
             syncViewInUrl
+            rootsOverview={!assetId}
           />
         ) : (
-          <Empty description="Выберите объект — для демо удобнее DATA_SOURCE (ICE / CME Group)" />
+          <Empty description="Загрузка lineage…" />
         )}
       </div>
+      {selectedIsExtraction && assetId ? (
+        <ExtractionLoadsPanel key={assetId} assetId={assetId} hideWhenUnavailable compact />
+      ) : null}
     </div>
   );
 };

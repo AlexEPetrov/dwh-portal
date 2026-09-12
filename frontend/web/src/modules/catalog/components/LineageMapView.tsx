@@ -25,6 +25,7 @@ type Props = {
   edges: LineageEdge[];
   selectedAssetId?: string;
   onSelectInLineage?: (assetId: string) => void;
+  rootsOverview?: boolean;
 };
 
 type AssetNodeData = {
@@ -85,13 +86,19 @@ const layoutWithDagre = (nodes: Node<AssetNodeData>[], edges: Edge[]): Node<Asse
   });
 };
 
-const LineageMapView = ({ nodes, edges, selectedAssetId, onSelectInLineage }: Props) => {
+const LineageMapView = ({
+  nodes,
+  edges,
+  selectedAssetId,
+  onSelectInLineage,
+  rootsOverview = false,
+}: Props) => {
   const navigate = useNavigate();
   const flow = useMemo(() => {
-    if (!nodes.length || !edges.length) {
+    if (!nodes.length) {
       return { nodes: [] as Node<AssetNodeData>[], edges: [] as Edge[] };
     }
-    const flowEdges = buildFlowEdges(nodes, edges);
+    const flowEdges = edges.length ? buildFlowEdges(nodes, edges) : [];
     const rfNodes: Node<AssetNodeData>[] = nodes.map((node) => ({
       id: node.id,
       type: 'asset',
@@ -142,9 +149,15 @@ const LineageMapView = ({ nodes, edges, selectedAssetId, onSelectInLineage }: Pr
   }, [nodes, edges, selectedAssetId, onSelectInLineage, navigate]);
 
   if (!nodes.length) {
-    return <Empty description="Нет lineage для выбранного объекта" />;
+    return (
+      <Empty
+        description={
+          rootsOverview ? 'Нет корневых объектов lineage' : 'Нет lineage для выбранного объекта'
+        }
+      />
+    );
   }
-  if (!edges.length || !flow.edges.length) {
+  if (!rootsOverview && (!edges.length || !flow.edges.length)) {
     return <Empty description="У объекта нет data-flow рёбер для карты зависимостей." />;
   }
 

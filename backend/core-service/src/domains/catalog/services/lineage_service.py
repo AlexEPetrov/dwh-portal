@@ -3,8 +3,18 @@ from __future__ import annotations
 import uuid
 from collections import deque
 
-from domains.catalog.models import LINEAGE_RELATIONSHIP_TYPES, Asset, Relationship
+from domains.catalog.models import (
+    LINEAGE_RELATIONSHIP_TYPES,
+    Asset,
+    AssetQuery,
+    AssetStatus,
+    AssetType,
+    Relationship,
+    RelationshipType,
+)
 from domains.catalog.repositories.ports import PortalStore
+
+_LIST_PAGE_SIZE = 200
 
 
 class LineageService:
@@ -13,6 +23,22 @@ class LineageService:
     def __init__(self, store: PortalStore, max_depth: int = 8):
         self._store = store
         self._max_depth = max_depth
+
+    def list_roots(self) -> dict:
+        """Return lineage roots: every DATA_SOURCE and orphan EXTRACTION_SOURCE."""
+        sources = self._list_active(AssetType.DATA_SOURCE)
+        extractions = [
+            asset
+            for asset in self._list_active(AssetType.EXTRACTION_SOURCE)
+            if not self._has_data_source_parent(asset)
+        ]
+        nodes = sources + extractions
+        nodes.sort(key=lambda asset: (asset.asset_type.value, asset.name.lower(), asset.qualified_name))
+        return {
+            "nodes": nodes,
+            "edges": [],
+            "unresolved_targets": [],
+        }
 
     def get_lineage(self, asset_id: uuid.UUID) -> dict:
         origin = self._store.get_asset(asset_id)
@@ -66,3 +92,37 @@ class LineageService:
                     seen_nodes.add(neighbour)
                     queue.append((neighbour, depth + 1))
         return list(visited_edges.values())
+
+    def _list_active(self, asset_type: AssetType) -> list[Asset]:
+        items: list[Asset] = []
+        page = 1
+        while True:
+            batch, total = self._store.list_assets(
+                AssetQuery(
+                    asset_type=asset_type,
+                    status=AssetStatus.ACTIVE,
+                    page=page,
+                    page_size=_LIST_PAGE_SIZE,
+                    sort="name",
+                )
+            )
+            items.extend(batch)
+            if len(items) >= total or not batch:
+                break
+            page += 1
+        return items
+
+    def _has_data_source_parent(self, extraction: Asset) -> bool:
+        for edge in self._store.list_relationships(
+            asset_id=extraction.id, types={RelationshipType.EXTRACTS_TO}
+        ):
+            if edge.to_asset_id != extraction.id:
+                continue
+            parent = self._store.get_asset(edge.from_asset_id)
+            if (
+                parent is not None
+                and parent.asset_type == AssetType.DATA_SOURCE
+                and parent.deleted_at is None
+            ):
+                return True
+        return False

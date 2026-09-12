@@ -40,7 +40,43 @@ MUST всё равно показывать SQL-зависимости `DERIVED_
 - THEN в ответе есть `EXTRACTION_SOURCE`, `PROCESS`, `TABLE` и `VIEW`
 - AND `DATA_SOURCE` и `STORAGE_LOCATION` отсутствуют
 
+### Requirement: Корень lineage по умолчанию
+
+`GET /api/v1/lineage/roots` MUST возвращать все активные `DATA_SOURCE` и
+`EXTRACTION_SOURCE` без родительского `DATA_SOURCE`. Страница `/lineage`
+без выбранного объекта MUST показывать этот набор.
+
+#### Scenario: Обзор корней на /lineage
+
+- GIVEN есть `DATA_SOURCE` ICE и Airflow extraction source без родителя
+- WHEN клиент вызывает `GET /api/v1/lineage/roots`
+- THEN в узлах есть оба корня
+- AND registry extraction source с родителем ICE отсутствует
+
 ### Requirement: Браузер говорит только с Portal API
 
 Веб-приложение MUST читать каталог только через `/api/v1/*`.
 UI MUST NOT вызывать `POST /api/v1/collect`.
+
+### Requirement: Загрузки EXTRACTION_SOURCE из реестра
+
+Для `EXTRACTION_SOURCE` с `source_provider=extraction_registry`
+`GET /api/v1/assets/{asset_id}/loads` MUST возвращать постраничный список
+файлов из `sys.log_files` по `extraction_source_id`, сортировка по времени
+загрузки DESC. Файлы MUST NOT становиться узлами lineage-графа.
+
+Для Airflow DAG и при отсутствии `sys.log_files` ответ MUST быть пустым
+с `available=false`, не 500. UI MUST показывать вкладку «Загрузки» на
+карточке и на странице Lineage.
+
+#### Scenario: Страница загрузок постранично
+
+- GIVEN extraction source из реестра с несколькими строками в `sys.log_files`
+- WHEN клиент запрашивает `/loads?page=1&page_size=50`
+- THEN ответ содержит не более 50 файлов и `available=true`
+
+#### Scenario: Airflow extraction source без журнала загрузок
+
+- GIVEN `EXTRACTION_SOURCE` с `source_provider=airflow_dags`
+- WHEN клиент запрашивает `/loads`
+- THEN `items` пустой и `available=false`
