@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
@@ -19,30 +19,26 @@ collect_router = APIRouter()
     responses={500: {"model": CollectResponse}},
 )
 def run_portal_collect(
+    service: Annotated[CollectionService, Depends(get_collection_service)],
     reset: bool = Query(False, description="Purge sol_dwh_portal snapshots before collecting"),
     airflow_lineage_mode: Literal["catalog", "code"] | None = Query(
         None,
         description="Airflow WRITES_TO matching: catalog (snapshot tables only) or code (DAG AST)",
     ),
-    payload: CollectRequest | None = Body(default=None),
-    service: CollectionService = Depends(get_collection_service),
+    payload: Annotated[CollectRequest | None, Body()] = None,
 ) -> CollectResponse | JSONResponse:
     """Trigger snapshot collection. Intended for Airflow DAGs, not UI page loads."""
     if payload is not None:
         reset = payload.reset
         if payload.airflow_lineage_mode is not None:
             airflow_lineage_mode = payload.airflow_lineage_mode
-    result = service.run(
-        CollectOptions(reset=reset, airflow_lineage_mode=airflow_lineage_mode)
-    )
+    result = service.run(CollectOptions(reset=reset, airflow_lineage_mode=airflow_lineage_mode))
     response = CollectResponse(
         reset=result.reset,
         airflow_lineage_mode=result.airflow_lineage_mode,
         failed=result.failed,
         runs={
-            name: CollectRunItem(
-                status=item.status, message=item.message, details=item.details
-            )
+            name: CollectRunItem(status=item.status, message=item.message, details=item.details)
             for name, item in result.runs.items()
         },
     )

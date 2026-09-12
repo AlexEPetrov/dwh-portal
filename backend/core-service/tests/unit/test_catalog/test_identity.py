@@ -1,6 +1,7 @@
+import uuid
+
 from domains.catalog.identity import compute_structure_hash, strip_secrets
 from domains.catalog.models import AssetColumn, AssetType
-import uuid
 
 
 def test_structure_hash_is_stable_for_same_columns():

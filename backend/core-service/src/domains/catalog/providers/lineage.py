@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-
 STORAGE_TARGET_TYPES = frozenset(
     {"storage", "storage_location", "s3", "file", "object_store"}
 )

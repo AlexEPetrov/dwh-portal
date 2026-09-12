@@ -25,7 +25,8 @@
   "python.analysis.inlayHints.variableTypes": true,
   "python.analysis.inlayHints.functionReturnTypes": true,
 
-  // Если используете Ruff + Black (рекомендую)
+  // Python style lives in backend/core-service/pyproject.toml (Black + Ruff, line length 100).
+  // Do not set ruff.lineLength or black-formatter.args here: editorFirst would override the file.
   "python.linting.enabled": false,
   "python.linting.pylintEnabled": false,
   "python.formatting.provider": "black",
@@ -34,11 +35,8 @@
   },
   "ruff.enable": true,
   "ruff.organizeImports": true,
-
-  "ruff.lineLength": 120,
-  "ruff.lint.select": ["E", "F", "B", "I"],
-  "ruff.lint.ignore": ["D"],
-  "black-formatter.args": ["--line-length", "100"],
+  "ruff.configuration": "${workspaceFolder}/backend/core-service/pyproject.toml",
+  "ruff.configurationPreference": "filesystemFirst",
 
   // Подхватывать типизацию/линт в рабочем дереве
   "python.analysis.typeCheckingMode": "basic",

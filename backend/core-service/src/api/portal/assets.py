@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -40,22 +41,28 @@ from domains.catalog.services.lineage_service import LineageService
 assets_router = APIRouter()
 
 
-@assets_router.get("/lineage/roots", response_model=LineageRootsResponse, operation_id="listLineageRoots")
+@assets_router.get(
+    "/lineage/roots", response_model=LineageRootsResponse, operation_id="listLineageRoots"
+)
 def list_lineage_roots(
-    service: LineageService = Depends(get_lineage_service),
-    status_service: CollectionStatusService = Depends(get_collection_status_service),
+    service: Annotated[LineageService, Depends(get_lineage_service)],
+    status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
 ) -> LineageRootsResponse:
     payload = service.list_roots()
     return LineageRootsResponse(
         nodes=[lineage_node(node) for node in payload["nodes"]],
         edges=[lineage_edge(edge) for edge in payload["edges"]],
-        unresolved_targets=[UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]],
+        unresolved_targets=[
+            UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]
+        ],
         collector_freshness=freshness_items(status_service.list_status()),
     )
 
 
 @assets_router.get("/assets", response_model=AssetListResponse, operation_id="listAssets")
 def list_assets(
+    service: Annotated[AssetService, Depends(get_asset_service)],
+    status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
     q: str | None = None,
     database: str | None = None,
     schema: str | None = Query(default=None, alias="schema"),
@@ -66,8 +73,6 @@ def list_assets(
     sort: str = "qualified_name",
     page: int = Query(default=1, ge=1),
     page_size: int | None = Query(default=None, ge=1),
-    service: AssetService = Depends(get_asset_service),
-    status_service: CollectionStatusService = Depends(get_collection_status_service),
 ) -> AssetListResponse:
     settings = get_portal_settings()
     resolved_page_size = min(page_size or settings.default_page_size, settings.max_page_size)
@@ -99,11 +104,13 @@ def list_assets(
     )
 
 
-@assets_router.get("/assets/{asset_id}", response_model=AssetDetailResponse, operation_id="getAsset")
+@assets_router.get(
+    "/assets/{asset_id}", response_model=AssetDetailResponse, operation_id="getAsset"
+)
 def get_asset(
     asset_id: uuid.UUID,
-    service: AssetService = Depends(get_asset_service),
-    status_service: CollectionStatusService = Depends(get_collection_status_service),
+    service: Annotated[AssetService, Depends(get_asset_service)],
+    status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
 ) -> AssetDetailResponse:
     asset = service.get_asset(asset_id)
     if asset is None:
@@ -138,11 +145,14 @@ def get_asset(
     "/assets/{asset_id}/columns", response_model=ColumnListResponse, operation_id="getAssetColumns"
 )
 def get_asset_columns(
-    asset_id: uuid.UUID, service: AssetService = Depends(get_asset_service)
+    asset_id: uuid.UUID,
+    service: Annotated[AssetService, Depends(get_asset_service)],
 ) -> ColumnListResponse:
     if service.get_asset(asset_id) is None:
         raise HTTPException(status_code=404, detail="Asset not found")
-    return ColumnListResponse(items=[column_item(column) for column in service.get_columns(asset_id)])
+    return ColumnListResponse(
+        items=[column_item(column) for column in service.get_columns(asset_id)]
+    )
 
 
 @assets_router.get(
@@ -150,8 +160,8 @@ def get_asset_columns(
 )
 def get_asset_lineage(
     asset_id: uuid.UUID,
-    service: LineageService = Depends(get_lineage_service),
-    status_service: CollectionStatusService = Depends(get_collection_status_service),
+    service: Annotated[LineageService, Depends(get_lineage_service)],
+    status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
 ) -> LineageResponse:
     payload = service.get_lineage(asset_id)
     if payload["asset"] is None:
@@ -160,7 +170,9 @@ def get_asset_lineage(
         asset_id=asset_id,
         nodes=[lineage_node(node) for node in payload["nodes"]],
         edges=[lineage_edge(edge) for edge in payload["edges"]],
-        unresolved_targets=[UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]],
+        unresolved_targets=[
+            UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]
+        ],
         collector_freshness=freshness_items(status_service.list_status()),
     )
 
@@ -170,9 +182,9 @@ def get_asset_lineage(
 )
 def list_asset_loads(
     asset_id: uuid.UUID,
+    service: Annotated[ExtractionLoadService, Depends(get_extraction_load_service)],
     page: int = Query(default=1, ge=1),
     page_size: int | None = Query(default=None, ge=1),
-    service: ExtractionLoadService = Depends(get_extraction_load_service),
 ) -> LoadFileListResponse:
     settings = get_portal_settings()
     resolved_page_size = min(page_size or settings.default_page_size, settings.max_page_size)

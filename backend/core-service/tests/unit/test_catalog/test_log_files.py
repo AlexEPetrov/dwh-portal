@@ -47,12 +47,20 @@ class FakeCursor:
         if "count(*)" in normalized:
             source_id = str(params[0])
             self._rows = [
-                (sum(1 for row in self._connection.rows if str(row["extraction_source_id"]) == source_id),)
+                (
+                    sum(
+                        1
+                        for row in self._connection.rows
+                        if str(row["extraction_source_id"]) == source_id
+                    ),
+                )
             ]
             return
         source_id = str(params[0])
         limit, offset = int(params[1]), int(params[2])
-        matched = [row for row in self._connection.rows if str(row["extraction_source_id"]) == source_id]
+        matched = [
+            row for row in self._connection.rows if str(row["extraction_source_id"]) == source_id
+        ]
         matched.sort(key=lambda row: row["timestamp"] or datetime.datetime.min, reverse=True)
         page_rows = matched[offset : offset + limit]
         select_part = sql.split("FROM", 1)[0].replace("SELECT", "", 1)
@@ -104,7 +112,11 @@ def test_log_files_are_paged_newest_first():
         [
             _file_row("old.xlsx", TS_OLD, "c2000000-0000-0000-0000-000000000001"),
             _file_row("new.xlsx", TS_NEW, "c2000000-0000-0000-0000-000000000002"),
-            _file_row("mid.xlsx", datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc), "c2000000-0000-0000-0000-000000000003"),
+            _file_row(
+                "mid.xlsx",
+                datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc),
+                "c2000000-0000-0000-0000-000000000003",
+            ),
         ],
     )
     provider = LogFilesProvider(connection=connection)
@@ -148,7 +160,10 @@ def test_registry_extraction_reads_provider(store):
             last_seen_at=TS_NEW,
         )
     )
-    connection = FakeConnection(LOG_COLUMNS, [_file_row("document_1.xlsx", TS_NEW, "c2000000-0000-0000-0000-000000000999")])
+    connection = FakeConnection(
+        LOG_COLUMNS,
+        [_file_row("document_1.xlsx", TS_NEW, "c2000000-0000-0000-0000-000000000999")],
+    )
     service = ExtractionLoadService(store, LogFilesProvider(connection=connection))
     page = service.list_loads(asset.id, 1, 50)
     assert page is not None

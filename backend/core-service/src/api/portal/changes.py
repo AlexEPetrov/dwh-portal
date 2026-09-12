@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.portal.dto import ChangeDetailResponse, ChangeListResponse, change_item, freshness_items
 from domains.catalog.models import ChangeQuery, ChangeType
-from domains.catalog.runtime import get_change_service, get_collection_status_service, get_portal_store
+from domains.catalog.runtime import (
+    get_change_service,
+    get_collection_status_service,
+    get_portal_store,
+)
 from domains.catalog.services.change_service import ChangeService
 from domains.catalog.services.collection_status_service import CollectionStatusService
 
@@ -16,14 +21,14 @@ changes_router = APIRouter()
 
 @changes_router.get("/changes", response_model=ChangeListResponse, operation_id="listChanges")
 def list_changes(
+    service: Annotated[ChangeService, Depends(get_change_service)],
+    status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
     change_type: ChangeType | None = None,
     since: datetime.datetime | None = None,
     until: datetime.datetime | None = None,
     asset_id: uuid.UUID | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
-    service: ChangeService = Depends(get_change_service),
-    status_service: CollectionStatusService = Depends(get_collection_status_service),
 ) -> ChangeListResponse:
     items, total = service.list_changes(
         ChangeQuery(
@@ -50,9 +55,12 @@ def list_changes(
     )
 
 
-@changes_router.get("/changes/{change_id}", response_model=ChangeDetailResponse, operation_id="getChange")
+@changes_router.get(
+    "/changes/{change_id}", response_model=ChangeDetailResponse, operation_id="getChange"
+)
 def get_change(
-    change_id: uuid.UUID, service: ChangeService = Depends(get_change_service)
+    change_id: uuid.UUID,
+    service: Annotated[ChangeService, Depends(get_change_service)],
 ) -> ChangeDetailResponse:
     event = service.get_change(change_id)
     if event is None:

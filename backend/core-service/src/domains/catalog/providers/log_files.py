@@ -113,7 +113,9 @@ class LogFilesProvider:
             return LoadFilePage(items=[], total=0, available=False)
         source_ident = _quote_ident(source_col)
         time_ident = next((ident for field, ident in selected if field == "loaded_at"), None)
-        order_ident = time_ident or next((ident for field, ident in selected if field == "id"), source_ident)
+        order_ident = time_ident or next(
+            (ident for field, ident in selected if field == "id"), source_ident
+        )
         select_sql = ", ".join(ident for _, ident in selected)
         offset = max(page - 1, 0) * page_size
         with connection.cursor() as cursor:
@@ -137,7 +139,9 @@ class LogFilesProvider:
 
     @staticmethod
     def _record(selected: list[tuple[str, str]], row: tuple[Any, ...]) -> LoadFileRecord:
-        values: dict[str, Any] = {field: value for (field, _), value in zip(selected, row)}
+        values: dict[str, Any] = {
+            field: value for (field, _), value in zip(selected, row, strict=True)
+        }
         loaded_at = values.get("loaded_at")
         doc_date = values.get("doc_date_actual")
         status = values.get("status")

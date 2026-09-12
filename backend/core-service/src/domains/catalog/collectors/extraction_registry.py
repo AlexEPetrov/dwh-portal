@@ -12,6 +12,7 @@ from domains.catalog.identity import (
     strip_secrets,
     unresolved_target_identity,
 )
+from domains.catalog.lineage_adapters.runs import skipped_run
 from domains.catalog.models import (
     Asset,
     AssetType,
@@ -23,15 +24,14 @@ from domains.catalog.models import (
     Relationship,
     RelationshipType,
 )
-from domains.catalog.lineage_adapters.runs import skipped_run
 from domains.catalog.providers.extraction_registry import ExtractionRegistryMissing
 from domains.catalog.providers.lineage import (
     STORAGE_TARGET_TYPES,
     VIEW_TARGET_TYPES,
     WRITE_RELATION_TYPES,
     ExtractionSourceRecord,
-    LoaderMetadata,
     LineageProvider,
+    LoaderMetadata,
     LoaderTarget,
 )
 from domains.catalog.repositories.ports import PortalStore

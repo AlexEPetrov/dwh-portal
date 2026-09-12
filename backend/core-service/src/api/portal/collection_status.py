@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 
 from api.portal.dto import CollectionStatusResponse, freshness_items
@@ -13,6 +15,6 @@ collection_status_router = APIRouter()
     operation_id="getCollectionStatus",
 )
 def get_collection_status(
-    service: CollectionStatusService = Depends(get_collection_status_service),
+    service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
 ) -> CollectionStatusResponse:
     return CollectionStatusResponse(items=freshness_items(service.list_status()))

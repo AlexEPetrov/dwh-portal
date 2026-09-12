@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 from domains.catalog.collectors.extraction_registry import ExtractionRegistryCollector
@@ -28,6 +29,4 @@ class ExtractionRegistryLineageAdapter:
         self._provider = lineage_provider or ExtractionRegistryProvider(self._settings)
 
     def collect(self, now: datetime.datetime | None = None) -> CollectionRun:
-        return ExtractionRegistryCollector(
-            self._store, self._provider, self._settings
-        ).run(now)
+        return ExtractionRegistryCollector(self._store, self._provider, self._settings).run(now)

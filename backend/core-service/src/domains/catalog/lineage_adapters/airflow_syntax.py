@@ -447,7 +447,7 @@ def _assign_constants(tree: ast.AST) -> dict[str, str]:
             for target in node.targets:
                 if isinstance(target, ast.Tuple):
                     names = [elt.id for elt in target.elts if isinstance(elt, ast.Name)]
-            for name, elt in zip(names, value.elts):
+            for name, elt in zip(names, value.elts, strict=False):
                 constants[name] = str(elt.value)
     return constants
 
@@ -493,7 +493,7 @@ def _schema_from_table_args(node: ast.AST, constants: dict[str, str]) -> str | N
     elif isinstance(node, ast.Tuple):
         dict_nodes.extend(elt for elt in node.elts if isinstance(elt, ast.Dict))
     for item in dict_nodes:
-        for key, value in zip(item.keys, item.values):
+        for key, value in zip(item.keys, item.values, strict=True):
             if _const_str(key) == "schema":
                 return _resolve_str(value, constants)
     return None

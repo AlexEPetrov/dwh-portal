@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 
 from api.portal.dto import (
@@ -16,7 +18,9 @@ overview_router = APIRouter()
 
 
 @overview_router.get("/overview", response_model=OverviewResponse, operation_id="getOverview")
-def get_overview(service: OverviewService = Depends(get_overview_service)) -> OverviewResponse:
+def get_overview(
+    service: Annotated[OverviewService, Depends(get_overview_service)],
+) -> OverviewResponse:
     payload = service.get_overview()
     store = get_portal_store()
     return OverviewResponse(
@@ -33,5 +37,7 @@ def get_overview(service: OverviewService = Depends(get_overview_service)) -> Ov
             ],
         ),
         collector_freshness=freshness_items(payload["collector_freshness"]),
-        storage_by_schema=[SchemaStorageRow.model_validate(row) for row in payload["storage_by_schema"]],
+        storage_by_schema=[
+            SchemaStorageRow.model_validate(row) for row in payload["storage_by_schema"]
+        ],
     )

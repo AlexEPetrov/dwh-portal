@@ -1,4 +1,5 @@
 import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
@@ -19,8 +20,8 @@ storage_router = APIRouter()
 
 @storage_router.get("/storage", response_model=StorageResponse, operation_id="getStorage")
 def get_storage(
-    service: StorageService = Depends(get_storage_service),
-    status_service: CollectionStatusService = Depends(get_collection_status_service),
+    service: Annotated[StorageService, Depends(get_storage_service)],
+    status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
 ) -> StorageResponse:
     payload = service.current()
     return StorageResponse(
@@ -29,7 +30,9 @@ def get_storage(
         index_bytes=payload["index_bytes"],
         total_bytes=payload["total_bytes"],
         by_schema=[SchemaStorageRow.model_validate(row) for row in payload["by_schema"]],
-        largest_objects=[StorageObjectRow.model_validate(row) for row in payload["largest_objects"]],
+        largest_objects=[
+            StorageObjectRow.model_validate(row) for row in payload["largest_objects"]
+        ],
         collector_freshness=freshness_items(status_service.list_status()),
     )
 
@@ -38,9 +41,9 @@ def get_storage(
     "/storage/history", response_model=StorageHistoryResponse, operation_id="getStorageHistory"
 )
 def get_storage_history(
+    service: Annotated[StorageService, Depends(get_storage_service)],
+    status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
     since: datetime.datetime | None = None,
-    service: StorageService = Depends(get_storage_service),
-    status_service: CollectionStatusService = Depends(get_collection_status_service),
 ) -> StorageHistoryResponse:
     return StorageHistoryResponse(
         items=[StorageHistoryPoint.model_validate(row) for row in service.history(since)],

@@ -6,7 +6,6 @@ from typing import Any, Iterable
 
 from domains.catalog.models import AssetColumn, AssetType
 
-
 SECRET_ATTRIBUTE_KEYS = {
     "password",
     "passwd",
