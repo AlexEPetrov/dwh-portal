@@ -105,6 +105,11 @@ const ObjectDetailPage = () => {
                 <Descriptions.Item label="Last scan">{formatDateTime(asset.last_seen_at)}</Descriptions.Item>
                 <Descriptions.Item label="Source">{asset.source_provider}</Descriptions.Item>
                 <Descriptions.Item label="Qualified name">{asset.qualified_name}</Descriptions.Item>
+                <Descriptions.Item label="Source files" span={2}>
+                  {asset.source_files && asset.source_files.length > 0
+                    ? asset.source_files.join(', ')
+                    : '—'}
+                </Descriptions.Item>
               </Descriptions>
             ),
           },

@@ -8,6 +8,7 @@ from typing import Any, Iterable
 from domains.catalog.identity import (
     airflow_extraction_identity,
     airflow_process_identity,
+    storage_location_identity,
     unresolved_target_identity,
 )
 from domains.catalog.lineage_adapters.airflow_syntax import (
@@ -17,6 +18,7 @@ from domains.catalog.lineage_adapters.airflow_syntax import (
     dag_closure,
     parse_module,
     rescan_writes,
+    storage_paths_for_closure,
     write_targets_for_closure,
 )
 from domains.catalog.lineage_adapters.runs import record_adapter_run, skipped_run
@@ -114,6 +116,7 @@ class AirflowDagsLineageAdapter:
             "processes": 0,
             "extraction_sources": 0,
             "writes": 0,
+            "storages": 0,
             "unresolved": 0,
             "mode": mode,
         }
@@ -136,18 +139,27 @@ class AirflowDagsLineageAdapter:
                     continue
                 details["dags"] += 1
                 closure = dag_closure(dag_path, facts_by_path, resolved_root)
-                if not any(facts_by_path[item].has_write for item in closure if item in facts_by_path):
-                    continue
-                refs = write_targets_for_closure(closure, facts_by_path)
-                matched = self._match_tables(refs, catalog_tables, started, mode)
-                if not matched:
+                has_write = any(
+                    facts_by_path[item].has_write
+                    for item in closure
+                    if item in facts_by_path
+                )
+                refs = write_targets_for_closure(closure, facts_by_path) if has_write else []
+                matched = self._match_tables(refs, catalog_tables, started, mode, resolved_root)
+                path_refs = (
+                    storage_paths_for_closure(closure, facts_by_path) if mode == "code" else []
+                )
+                if not matched and not path_refs:
                     continue
                 meta = facts.dag_meta
                 if not meta.dag_id and not meta.description:
                     meta = parse_dag_meta(facts.source)
                 module_name = _module_name(dag_path, resolved_root)
-                process = self._upsert_process(module_name, dag_path, meta, started)
-                extraction = self._upsert_extraction(module_name, meta, dag_path, started)
+                dag_files = _relative_sources([str(dag_path)], resolved_root)
+                process = self._upsert_process(module_name, dag_path, meta, started, dag_files)
+                extraction = self._upsert_extraction(
+                    module_name, meta, dag_path, started, dag_files
+                )
                 details["extraction_sources"] += 1
                 self._rel(extraction.id, process.id, RelationshipType.EXTRACTS_TO)
                 for table in matched:
@@ -155,12 +167,21 @@ class AirflowDagsLineageAdapter:
                     details["writes"] += 1
                     if table.attributes.get("unresolved"):
                         details["unresolved"] += 1
+                for path_ref in path_refs:
+                    storage = self._upsert_storage(
+                        path_ref.path,
+                        _relative_sources([path_ref.source_path], resolved_root),
+                        started,
+                    )
+                    self._rel(process.id, storage.id, RelationshipType.READS_FROM)
+                    details["storages"] += 1
                 if module_name not in seen_processes:
                     seen_processes.add(module_name)
                     details["processes"] += 1
             message = (
                 f"Scanned {details['files']} files, {details['dags']} DAGs, "
-                f"{details['processes']} processes, {details['writes']} writes"
+                f"{details['processes']} processes, {details['writes']} writes, "
+                f"{details['storages']} storages"
             )
             status = CollectorStatus.SUCCESS
         except Exception as exc:
@@ -193,12 +214,17 @@ class AirflowDagsLineageAdapter:
         tables: list[Asset],
         now: datetime.datetime,
         mode: str,
+        root: Path,
     ) -> list[Asset]:
         matched: list[Asset] = []
         seen: set[str] = set()
         for ref in refs:
             asset = self._match_table(ref, tables, now, mode)
-            if asset is None or str(asset.id) in seen:
+            if asset is None:
+                continue
+            files = _relative_sources([ref.source_path], root)
+            asset = self._attach_source_files(asset, files)
+            if str(asset.id) in seen:
                 continue
             seen.add(str(asset.id))
             matched.append(asset)
@@ -272,8 +298,55 @@ class AirflowDagsLineageAdapter:
             )
         )
 
+    def _upsert_storage(self, path: str, source_files: list[str], now: datetime.datetime) -> Asset:
+        qualified_name, identity_key = storage_location_identity(path)
+        existing = self._store.find_by_identity(PROVIDER, identity_key)
+        if existing is None:
+            existing = self._store.find_by_qualified_name(qualified_name)
+        attributes = {
+            "path": path,
+            "origin": "airflow_dag",
+            "source_files": source_files,
+            "display_name": path,
+        }
+        if existing is not None:
+            existing.last_seen_at = now
+            existing.deleted_at = None
+            merged = {**existing.attributes, **attributes}
+            merged["source_files"] = _merge_source_files(
+                existing.attributes.get("source_files"), source_files
+            )
+            existing.attributes = merged
+            return self._store.upsert_asset(existing)
+        return self._store.upsert_asset(
+            Asset(
+                asset_type=AssetType.STORAGE_LOCATION,
+                qualified_name=qualified_name,
+                name=path,
+                source_provider=PROVIDER,
+                identity_key=identity_key,
+                first_seen_at=now,
+                last_seen_at=now,
+                attributes=attributes,
+            )
+        )
+
+    def _attach_source_files(self, asset: Asset, files: list[str]) -> Asset:
+        if not files:
+            return asset
+        asset.attributes = {
+            **asset.attributes,
+            "source_files": _merge_source_files(asset.attributes.get("source_files"), files),
+        }
+        return self._store.upsert_asset(asset)
+
     def _upsert_process(
-        self, module_name: str, file_path: Path, meta: DagMeta, now: datetime.datetime
+        self,
+        module_name: str,
+        file_path: Path,
+        meta: DagMeta,
+        now: datetime.datetime,
+        source_files: list[str],
     ) -> Asset:
         qualified_name, identity_key = airflow_process_identity(module_name)
         existing = self._store.find_by_identity(PROVIDER, identity_key)
@@ -282,6 +355,7 @@ class AirflowDagsLineageAdapter:
             "module_name": module_name,
             "dag_id": meta.dag_id,
             "source_path": str(file_path),
+            "source_files": source_files,
             "metadata_status": "OK",
             "lineage_status": "RESOLVED",
         }
@@ -309,7 +383,12 @@ class AirflowDagsLineageAdapter:
         )
 
     def _upsert_extraction(
-        self, module_name: str, meta: DagMeta, file_path: Path, now: datetime.datetime
+        self,
+        module_name: str,
+        meta: DagMeta,
+        file_path: Path,
+        now: datetime.datetime,
+        source_files: list[str],
     ) -> Asset:
         native_id = meta.dag_id or module_name
         qualified_name, identity_key = airflow_extraction_identity(native_id)
@@ -318,6 +397,7 @@ class AirflowDagsLineageAdapter:
             "dag_id": meta.dag_id,
             "module_name": module_name,
             "source_path": str(file_path),
+            "source_files": source_files,
             "origin": "airflow_dag",
         }
         name = meta.dag_id or Path(module_name).name
@@ -378,6 +458,40 @@ class AirflowDagsLineageAdapter:
 def _lineage_mode(settings: DwhCollectorSettings) -> str:
     mode = (settings.airflow_lineage_mode or "catalog").strip().lower()
     return mode if mode in {"catalog", "code"} else "catalog"
+
+
+def _relative_sources(paths: list[str | None], root: Path) -> list[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+    for raw in paths:
+        if not raw:
+            continue
+        rel = _relative_to_root(raw, root)
+        if rel in seen:
+            continue
+        seen.add(rel)
+        found.append(rel)
+    return found
+
+
+def _relative_to_root(raw: str, root: Path) -> str:
+    path = Path(raw)
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _merge_source_files(existing: Any, incoming: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in list(existing or []) + incoming:
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        merged.append(text)
+    return merged
 
 
 def _module_name(file_path: Path, root: Path) -> str:

@@ -42,6 +42,7 @@ export type AssetDetailResponse = {
     };
     metrics: SnapshotMetrics;
     collector_freshness: Array<FreshnessItem>;
+    source_files?: Array<(string)>;
 };
 
 export type AssetListItem = {
@@ -58,6 +59,7 @@ export type AssetListItem = {
     last_seen_at: string;
     last_changed_at?: string | null;
     metrics?: SnapshotMetrics;
+    source_files?: Array<(string)>;
 };
 
 export type AssetListResponse = {

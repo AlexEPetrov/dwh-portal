@@ -66,11 +66,20 @@ MUST оставаться доступным по идентификатору �
 `GET /api/v1/assets/{asset_id}/columns` MUST возвращать колонки в порядке
 `ordinal` с типом, nullable и описанием.
 
+Если у объекта есть `source_files`, список и карточка MUST показывать
+эти пути: из какого файла DAG объект был разобран.
+
 #### Scenario: Колонки таблицы
 
 - GIVEN у таблицы есть колонки `trade_date` и `settlement_price`
 - WHEN клиент запрашивает колонки объекта
 - THEN они возвращаются в порядке `ordinal` вместе с `data_type` и `description`
+
+#### Scenario: Карточка показывает source_files
+
+- GIVEN объект создан адаптером `airflow_dags` из `platts_egd/paths.py`
+- WHEN клиент открывает карточку
+- THEN в ответе есть `source_files` с `platts_egd/paths.py`
 
 ### Requirement: Lineage на карточке и отдельной странице
 

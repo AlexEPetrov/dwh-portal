@@ -109,6 +109,13 @@ class DagMeta:
 class TableRef:
     schema: str | None
     name: str
+    source_path: str | None = None
+
+
+@dataclass(frozen=True)
+class StoragePathRef:
+    path: str
+    source_path: str
 
 
 @dataclass
@@ -125,6 +132,7 @@ class ModuleFacts:
     write_tables: list[TableRef] = field(default_factory=list)
     write_classes: set[str] = field(default_factory=set)
     write_adapters: set[str] = field(default_factory=set)
+    storage_paths: list[str] = field(default_factory=list)
     has_write: bool = False
     imported_names: dict[str, tuple[str, str]] = field(default_factory=dict)
 
@@ -179,6 +187,7 @@ def rescan_writes(facts: ModuleFacts) -> None:
     facts.write_tables.clear()
     facts.write_classes.clear()
     facts.write_adapters.clear()
+    facts.storage_paths.clear()
     facts.has_write = False
     _scan_writes(tree, facts)
 
@@ -291,25 +300,34 @@ def write_targets_for_closure(
     found: list[TableRef] = []
     seen: set[tuple[str | None, str]] = set()
 
-    def add(table: TableRef | None) -> None:
+    def add(table: TableRef | None, source_path: str | None = None) -> None:
         if table is None or not table.name:
             return
         key = (table.schema, table.name.lower())
         if key in seen:
             return
         seen.add(key)
-        found.append(table)
+        found.append(
+            TableRef(
+                schema=table.schema,
+                name=table.name,
+                source_path=source_path or table.source_path,
+            )
+        )
 
     for path in closure:
         facts = facts_by_path.get(path)
         if facts is None:
             continue
+        origin = str(facts.path)
         for table in facts.write_tables:
-            add(table)
+            add(table, table.source_path or origin)
         for class_name in facts.write_classes:
-            add(class_tables.get(class_name))
+            table = class_tables.get(class_name)
+            add(table, origin if table is None or table.source_path is None else table.source_path)
         for adapter_name in facts.write_adapters:
-            add(adapter_tables.get(adapter_name))
+            table = adapter_tables.get(adapter_name)
+            add(table, origin if table is None or table.source_path is None else table.source_path)
     if found:
         return found
     if any(
@@ -321,6 +339,25 @@ def write_targets_for_closure(
             add(table)
         for table in adapter_tables.values():
             add(table)
+    return found
+
+
+def storage_paths_for_closure(
+    closure: list[Path], facts_by_path: dict[Path, ModuleFacts]
+) -> list[StoragePathRef]:
+    found: list[StoragePathRef] = []
+    seen: set[str] = set()
+    for path in closure:
+        facts = facts_by_path.get(path)
+        if facts is None:
+            continue
+        origin = str(facts.path)
+        for raw in facts.storage_paths:
+            key = raw.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(StoragePathRef(path=raw, source_path=origin))
     return found
 
 
@@ -406,7 +443,9 @@ def _scan_orm_classes(tree: ast.AST, facts: ModuleFacts) -> None:
             if "__table_args__" in targets:
                 schema = _schema_from_table_args(stmt.value, facts.constants) or schema
         if table_name:
-            facts.classes[node.name] = TableRef(schema=schema, name=table_name)
+            facts.classes[node.name] = TableRef(
+                schema=schema, name=table_name, source_path=str(facts.path)
+            )
 
 
 def _schema_from_table_args(node: ast.AST, constants: dict[str, str]) -> str | None:
@@ -437,7 +476,7 @@ def _scan_adapter_assigns(tree: ast.AST, facts: ModuleFacts) -> None:
         schema = _resolve_str(root.args[2], facts.constants)
         if not table:
             continue
-        ref = TableRef(schema=schema, name=table)
+        ref = TableRef(schema=schema, name=table, source_path=str(facts.path))
         for target in node.targets:
             if isinstance(target, ast.Name):
                 facts.adapters[target.id] = ref
@@ -486,10 +525,16 @@ def _is_session_owner(name: str | None) -> bool:
 
 def _scan_sql_literals(tree: ast.AST, facts: ModuleFacts) -> None:
     for node in ast.walk(tree):
+        text: str | None = None
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            _sql_from_text(node.value, facts)
+            text = node.value
         elif isinstance(node, ast.JoinedStr):
-            _sql_from_text(_joined_str(node, facts.constants), facts)
+            text = _joined_str(node, facts.constants)
+        if not text:
+            continue
+        _sql_from_text(text, facts)
+        if _looks_like_storage_path(text):
+            facts.storage_paths.append(text.strip())
 
 
 def _tables_from_call(node: ast.Call, func_name: str | None, facts: ModuleFacts) -> None:
@@ -511,7 +556,9 @@ def _tables_from_call(node: ast.Call, func_name: str | None, facts: ModuleFacts)
         if func_name == "to_sql" and table is None and node.args:
             table = _resolve_str(node.args[0], facts.constants)
     if table:
-        facts.write_tables.append(TableRef(schema=schema, name=table))
+        facts.write_tables.append(
+            TableRef(schema=schema, name=table, source_path=str(facts.path))
+        )
 
 
 def _sql_from_text(text: str | None, facts: ModuleFacts) -> None:
@@ -521,7 +568,30 @@ def _sql_from_text(text: str | None, facts: ModuleFacts) -> None:
         facts.has_write = True
     for match in _SQL_INTO.finditer(text):
         facts.has_write = True
-        facts.write_tables.append(TableRef(schema=match.group(1), name=match.group(2)))
+        facts.write_tables.append(
+            TableRef(schema=match.group(1), name=match.group(2), source_path=str(facts.path))
+        )
+
+
+_HTTP_URL = re.compile(r"(?i)^https?://")
+_SQL_START = re.compile(r"(?i)^\s*(?:SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|MERGE|COPY|ALTER)\b")
+_STORAGE_URI = re.compile(r"(?i)^(?:s3|gs|abfss|wasbs|file|hdfs)://")
+_WIN_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def _looks_like_storage_path(text: str) -> bool:
+    value = text.strip()
+    if len(value) < 4 or len(value) > 512:
+        return False
+    if _HTTP_URL.match(value) or _SQL_START.match(value):
+        return False
+    if "\n" in value:
+        return False
+    if _STORAGE_URI.match(value) or _WIN_PATH.match(value) or value.startswith("\\\\"):
+        return True
+    if value.startswith("/") and value.count("/") >= 2:
+        return True
+    return False
 
 
 def _class_from_arg(node: ast.AST | None) -> str | None:

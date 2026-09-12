@@ -156,6 +156,7 @@ def load_data():
     table = store.find_by_qualified_name("dwh.raw.ice_brent")
     assert process and table
     assert process.name == "load_platts_egd"
+    assert process.attributes.get("source_files") == ["load_platts_egd.py"]
     writes = [
         edge
         for edge in store.list_relationships(asset_id=process.id)
@@ -404,6 +405,73 @@ def load_data():
     assert table.attributes.get("unresolved") is True
     assert table.attributes["target_ref"]["schema"] == "src_gassco"
     assert table.attributes["target_ref"]["name"] == "gassco_flows"
+    assert process.attributes.get("source_files") == ["load_gassco.py"]
+    assert table.attributes.get("source_files") == ["load_gassco.py"]
+
+
+def test_airflow_code_mode_storage_records_imported_source_file(store, now, tmp_path):
+    pkg = tmp_path / "platts_egd"
+    pkg.mkdir()
+    (pkg / "paths.py").write_text(
+        'LANDING = "/data/landing/platts/egd"\n',
+        encoding="utf-8",
+    )
+    (pkg / "load_platts_egd.py").write_text(
+        '''
+from airflow import DAG
+from dags.platts_egd.paths import LANDING
+
+dag = DAG(dag_id="load_platts_egd", description="Загрузка Platts")
+
+def load_data():
+    sql = "INSERT INTO src_gassco.gassco_flows VALUES (1)"
+    return LANDING
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("storages", 0) == 1
+    process = store.find_by_identity(
+        "airflow_dags", airflow_process_identity("platts_egd/load_platts_egd")[1]
+    )
+    storage = store.find_by_qualified_name("storage:/data/landing/platts/egd")
+    assert process and storage
+    assert storage.asset_type == AssetType.STORAGE_LOCATION
+    assert storage.attributes.get("source_files") == ["platts_egd/paths.py"]
+    reads = store.list_relationships(asset_id=process.id, types={RelationshipType.READS_FROM})
+    assert reads[0].to_asset_id == storage.id
+
+
+def test_airflow_code_mode_ignores_unimported_paths_file(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    folder = tmp_path / "platts_egd"
+    folder.mkdir()
+    (folder / "load_platts_egd.py").write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(dag_id="load_platts_egd", description="Загрузка Platts")
+
+def load_data():
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
+''',
+        encoding="utf-8",
+    )
+    (folder / "paths.py").write_text(
+        'LANDING = "/data/landing/platts/egd"\n',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("storages", 0) == 0
+    assert store.find_by_qualified_name("storage:/data/landing/platts/egd") is None
 
 
 def test_airflow_adapter_ignores_pandas_merge(store, now, tmp_path):

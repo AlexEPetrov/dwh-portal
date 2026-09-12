@@ -85,6 +85,7 @@ class AssetListItem(BaseModel):
     last_seen_at: datetime.datetime
     last_changed_at: datetime.datetime | None = None
     metrics: SnapshotMetrics = Field(default_factory=SnapshotMetrics)
+    source_files: list[str] = Field(default_factory=list)
 
 
 class AssetListResponse(BaseModel):
@@ -112,6 +113,7 @@ class AssetDetailResponse(BaseModel):
     attributes: dict[str, Any]
     metrics: SnapshotMetrics
     collector_freshness: list[FreshnessItem]
+    source_files: list[str] = Field(default_factory=list)
 
 
 class ColumnItem(BaseModel):
@@ -245,6 +247,16 @@ def display_name_for(asset: Asset) -> str:
     return asset.qualified_name
 
 
+def source_files_for(asset: Asset) -> list[str]:
+    raw = asset.attributes.get("source_files")
+    if isinstance(raw, list):
+        return [str(item) for item in raw if str(item).strip()]
+    path = asset.attributes.get("source_path")
+    if path:
+        return [str(path)]
+    return []
+
+
 def snapshot_metrics(snapshot: AssetSnapshot | None) -> SnapshotMetrics:
     if snapshot is None:
         return SnapshotMetrics()
@@ -272,6 +284,7 @@ def asset_list_item(asset: Asset, snapshot: AssetSnapshot | None, last_changed_a
         last_seen_at=asset.last_seen_at,
         last_changed_at=last_changed_at,
         metrics=snapshot_metrics(snapshot),
+        source_files=source_files_for(asset),
     )
 
 

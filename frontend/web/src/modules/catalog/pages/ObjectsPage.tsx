@@ -17,6 +17,7 @@ const TYPE_TOGGLES = [
   { key: 'DATA_SOURCE', label: 'Source' },
   { key: 'EXTRACTION_SOURCE', label: 'Extract' },
   { key: 'PROCESS', label: 'Loader' },
+  { key: 'STORAGE_LOCATION', label: 'Storage' },
   { key: 'TABLE', label: 'Table' },
   { key: 'VIEW', label: 'View' },
 ] as const;
@@ -104,6 +105,12 @@ const ObjectsPage = () => {
         dataIndex: 'asset_type',
         width: 170,
         render: (value) => <Tag>{value}</Tag>,
+      },
+      {
+        title: 'Source file',
+        dataIndex: 'source_files',
+        ellipsis: true,
+        render: (value: string[] | undefined) => (value && value.length > 0 ? value.join(', ') : '—'),
       },
       {
         title: 'Size',

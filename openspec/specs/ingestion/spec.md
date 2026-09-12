@@ -236,6 +236,32 @@ code
 Адаптер MUST NOT запрашивать сканируемый DWH, чтобы решить, существует
 ли таблица.
 
+Объекты, которые адаптер создаёт или обновляет, MUST получать атрибут
+`source_files` — относительные пути файлов в корне DAG, из которых
+объект разобран. Это MUST относиться к `PROCESS`, `EXTRACTION_SOURCE`,
+unresolved `TABLE` и `STORAGE_LOCATION`.
+
+В режиме `code` path-литералы в замыкании импортов (`/data/...`,
+`s3://...`, Windows-путь) MUST материализоваться как `STORAGE_LOCATION`
+с `source_files` файла, где литерал найден, и ребро `PROCESS`
+`READS_FROM` эту локацию. Неимпортированный соседний файл MUST NOT
+порождать `STORAGE_LOCATION`. HTTP-константы MUST NOT становиться
+`DATA_SOURCE`.
+
+В режиме `catalog` адаптер MUST NOT создавать `DATA_SOURCE` и MUST NOT
+создавать `STORAGE_LOCATION`. Цепочка Airflow MUST быть:
+
+```text
+EXTRACTION_SOURCE -> PROCESS -> TABLE
+```
+
+В режиме `code` цепочка MAY включать storage:
+
+```text
+EXTRACTION_SOURCE -> PROCESS -> TABLE
+PROCESS -> STORAGE_LOCATION
+```
+
 В обоих режимах таблица MUST попадать в `WRITES_TO` только если в
 замыкании DAG есть и идентичность таблицы, и свидетельство записи.
 Идентичность MAY браться из:
@@ -255,12 +281,8 @@ code
 MUST NOT создавать `WRITES_TO`. HTTP-константы в `scrapers/` MUST NOT
 становиться `DATA_SOURCE`.
 
-Адаптер MUST NOT создавать `DATA_SOURCE` и MUST NOT создавать
-`STORAGE_LOCATION`. Цепочка Airflow MUST быть:
-
-```text
-EXTRACTION_SOURCE -> PROCESS -> TABLE
-```
+Адаптер MUST NOT создавать `DATA_SOURCE`. В режиме `catalog` адаптер
+MUST NOT создавать `STORAGE_LOCATION`.
 
 Рёбра `VIEW` / `MATERIALIZED_VIEW` `DERIVED_FROM` таблицу MUST писать
 адаптер `postgres_sql`. Вместе адаптеры MUST образовывать:
@@ -317,6 +339,7 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
 - WHEN выполняется адаптер `airflow_dags`
 - THEN создаётся `PROCESS` и unresolved `TABLE`
 - AND есть ребро `WRITES_TO` на эту цель
+- AND у `PROCESS` и таблицы в `source_files` есть файл DAG
 
 #### Scenario: Пути в DAG не становятся storage
 
@@ -326,6 +349,16 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
 - WHEN выполняется адаптер `airflow_dags`
 - THEN `STORAGE_LOCATION` не создаётся
 - AND цепочка остаётся `EXTRACTION_SOURCE -> PROCESS -> TABLE`
+
+#### Scenario: Режим code ставит source_files на storage
+
+- GIVEN режим `code`
+- AND DAG импортирует `paths.py` с `LANDING = "/data/landing/platts/egd"`
+- AND в замыкании есть запись в таблицу
+- WHEN выполняется адаптер `airflow_dags`
+- THEN создаётся `STORAGE_LOCATION` для этого пути
+- AND `source_files` содержит `paths.py`
+- AND есть ребро `READS_FROM` от процесса
 
 #### Scenario: Корень DAG не задан
 

@@ -177,6 +177,13 @@ export const $AssetDetailResponse = {
             },
             type: 'array',
             title: 'Collector Freshness'
+        },
+        source_files: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Source Files'
         }
     },
     type: 'object',
@@ -267,6 +274,13 @@ export const $AssetListItem = {
         },
         metrics: {
             '$ref': '#/components/schemas/SnapshotMetrics'
+        },
+        source_files: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Source Files'
         }
     },
     type: 'object',

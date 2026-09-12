@@ -27,8 +27,10 @@ def test_overview_and_assets_use_canonical_payload():
     item = assets["items"][0]
     assert item["name"] == "ice_brent"
     assert "metrics" in item
+    assert "source_files" in item
     detail = client.get(f"/api/v1/assets/{item['id']}").json()
     assert detail["description"]
+    assert "source_files" in detail
     columns = client.get(f"/api/v1/assets/{item['id']}/columns").json()
     assert columns["items"][0]["name"] == "trade_date"
     lineage = client.get(f"/api/v1/assets/{item['id']}/lineage").json()

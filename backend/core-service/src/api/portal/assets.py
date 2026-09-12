@@ -18,6 +18,7 @@ from api.portal.dto import (
     lineage_edge,
     lineage_node,
     snapshot_metrics,
+    source_files_for,
 )
 from domains.catalog.models import AssetQuery, AssetStatus, AssetType
 from domains.catalog.runtime import (
@@ -110,6 +111,7 @@ def get_asset(
         },
         metrics=snapshot_metrics(snapshot),
         collector_freshness=freshness_items(status_service.list_status()),
+        source_files=source_files_for(asset),
     )
 
 
