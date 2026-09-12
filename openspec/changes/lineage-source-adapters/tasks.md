@@ -8,6 +8,7 @@
 - [x] 2.1 Make missing `sys.data_extraction_sources` a skipped SUCCESS in `extraction_registry`; verify `test_daily_runner_localizes_lineage_failure` still fails only on unexpected errors
 - [x] 2.2 Add `postgres_sql` view/table `DERIVED_FROM` from `pg_depend`; verify a fake dependency becomes a lineage edge between catalog assets
 - [x] 2.3 Add `airflow_dags` reverse reconstruction (DAG process, URL data source, no DAG execution); verify table-name and URL fixtures
+- [x] 2.4 Drop Airflow `STORAGE_LOCATION`; chain is `EXTRACTION_SOURCE -> PROCESS -> TABLE`, with `VIEW` via `postgres_sql`
 
 ## 3. Runner and specs
 

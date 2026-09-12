@@ -21,8 +21,10 @@
   но MUST NOT валить прогон, если реестра нет: статус SUCCESS со
   `skipped=true`.
 - Адаптер `airflow_dags` (опционально) ищет имя таблицы в исходниках DAG и
-  восстанавливает цепочку в обратную сторону:
-  `DATA_SOURCE (URL) <- PROCESS (DAG) <- TABLE`.
+  восстанавливает упрощённую цепочку
+  `EXTRACTION_SOURCE (DAG) -> PROCESS (DAG) -> TABLE`.
+  `STORAGE_LOCATION` и `DATA_SOURCE` из DAG MUST NOT создаваться.
+  `VIEW` подключается через `postgres_sql` (`DERIVED_FROM`).
 - Каноническая модель, Portal API чтения lineage и UI не меняют форму
   контракта: новые рёбра вливаются в уже существующие типы
   `DERIVED_FROM` / `READS_FROM` / `WRITES_TO`.

@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class PortalSettings(BaseSettings):
     """Runtime options for the DWH Portal snapshot store.
 
-    Target production path: APP_PORTAL_STORE=sql (schema `portal` in app DB).
+    Target production path: APP_PORTAL_STORE=sql (schema `sol_dwh_portal` in app DB).
     `seed_demo` applies only to the in-memory store; SQL never auto-seeds.
     """
 
@@ -14,6 +14,7 @@ class PortalSettings(BaseSettings):
 
     store: Literal["memory", "sql"] = "memory"
     seed_demo: bool = True
+    reset_on_collect: bool = False
     stale_after_hours: int = 36
     lineage_max_depth: int = 8
     default_page_size: int = 50

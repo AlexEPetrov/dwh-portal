@@ -1,9 +1,9 @@
 from domains.catalog.collectors.catalog import CatalogCollector
 from domains.catalog.collectors.runner import run_daily_collection
-from domains.catalog.identity import airflow_process_identity, url_data_source_identity
+from domains.catalog.identity import airflow_extraction_identity, airflow_process_identity
 from domains.catalog.lineage_adapters.airflow_dags import (
     AirflowDagsLineageAdapter,
-    normalize_url,
+    parse_dag_meta,
 )
 from domains.catalog.lineage_adapters.postgres_sql import PostgresSqlLineageAdapter
 from domains.catalog.lineage_adapters.registry import load_lineage_adapters
@@ -117,47 +117,139 @@ def test_missing_extraction_registry_is_skipped_and_sql_lineage_remains(store, n
     assert not any(node.asset_type == AssetType.EXTRACTION_SOURCE for node in payload["nodes"])
 
 
-def test_airflow_adapter_rebuilds_process_and_url_source(store, now, tmp_path):
+def test_airflow_adapter_uses_module_name_and_dag_description(store, now, tmp_path):
     CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
-    dag = tmp_path / "load_ice_brent.py"
+    dag = tmp_path / "load_platts_egd.py"
     dag.write_text(
-        """
+        '''
 from airflow import DAG
 
-with DAG(dag_id="load_ice_brent", schedule=None):
-    TARGET = "raw.ice_brent"
-    URL = "https://user:token@api.example.com/v1/brent?api_key=secret"
-    IGNORE = "https://airflow.apache.org/docs/"
-""",
+default_args = {}
+doc_md = "docs"
+
+dag = DAG(
+    dag_id='load_platts_egd',
+    default_args=default_args,
+    schedule_interval="10 * * * *",
+    render_template_as_native_obj=True,
+    tags=["platts_egd", "egd"],
+    catchup=False,
+    max_active_runs=1,
+    concurrency=1,
+    description="Загрузка данных  Platts European Gas Daily",
+    doc_md=doc_md
+)
+
+TARGET = "raw.ice_brent"
+URL = "https://api.example.com/v1/brent"
+''',
         encoding="utf-8",
     )
     run = AirflowDagsLineageAdapter(
         store, DwhCollectorSettings(airflow_dags_root=str(tmp_path))
     ).collect(now)
     assert run.status == CollectorStatus.SUCCESS
-    assert run.details["writes"] == 1
-    process = store.find_by_identity("airflow_dags", airflow_process_identity("load_ice_brent")[1])
+    process = store.find_by_identity("airflow_dags", airflow_process_identity("load_platts_egd")[1])
     table = store.find_by_qualified_name("dwh.raw.ice_brent")
     assert process and table
+    assert process.name == "load_platts_egd"
     writes = [
         edge
         for edge in store.list_relationships(asset_id=process.id)
         if edge.relationship_type == RelationshipType.WRITES_TO
     ]
     assert writes[0].to_asset_id == table.id
-    reads = [
-        edge
-        for edge in store.list_relationships(asset_id=process.id)
-        if edge.relationship_type == RelationshipType.READS_FROM
-    ]
-    assert len(reads) == 1
-    source = store.get_asset(reads[0].to_asset_id)
-    assert source.asset_type == AssetType.DATA_SOURCE
-    assert source.name == "https://api.example.com/v1/brent"
-    assert "token" not in (source.attributes.get("url") or "")
+    extraction = store.find_by_identity(
+        "airflow_dags", airflow_extraction_identity("load_platts_egd")[1]
+    )
+    assert extraction is not None
+    assert extraction.asset_type == AssetType.EXTRACTION_SOURCE
+    assert extraction.description == "Загрузка данных Platts European Gas Daily"
+    assert not any(item.asset_type == AssetType.DATA_SOURCE for item in store.assets.values())
+    assert not any(item.asset_type == AssetType.STORAGE_LOCATION for item in store.assets.values())
     payload = LineageService(store).get_lineage(table.id)
     types = {node.asset_type for node in payload["nodes"]}
-    assert types == {AssetType.TABLE, AssetType.PROCESS, AssetType.DATA_SOURCE}
+    assert types == {AssetType.TABLE, AssetType.PROCESS, AssetType.EXTRACTION_SOURCE}
+
+
+def test_airflow_adapter_does_not_create_storage_location(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    folder = tmp_path / "platts_egd"
+    folder.mkdir()
+    (folder / "load_platts_egd.py").write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(
+    dag_id="load_platts_egd",
+    description="Загрузка Platts",
+)
+
+TARGET = "raw.ice_brent"
+''',
+        encoding="utf-8",
+    )
+    (folder / "paths.py").write_text(
+        'LANDING = "/data/landing/platts/egd"\n',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store, DwhCollectorSettings(airflow_dags_root=str(tmp_path))
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    process = store.find_by_identity(
+        "airflow_dags", airflow_process_identity("platts_egd/load_platts_egd")[1]
+    )
+    assert process is not None
+    assert not any(
+        edge.relationship_type == RelationshipType.READS_FROM
+        for edge in store.list_relationships(asset_id=process.id)
+    )
+    assert not any(item.asset_type == AssetType.STORAGE_LOCATION for item in store.assets.values())
+    extraction = store.find_by_identity(
+        "airflow_dags", airflow_extraction_identity("load_platts_egd")[1]
+    )
+    table = store.find_by_qualified_name("dwh.raw.ice_brent")
+    assert extraction and table
+    extracts = store.list_relationships(asset_id=extraction.id, types={RelationshipType.EXTRACTS_TO})
+    writes = store.list_relationships(asset_id=process.id, types={RelationshipType.WRITES_TO})
+    assert extracts[0].to_asset_id == process.id
+    assert writes[0].to_asset_id == table.id
+
+
+def test_airflow_and_sql_form_extraction_to_view_chain(store, now, tmp_path):
+    objects = _catalog_objects() + [_view()]
+    CatalogCollector(store, FakeMetadataProvider(objects)).run(now)
+    PostgresSqlLineageAdapter(
+        store,
+        DwhCollectorSettings(),
+        metadata_provider=_SqlProvider(objects),
+    ).collect(now)
+    dag = tmp_path / "load_platts_egd.py"
+    dag.write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(dag_id="load_platts_egd", description="Загрузка Platts")
+TARGET = "raw.ice_brent"
+LANDING = "/data/landing/platts/egd"
+''',
+        encoding="utf-8",
+    )
+    AirflowDagsLineageAdapter(
+        store, DwhCollectorSettings(airflow_dags_root=str(tmp_path))
+    ).collect(now)
+    view = store.find_by_qualified_name("dwh.raw.v_ice_brent_latest")
+    payload = LineageService(store).get_lineage(view.id)
+    types = {node.asset_type for node in payload["nodes"]}
+    assert types == {
+        AssetType.VIEW,
+        AssetType.TABLE,
+        AssetType.PROCESS,
+        AssetType.EXTRACTION_SOURCE,
+    }
+    assert AssetType.STORAGE_LOCATION not in types
+    assert AssetType.DATA_SOURCE not in types
 
 
 def test_airflow_adapter_skips_when_root_missing(store, now):
@@ -168,14 +260,18 @@ def test_airflow_adapter_skips_when_root_missing(store, now):
     assert run.details.get("skipped") is True
 
 
-def test_normalize_url_strips_secrets_and_noise():
-    assert normalize_url("https://user:token@api.example.com/v1/brent?api_key=secret") == (
-        "https://api.example.com/v1/brent"
+def test_parse_dag_meta():
+    meta = parse_dag_meta(
+        '''
+dag = DAG(
+    dag_id='load_platts_egd',
+    tags=["platts_egd", "egd"],
+    description="Загрузка данных  Platts European Gas Daily",
+)
+'''
     )
-    assert normalize_url("https://airflow.apache.org/docs/") is None
-    assert url_data_source_identity("https://api.example.com/v1/brent")[0].startswith(
-        "datasource:url:"
-    )
+    assert meta.dag_id == "load_platts_egd"
+    assert meta.description == "Загрузка данных Platts European Gas Daily"
 
 
 def test_dynamic_plugin_and_unknown_spec_are_localized(store, now):

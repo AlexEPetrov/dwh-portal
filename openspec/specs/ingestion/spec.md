@@ -27,6 +27,22 @@
   отображаемого имени
 - AND обновляются `last_seen_at` и связанные снимки
 
+### Requirement: Опциональный сброс снимков перед сбором
+
+Сбор MUST поддерживать явный сброс Portal DB перед прогоном. Сброс MUST
+удалять только снимки схемы `sol_dwh_portal` и MUST NOT изменять
+сканируемый DWH.
+
+Сброс MUST включаться флагом `--reset` или
+`APP_PORTAL_RESET_ON_COLLECT=true` и MUST быть выключен по умолчанию.
+
+#### Scenario: Collect с --reset очищает старый lineage
+
+- GIVEN в Portal DB остались `DATA_SOURCE` от предыдущего адаптера
+- WHEN запускается `python -m domains.catalog.collect --reset`
+- THEN предыдущие снимки удалены до нового прогона
+- AND новый прогон записывает только текущие адаптеры
+
 ### Requirement: Канонические identity
 
 Коллекторы MUST использовать устойчивые identity:
@@ -36,9 +52,9 @@
 - таблица/представление: актив схемы + имя объекта;
 - extraction source: `sys.data_extraction_sources.id`;
 - data source из реестра: `sys.data_source_items.id`;
-- data source из URL: нормализованный URL без userinfo и query;
 - process из реестра: id источника извлечения + стабильный ключ handler;
-- process из Airflow: стабильный `dag_id`;
+- process из Airflow: модуль файла с конструктором `DAG(...)` относительно корня DAG;
+- extraction source из Airflow: `airflow:{dag_id}` или модуль, если `dag_id` не найден;
 - storage location: нормализованный дескриптор расположения.
 
 Секреты, credentials и host-specific детали MUST NOT сохраняться в
@@ -50,13 +66,6 @@ Portal DB.
 - WHEN коллектор материализует `STORAGE_LOCATION`
 - THEN в атрибутах остаётся логический `path` и шаблоны
 - AND credentials отсутствуют
-
-#### Scenario: URL data source без credentials
-
-- GIVEN в DAG есть `https://user:token@api.example.com/v1/brent?api_key=secret`
-- WHEN адаптер `airflow_dags` материализует `DATA_SOURCE`
-- THEN identity использует `https://api.example.com/v1/brent`
-- AND userinfo и query отсутствуют в атрибутах
 
 ### Requirement: Lineage собирается независимыми адаптерами
 
@@ -185,7 +194,7 @@ runtime payload.
 как текст и MUST NOT импортировать и MUST NOT исполнять Python DAG.
 
 Для каждой каталожной `TABLE` или `MATERIALIZED_VIEW` адаптер MUST
-искать DAG-файл, в котором встречается имя объекта:
+искать Python-модуль, в котором встречается имя объекта:
 
 - квалифицированное `schema.name` или `database.schema.name` как токен;
 - неквалифицированное имя только если оно уникально в каталоге, длиной
@@ -195,36 +204,54 @@ runtime payload.
   `date`, `test`, `main`, `config`, `source`, `target`, `user`, `file`,
   `path`, `sql`, `dag`, `task`) MUST NOT сопоставляться неквалифицированно.
 
-Найденный DAG MUST материализоваться как `PROCESS` с устойчивым
-identity по `dag_id` (из `DAG(...)` / `@dag(...)` или, если не найден,
-по имени файла). `PROCESS` MUST иметь `WRITES_TO` на сопоставленную
+`PROCESS` MUST называться по имени модуля файла с конструктором
+`DAG(...)` / `@dag(...)` в той же папке (stem / путь относительно корня
+DAG). Если конструктора в папке нет, MUST использоваться модуль, где
+найдено имя таблицы. `PROCESS` MUST иметь `WRITES_TO` на сопоставленную
 таблицу.
 
-URL в том же файле (`http`, `https`, `s3`, `gs`, `ftp`, `sftp`) MUST
-становиться `DATA_SOURCE`. `PROCESS` MUST `READS_FROM` этот источник.
-Credentials и query-часть MUST отбрасываться. URL на
-`airflow.apache.org`, `pypi.org`, `localhost` и `127.0.0.1` MUST
-игнорироваться.
+В той же папке адаптер MUST искать конструктор `DAG(...)` / `@dag(...)`
+и MUST материализовать `EXTRACTION_SOURCE` с `description` из аргумента
+`description`, если он есть. `EXTRACTION_SOURCE` MUST иметь `EXTRACTS_TO`
+на `PROCESS`.
 
-Несколько DAG на одну таблицу MUST сохраняться как несколько процессов.
-Отсутствие корня исходников MUST быть пропуском адаптера, не `FAILED`.
+Адаптер MUST NOT создавать `DATA_SOURCE` и MUST NOT создавать
+`STORAGE_LOCATION`. Цепочка Airflow MUST быть:
 
-#### Scenario: Имя таблицы в DAG восстанавливает загрузчик
+```text
+EXTRACTION_SOURCE -> PROCESS -> TABLE
+```
+
+Рёбра `VIEW` / `MATERIALIZED_VIEW` `DERIVED_FROM` таблицу MUST писать
+адаптер `postgres_sql`, а не `airflow_dags`. Вместе адаптеры MUST
+образовывать:
+
+```text
+EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
+```
+
+Несколько папок/DAG на одну таблицу MUST сохраняться как несколько
+процессов. Отсутствие корня исходников MUST быть пропуском адаптера,
+не `FAILED`.
+
+#### Scenario: Имя модуля DAG становится PROCESS
 
 - GIVEN каталог содержит таблицу `raw.ice_brent`
-- AND в корне DAG есть файл с `dag_id="load_ice_brent"` и токеном
-  `raw.ice_brent`
+- AND файл `load_platts_egd.py` содержит токен `raw.ice_brent` и
+  `DAG(dag_id="load_platts_egd", description="Загрузка Platts")`
 - WHEN выполняется адаптер `airflow_dags`
-- THEN создаётся `PROCESS` `load_ice_brent`
-- AND есть ребро `WRITES_TO` на таблицу
+- THEN создаётся `PROCESS` с именем `load_platts_egd`
+- AND создаётся `EXTRACTION_SOURCE` с description «Загрузка Platts»
+- AND есть ребро `EXTRACTS_TO` на процесс и `WRITES_TO` на таблицу
+- AND `DATA_SOURCE` и `STORAGE_LOCATION` не создаются
 
-#### Scenario: URL в DAG становится data source
+#### Scenario: Пути в DAG не становятся storage
 
-- GIVEN DAG-файл содержит `https://api.example.com/v1/brent`
-- AND тот же файл сопоставлен таблице
+- GIVEN имя таблицы найдено в `load_platts_egd.py`
+- AND соседний `paths.py` содержит `"/data/landing/platts/egd"`
 - WHEN выполняется адаптер `airflow_dags`
-- THEN создаётся `DATA_SOURCE` с нормализованным URL без credentials
-- AND процесс имеет `READS_FROM` этот источник
+- THEN `STORAGE_LOCATION` не создаётся
+- AND цепочка остаётся `EXTRACTION_SOURCE -> PROCESS -> TABLE`
 
 #### Scenario: Корень DAG не задан
 

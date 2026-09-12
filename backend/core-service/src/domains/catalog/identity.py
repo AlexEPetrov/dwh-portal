@@ -59,9 +59,13 @@ def process_identity(extraction_source_id: str, handler_key: str) -> tuple[str, 
     return qualified_name, qualified_name
 
 
-def airflow_process_identity(dag_id: str) -> tuple[str, str]:
-    qualified_name = f"process:airflow:{dag_id}"
+def airflow_process_identity(module_name: str) -> tuple[str, str]:
+    qualified_name = f"process:airflow:{module_name}"
     return qualified_name, qualified_name
+
+
+def airflow_extraction_identity(native_id: str) -> tuple[str, str]:
+    return extraction_source_identity(f"airflow:{native_id}")
 
 
 def storage_location_identity(normalized_path: str) -> tuple[str, str]:

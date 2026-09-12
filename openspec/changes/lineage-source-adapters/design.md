@@ -74,11 +74,13 @@ catalog identities.
 collector records `SUCCESS` + `details.skipped=true`. Unexpected
 errors remain `FAILED` (existing runner test with `RuntimeError`).
 
-### 5. Airflow edges reuse PROCESS READS_FROM / WRITES_TO
+### 5. Airflow chain is EXTRACTION_SOURCE → PROCESS → TABLE
 
-`PROCESS WRITES_TO TABLE` and `PROCESS READS_FROM DATA_SOURCE` match
-the existing list/map UI (PROCESS in the middle). DAG code is never
-executed; matching is token/literal scan as specified.
+`PROCESS` is named after the DAG Python module. `EXTRACTION_SOURCE`
+takes `description=` from `DAG(...)` and `EXTRACTS_TO` the process.
+The adapter does not create `DATA_SOURCE` or `STORAGE_LOCATION`.
+Views attach via `postgres_sql` `DERIVED_FROM`, so the visible chain is
+`EXTRACTION_SOURCE → PROCESS → TABLE → VIEW`.
 
 ### 6. Human approval checkpoint
 

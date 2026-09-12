@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import datetime
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import urlsplit, urlunsplit
 
 from domains.catalog.identity import (
+    airflow_extraction_identity,
     airflow_process_identity,
-    url_data_source_identity,
 )
 from domains.catalog.lineage_adapters.runs import record_adapter_run, skipped_run
 from domains.catalog.models import (
@@ -49,23 +49,29 @@ UNQUALIFIED_STOPLIST = frozenset(
         "task",
     }
 )
-SKIP_URL_HOSTS = frozenset(
-    {
-        "localhost",
-        "127.0.0.1",
-        "airflow.apache.org",
-        "www.airflow.apache.org",
-        "pypi.org",
-        "www.pypi.org",
-    }
+_DAG_START = re.compile(r"(?<![A-Za-z0-9_])(?:DAG|@dag)\s*\(", re.IGNORECASE)
+_DAG_ID_KW = re.compile(
+    r"""\bdag_id\s*=\s*(?:'''(.*?)'''|\"\"\"(.*?)\"\"\"|['\"]([^'\"]+)['\"])""",
+    re.DOTALL,
 )
-_DAG_ID_KW = re.compile(r"""\bdag_id\s*=\s*['"]([^'"]+)['"]""")
-_DAG_POS = re.compile(r"""\bDAG\s*\(\s*['"]([^'"]+)['"]""")
-_URL_RE = re.compile(r"""(?i)\b(?:https?|s3|gs|ftp|sftp)://[^\s'\"\\)<>]+""")
+_DESCRIPTION_KW = re.compile(
+    r"""\bdescription\s*=\s*(?:'''(.*?)'''|\"\"\"(.*?)\"\"\"|['\"]([^'\"]*)['\"])""",
+    re.DOTALL,
+)
+_POS_STRING = re.compile(
+    r"""^\s*(?:'''(.*?)'''|\"\"\"(.*?)\"\"\"|['\"]([^'\"]+)['\"])""",
+    re.DOTALL,
+)
+
+
+@dataclass(frozen=True)
+class DagMeta:
+    dag_id: str | None = None
+    description: str | None = None
 
 
 class AirflowDagsLineageAdapter:
-    """Reverse-reconstruct PROCESS/DATA_SOURCE edges from DAG source text."""
+    """Reverse-reconstruct EXTRACTION_SOURCE -> PROCESS -> TABLE from DAG text."""
 
     name = "airflow_dags"
 
@@ -98,12 +104,27 @@ class AirflowDagsLineageAdapter:
                 reason="DAGS_ROOT_MISSING",
                 message=f"Airflow DAG root does not exist: {root}",
             )
-        details = {"files": 0, "processes": 0, "data_sources": 0, "writes": 0}
+        details = {
+            "files": 0,
+            "processes": 0,
+            "extraction_sources": 0,
+            "writes": 0,
+        }
         try:
             tables = self._catalog_write_targets()
-            for file_path, text in self._iter_python_files(path):
-                details["files"] += 1
-                self._ingest_file(file_path, text, tables, started, details)
+            files = list(self._iter_python_files(path))
+            details["files"] = len(files)
+            by_dir: dict[Path, list[tuple[Path, str]]] = {}
+            for file_path, text in files:
+                by_dir.setdefault(file_path.parent, []).append((file_path, text))
+            seen_processes: set[str] = set()
+            for file_path, text in files:
+                created = self._ingest_file(
+                    path, file_path, text, tables, by_dir.get(file_path.parent, []), started, details
+                )
+                if created and created not in seen_processes:
+                    seen_processes.add(created)
+                    details["processes"] += 1
             message = (
                 f"Scanned {details['files']} DAG files, "
                 f"{details['processes']} processes, {details['writes']} writes"
@@ -135,25 +156,29 @@ class AirflowDagsLineageAdapter:
 
     def _ingest_file(
         self,
+        root: Path,
         file_path: Path,
         text: str,
         tables: list[Asset],
+        dir_files: list[tuple[Path, str]],
         now: datetime.datetime,
         details: dict,
-    ) -> None:
+    ) -> str | None:
         matched = [asset for asset in tables if self._mentions(text, asset, tables)]
         if not matched:
-            return
-        dag_id = self._dag_id(text, file_path)
-        process = self._upsert_process(dag_id, file_path, now)
-        details["processes"] += 1
+            return None
+        dag_path, dag_text = _resolve_dag_module(file_path, text, dir_files)
+        process_path = dag_path or file_path
+        meta = parse_dag_meta(dag_text if dag_path else text)
+        module_name = _module_name(process_path, root)
+        process = self._upsert_process(module_name, process_path, meta, now)
+        extraction = self._upsert_extraction(module_name, meta, process_path, now)
+        details["extraction_sources"] += 1
+        self._rel(extraction.id, process.id, RelationshipType.EXTRACTS_TO)
         for table in matched:
             self._rel(process.id, table.id, RelationshipType.WRITES_TO)
             details["writes"] += 1
-        for url in self._extract_urls(text):
-            source = self._upsert_url_source(url, now)
-            self._rel(process.id, source.id, RelationshipType.READS_FROM)
-            details["data_sources"] += 1
+        return module_name
 
     def _mentions(self, text: str, asset: Asset, all_tables: list[Asset]) -> bool:
         schema = str(asset.attributes.get("schema") or "")
@@ -169,37 +194,34 @@ class AirflowDagsLineageAdapter:
             return False
         return _has_quoted(text, name) or _has_token(text, name)
 
-    def _dag_id(self, text: str, file_path: Path) -> str:
-        keyword = _DAG_ID_KW.search(text)
-        if keyword:
-            return keyword.group(1)
-        positional = _DAG_POS.search(text)
-        if positional:
-            return positional.group(1)
-        return file_path.stem
-
-    def _upsert_process(self, dag_id: str, file_path: Path, now: datetime.datetime) -> Asset:
-        qualified_name, identity_key = airflow_process_identity(dag_id)
+    def _upsert_process(
+        self, module_name: str, file_path: Path, meta: DagMeta, now: datetime.datetime
+    ) -> Asset:
+        qualified_name, identity_key = airflow_process_identity(module_name)
         existing = self._store.find_by_identity(PROVIDER, identity_key)
         attributes = {
             "handler_type": "AirflowDag",
-            "dag_id": dag_id,
+            "module_name": module_name,
+            "dag_id": meta.dag_id,
             "source_path": str(file_path),
             "metadata_status": "OK",
             "lineage_status": "RESOLVED",
         }
+        display_name = Path(module_name).name
+        description = meta.description or f"Airflow DAG module {display_name}"
         if existing is not None:
             existing.last_seen_at = now
             existing.deleted_at = None
-            existing.name = dag_id
+            existing.name = display_name
+            existing.description = description
             existing.attributes = {**existing.attributes, **attributes}
             return self._store.upsert_asset(existing)
         return self._store.upsert_asset(
             Asset(
                 asset_type=AssetType.PROCESS,
                 qualified_name=qualified_name,
-                name=dag_id,
-                description=f"Airflow DAG {dag_id}",
+                name=display_name,
+                description=description,
                 source_provider=PROVIDER,
                 identity_key=identity_key,
                 first_seen_at=now,
@@ -208,21 +230,34 @@ class AirflowDagsLineageAdapter:
             )
         )
 
-    def _upsert_url_source(self, url: str, now: datetime.datetime) -> Asset:
-        qualified_name, identity_key = url_data_source_identity(url)
+    def _upsert_extraction(
+        self, module_name: str, meta: DagMeta, file_path: Path, now: datetime.datetime
+    ) -> Asset:
+        native_id = meta.dag_id or module_name
+        qualified_name, identity_key = airflow_extraction_identity(native_id)
         existing = self._store.find_by_identity(PROVIDER, identity_key)
-        attributes = {"url": url, "origin": "airflow_dag"}
+        attributes = {
+            "dag_id": meta.dag_id,
+            "module_name": module_name,
+            "source_path": str(file_path),
+            "origin": "airflow_dag",
+        }
+        name = meta.dag_id or Path(module_name).name
+        description = meta.description
         if existing is not None:
             existing.last_seen_at = now
             existing.deleted_at = None
+            existing.name = name
+            if description:
+                existing.description = description
             existing.attributes = {**existing.attributes, **attributes}
             return self._store.upsert_asset(existing)
         return self._store.upsert_asset(
             Asset(
-                asset_type=AssetType.DATA_SOURCE,
+                asset_type=AssetType.EXTRACTION_SOURCE,
                 qualified_name=qualified_name,
-                name=url,
-                description=url,
+                name=name,
+                description=description,
                 source_provider=PROVIDER,
                 identity_key=identity_key,
                 first_seen_at=now,
@@ -261,16 +296,98 @@ class AirflowDagsLineageAdapter:
                 continue
             yield path, text
 
-    def _extract_urls(self, text: str) -> list[str]:
-        found: list[str] = []
-        seen: set[str] = set()
-        for match in _URL_RE.findall(text):
-            normalized = normalize_url(match)
-            if normalized is None or normalized in seen:
-                continue
-            seen.add(normalized)
-            found.append(normalized)
-        return found
+
+def _module_name(file_path: Path, root: Path) -> str:
+    try:
+        relative = file_path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return file_path.stem
+    return relative.with_suffix("").as_posix()
+
+
+def is_dag_module(text: str) -> bool:
+    return _DAG_START.search(text) is not None
+
+
+def _resolve_dag_module(
+    file_path: Path, text: str, dir_files: list[tuple[Path, str]]
+) -> tuple[Path | None, str]:
+    if is_dag_module(text):
+        return file_path, text
+    for other_path, other_text in sorted(dir_files, key=lambda item: str(item[0])):
+        if other_path == file_path:
+            continue
+        if is_dag_module(other_text):
+            return other_path, other_text
+    return None, text
+
+
+def parse_dag_meta(text: str) -> DagMeta:
+    """Read dag_id and description from the first DAG(...) / @dag(...) call."""
+    match = _DAG_START.search(text)
+    if match is None:
+        return DagMeta()
+    open_idx = match.end() - 1
+    body = _paren_body(text, open_idx)
+    if not body:
+        return DagMeta()
+    dag_id = _first_string(_DAG_ID_KW.search(body)) or _first_string(_POS_STRING.search(body))
+    description = _first_string(_DESCRIPTION_KW.search(body))
+    if description:
+        description = " ".join(description.split())
+    return DagMeta(dag_id=dag_id, description=description or None)
+
+
+def _paren_body(text: str, open_idx: int) -> str | None:
+    if open_idx >= len(text) or text[open_idx] != "(":
+        return None
+    depth = 0
+    i = open_idx
+    quote: str | None = None
+    triple = False
+    escape = False
+    while i < len(text):
+        ch = text[i]
+        if quote is not None:
+            if escape:
+                escape = False
+            elif ch == "\\" and not triple:
+                escape = True
+            elif triple and text.startswith(quote, i):
+                i += 2
+                quote = None
+                triple = False
+            elif not triple and ch == quote:
+                quote = None
+            i += 1
+            continue
+        if text.startswith("'''", i) or text.startswith('"""', i):
+            quote = text[i : i + 3]
+            triple = True
+            i += 3
+            continue
+        if ch in {"'", '"'}:
+            quote = ch
+            triple = False
+            i += 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return text[open_idx + 1 : i]
+        i += 1
+    return None
+
+
+def _first_string(match: re.Match[str] | None) -> str | None:
+    if match is None:
+        return None
+    for group in match.groups():
+        if group is not None and group != "":
+            return group
+    return None
 
 
 def _has_token(text: str, needle: str) -> bool:
@@ -280,17 +397,3 @@ def _has_token(text: str, needle: str) -> bool:
 
 def _has_quoted(text: str, name: str) -> bool:
     return re.search(r"['\"]" + re.escape(name) + r"['\"]", text) is not None
-
-
-def normalize_url(raw: str) -> str | None:
-    """Drop credentials and query; skip documentation/local hosts."""
-    cleaned = raw.rstrip(".,;)]}'\"")
-    parts = urlsplit(cleaned)
-    host = (parts.hostname or "").lower()
-    if not parts.scheme or not host or host in SKIP_URL_HOSTS:
-        return None
-    netloc = host
-    if parts.port:
-        netloc = f"{host}:{parts.port}"
-    path = parts.path.rstrip("/")
-    return urlunsplit((parts.scheme.lower(), netloc, path, "", ""))

@@ -255,3 +255,16 @@ class InMemoryPortalStore:
 
     def is_empty(self) -> bool:
         return not self.assets
+
+    def purge(self) -> None:
+        """Drop all in-memory portal snapshots."""
+        with self._lock:
+            self.assets.clear()
+            self.columns.clear()
+            self.snapshots.clear()
+            self.relationships.clear()
+            self.changes.clear()
+            self.diagnostics.clear()
+            self.runs.clear()
+            self._identity_index.clear()
+            self._relationship_index.clear()

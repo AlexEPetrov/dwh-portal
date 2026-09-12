@@ -26,7 +26,16 @@ MUST всё равно показывать SQL-зависимости `DERIVED_
 
 #### Scenario: Lineage таблицы из Airflow DAG
 
-- GIVEN процесс DAG пишет в таблицу и читает URL data source
+- GIVEN процесс DAG пишет в таблицу и связан с extraction source
 - WHEN клиент запрашивает lineage таблицы
-- THEN в ответе есть `DATA_SOURCE`, `PROCESS` и `TABLE`
+- THEN в ответе есть `EXTRACTION_SOURCE`, `PROCESS` и `TABLE`
 - AND рёбра только data-flow типов
+- AND `DATA_SOURCE` и `STORAGE_LOCATION` отсутствуют
+
+#### Scenario: Lineage представления через DAG и SQL
+
+- GIVEN представление имеет `DERIVED_FROM` на таблицу
+- AND процесс DAG пишет в эту таблицу и связан с extraction source
+- WHEN клиент запрашивает lineage представления
+- THEN в ответе есть `EXTRACTION_SOURCE`, `PROCESS`, `TABLE` и `VIEW`
+- AND `DATA_SOURCE` и `STORAGE_LOCATION` отсутствуют

@@ -21,7 +21,7 @@ BUILTIN_ADAPTERS = {
 
 def default_adapter_specs(settings: DwhCollectorSettings) -> list[str]:
     """Built-in adapters when APP_DWH_LINEAGE_ADAPTERS is unset."""
-    specs = ["postgres_sql", "extraction_registry"]
+    specs = ["postgres_sql", "extraction_registry", "airflow_dags"]
     if settings.airflow_dags_root:
         specs.append("airflow_dags")
     return specs

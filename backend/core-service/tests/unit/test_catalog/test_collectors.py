@@ -16,7 +16,7 @@ from domains.catalog.providers.lineage import (
 from domains.catalog.providers.metadata import CatalogObject
 from domains.catalog.providers.python_metadata import resolve_python_metadata
 from domains.catalog.providers.rest_metadata import metadata_url
-from settings.portal import DwhCollectorSettings
+from settings.portal import DwhCollectorSettings, PortalSettings
 
 
 class FakeMetadataProvider:
@@ -301,3 +301,45 @@ def test_daily_runner_localizes_lineage_failure(store):
     assert result["postgres_sql"].status == CollectorStatus.SUCCESS
     assert result["postgres_sql"].details.get("skipped") is True
     assert store.find_by_qualified_name("dwh.raw.ice_brent") is not None
+
+
+def test_portal_store_purge_drops_previous_snapshots(store, now):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    assert not store.is_empty()
+    store.purge()
+    assert store.is_empty()
+    assert store.relationships == {}
+    assert store.runs == []
+
+
+def test_collect_reset_purges_before_run(store, monkeypatch):
+    from domains.catalog import collect as collect_mod
+
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run()
+    assert not store.is_empty()
+    monkeypatch.setattr(
+        collect_mod,
+        "get_portal_settings",
+        lambda: PortalSettings(store="memory", seed_demo=False, reset_on_collect=False),
+    )
+    monkeypatch.setattr(collect_mod, "create_portal_store", lambda settings: store)
+    monkeypatch.setattr(collect_mod, "run_daily_collection", lambda portal_store: {})
+    assert collect_mod.main([]) == 0
+    assert not store.is_empty()
+    assert collect_mod.main(["--reset"]) == 0
+    assert store.is_empty()
+
+
+def test_collect_reset_on_collect_setting(store, monkeypatch):
+    from domains.catalog import collect as collect_mod
+
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run()
+    monkeypatch.setattr(
+        collect_mod,
+        "get_portal_settings",
+        lambda: PortalSettings(store="memory", seed_demo=False, reset_on_collect=True),
+    )
+    monkeypatch.setattr(collect_mod, "create_portal_store", lambda settings: store)
+    monkeypatch.setattr(collect_mod, "run_daily_collection", lambda portal_store: {})
+    assert collect_mod.main([]) == 0
+    assert store.is_empty()

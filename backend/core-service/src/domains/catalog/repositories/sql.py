@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from domains.catalog.models import (
@@ -26,6 +26,7 @@ from domains.catalog.models import (
     RelationshipType,
 )
 from infrastructure.db.models.portal import (
+    PORTAL_SCHEMA,
     PortalAssetColumnDbModel,
     PortalAssetDbModel,
     PortalAssetSnapshotDbModel,
@@ -378,6 +379,21 @@ class SqlPortalStore:
             for row in rows:
                 latest[row.collector_name] = self._run_from_row(row)
             return list(latest.values())
+
+    def purge(self) -> None:
+        """Delete all portal snapshot rows. Does not touch DWH or other app schemas."""
+        tables = (
+            "portal_asset_columns",
+            "portal_asset_snapshots",
+            "portal_relationships",
+            "portal_change_events",
+            "portal_discovery_diagnostics",
+            "portal_collection_runs",
+            "portal_assets",
+        )
+        qualified = ", ".join(f'"{PORTAL_SCHEMA}".{name}' for name in tables)
+        with self._session(commit=True) as session:
+            session.execute(text(f"TRUNCATE TABLE {qualified} RESTART IDENTITY CASCADE"))
 
     def mark_missing_as_deleted(
         self,
