@@ -1,3 +1,5 @@
+import warnings
+
 from domains.catalog.collectors.catalog import CatalogCollector
 from domains.catalog.collectors.runner import run_daily_collection
 from domains.catalog.identity import airflow_extraction_identity, airflow_process_identity
@@ -5,6 +7,7 @@ from domains.catalog.lineage_adapters.airflow_dags import (
     AirflowDagsLineageAdapter,
     parse_dag_meta,
 )
+from domains.catalog.lineage_adapters.airflow_syntax import parse_module
 from domains.catalog.lineage_adapters.postgres_sql import PostgresSqlLineageAdapter
 from domains.catalog.lineage_adapters.registry import load_lineage_adapters
 from domains.catalog.models import AssetType, CollectorStatus, RelationshipType
@@ -140,8 +143,8 @@ dag = DAG(
     doc_md=doc_md
 )
 
-TARGET = "raw.ice_brent"
-URL = "https://api.example.com/v1/brent"
+def load_data():
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
 ''',
         encoding="utf-8",
     )
@@ -185,7 +188,8 @@ dag = DAG(
     description="Загрузка Platts",
 )
 
-TARGET = "raw.ice_brent"
+def load_data():
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
 ''',
         encoding="utf-8",
     )
@@ -231,8 +235,9 @@ def test_airflow_and_sql_form_extraction_to_view_chain(store, now, tmp_path):
 from airflow import DAG
 
 dag = DAG(dag_id="load_platts_egd", description="Загрузка Platts")
-TARGET = "raw.ice_brent"
-LANDING = "/data/landing/platts/egd"
+
+def load_data():
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
 ''',
         encoding="utf-8",
     )
@@ -252,12 +257,192 @@ LANDING = "/data/landing/platts/egd"
     assert AssetType.DATA_SOURCE not in types
 
 
+def test_airflow_adapter_follows_imports_and_requires_write(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    pkg = tmp_path / "platts_egd"
+    scrapers = pkg / "scrapers"
+    scrapers.mkdir(parents=True)
+    (scrapers / "fetch.py").write_text(
+        '''
+URL = "https://gnpholding.gazprom.ru/calculation-data"
+
+def get_online_data():
+    return requests.get(URL).text
+''',
+        encoding="utf-8",
+    )
+    (pkg / "db_models.py").write_text(
+        '''
+from sqlalchemy.dialects.postgresql import insert
+
+PLATTS_SCHEMA = "raw"
+PLATTS_TABLE_NAME = "ice_brent"
+
+class EuropeanGasDaily:
+    __tablename__ = PLATTS_TABLE_NAME
+    __table_args__ = {"schema": PLATTS_SCHEMA}
+
+def upsert(session, model, rows):
+    table = model.__table__
+    stmt = insert(table)
+    on_conflict_stmt = stmt.on_conflict_do_update(set_={})
+    session.execute(on_conflict_stmt)
+''',
+        encoding="utf-8",
+    )
+    (pkg / "dag_platts_etl.py").write_text(
+        '''
+from airflow import DAG
+from dags.platts_egd.scrapers.fetch import get_online_data
+from dags.platts_egd.db_models import EuropeanGasDaily, upsert
+
+def load_data():
+    data = get_online_data()
+    upsert(session, EuropeanGasDaily, data)
+
+dag = DAG(
+    dag_id="load_platts_egd",
+    description="Загрузка Platts",
+)
+''',
+        encoding="utf-8",
+    )
+    (pkg / "paths.py").write_text('LANDING = "/data/landing/platts/egd"\n', encoding="utf-8")
+    run = AirflowDagsLineageAdapter(
+        store, DwhCollectorSettings(airflow_dags_root=str(tmp_path))
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    process = store.find_by_identity(
+        "airflow_dags", airflow_process_identity("platts_egd/dag_platts_etl")[1]
+    )
+    table = store.find_by_qualified_name("dwh.raw.ice_brent")
+    assert process and table
+    writes = store.list_relationships(asset_id=process.id, types={RelationshipType.WRITES_TO})
+    assert writes[0].to_asset_id == table.id
+    assert not any(item.asset_type == AssetType.DATA_SOURCE for item in store.assets.values())
+    assert not any(item.asset_type == AssetType.STORAGE_LOCATION for item in store.assets.values())
+
+
+def test_airflow_adapter_ignores_select_without_write(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    (tmp_path / "plot_dag.py").write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(dag_id="rates_plots", description="График")
+SQL = "SELECT * FROM raw.ice_brent"
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store, DwhCollectorSettings(airflow_dags_root=str(tmp_path))
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("writes", 0) == 0
+    assert store.find_by_identity("airflow_dags", airflow_process_identity("plot_dag")[1]) is None
+
+
 def test_airflow_adapter_skips_when_root_missing(store, now):
     run = AirflowDagsLineageAdapter(
         store, DwhCollectorSettings(airflow_dags_root="")
     ).collect(now)
     assert run.status == CollectorStatus.SUCCESS
     assert run.details.get("skipped") is True
+
+
+def test_airflow_catalog_mode_skips_table_absent_from_snapshot(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    (tmp_path / "load_gassco.py").write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(dag_id="load_gassco", description="Gassco")
+
+def load_data():
+    sql = "INSERT INTO src_gassco.gassco_flows VALUES (1)"
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="catalog"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("mode") == "catalog"
+    assert run.details.get("writes", 0) == 0
+    assert store.find_by_identity("airflow_dags", airflow_process_identity("load_gassco")[1]) is None
+
+
+def test_airflow_code_mode_materializes_unresolved_write_target(store, now, tmp_path):
+    (tmp_path / "load_gassco.py").write_text(
+        '''
+from airflow import DAG
+
+CBR_SCHEMA = "src_gassco"
+CBR_TABLE = "gassco_flows"
+
+dag = DAG(dag_id="load_gassco", description="Gassco")
+
+def load_data():
+    sql = f"INSERT INTO {CBR_SCHEMA}.{CBR_TABLE} VALUES (1)"
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("mode") == "code"
+    assert run.details.get("writes", 0) == 1
+    assert run.details.get("unresolved", 0) == 1
+    process = store.find_by_identity("airflow_dags", airflow_process_identity("load_gassco")[1])
+    assert process is not None
+    writes = store.list_relationships(asset_id=process.id, types={RelationshipType.WRITES_TO})
+    table = store.get_asset(writes[0].to_asset_id)
+    assert table is not None
+    assert table.attributes.get("unresolved") is True
+    assert table.attributes["target_ref"]["schema"] == "src_gassco"
+    assert table.attributes["target_ref"]["name"] == "gassco_flows"
+
+
+def test_airflow_adapter_ignores_pandas_merge(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    (tmp_path / "load_gnph.py").write_text(
+        '''
+from airflow import DAG
+import pandas as pd
+
+dag = DAG(dag_id="load_gnph", description="GNPH")
+
+def load_data():
+    df = pd.DataFrame()
+    other = pd.DataFrame()
+    df.merge(other, on="date")
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("writes", 0) == 0
+    assert store.find_by_identity("airflow_dags", airflow_process_identity("load_gnph")[1]) is None
+
+
+def test_parse_module_ignores_invalid_string_escapes(tmp_path):
+    path = tmp_path / "platts.py"
+    path.write_text(
+        'PATTERN = "^x_(?P<year>\\d{4}).csv$"\n'
+        'PATH = "D:\\\\temp\\\\airflow_files\\epdk\\plot.png"\n',
+        encoding="utf-8",
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        facts = parse_module(path, path.read_text(encoding="utf-8"))
+    assert facts is not None
+    assert not any(issubclass(item.category, SyntaxWarning) for item in caught)
 
 
 def test_parse_dag_meta():

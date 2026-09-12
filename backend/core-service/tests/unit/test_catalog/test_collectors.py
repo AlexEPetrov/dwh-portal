@@ -323,7 +323,10 @@ def test_collect_reset_purges_before_run(store, monkeypatch):
         lambda: PortalSettings(store="memory", seed_demo=False, reset_on_collect=False),
     )
     monkeypatch.setattr(collect_mod, "create_portal_store", lambda settings: store)
-    monkeypatch.setattr(collect_mod, "run_daily_collection", lambda portal_store: {})
+    monkeypatch.setattr(
+        "domains.catalog.services.collection_service.run_daily_collection",
+        lambda portal_store, **kwargs: {},
+    )
     assert collect_mod.main([]) == 0
     assert not store.is_empty()
     assert collect_mod.main(["--reset"]) == 0
@@ -340,6 +343,32 @@ def test_collect_reset_on_collect_setting(store, monkeypatch):
         lambda: PortalSettings(store="memory", seed_demo=False, reset_on_collect=True),
     )
     monkeypatch.setattr(collect_mod, "create_portal_store", lambda settings: store)
-    monkeypatch.setattr(collect_mod, "run_daily_collection", lambda portal_store: {})
+    monkeypatch.setattr(
+        "domains.catalog.services.collection_service.run_daily_collection",
+        lambda portal_store, **kwargs: {},
+    )
     assert collect_mod.main([]) == 0
     assert store.is_empty()
+
+
+def test_collect_cli_passes_airflow_lineage_mode(store, monkeypatch):
+    from domains.catalog import collect as collect_mod
+
+    captured = {}
+
+    def fake_run(portal_store, **kwargs):
+        captured["settings"] = kwargs.get("settings")
+        return {}
+
+    monkeypatch.setattr(
+        collect_mod,
+        "get_portal_settings",
+        lambda: PortalSettings(store="memory", seed_demo=False),
+    )
+    monkeypatch.setattr(collect_mod, "create_portal_store", lambda settings: store)
+    monkeypatch.setattr(
+        "domains.catalog.services.collection_service.run_daily_collection",
+        fake_run,
+    )
+    assert collect_mod.main(["--airflow-lineage-mode", "code"]) == 0
+    assert captured["settings"].airflow_lineage_mode == "code"

@@ -20,14 +20,19 @@
   `DATA_SOURCE -> EXTRACTION_SOURCE -> STORAGE_LOCATION -> PROCESS -> TABLE`,
   но MUST NOT валить прогон, если реестра нет: статус SUCCESS со
   `skipped=true`.
-- Адаптер `airflow_dags` (опционально) ищет имя таблицы в исходниках DAG и
-  восстанавливает упрощённую цепочку
-  `EXTRACTION_SOURCE (DAG) -> PROCESS (DAG) -> TABLE`.
-  `STORAGE_LOCATION` и `DATA_SOURCE` из DAG MUST NOT создаваться.
-  `VIEW` подключается через `postgres_sql` (`DERIVED_FROM`).
+- Адаптер `airflow_dags` (опционально) разбирает исходники DAG через
+  `ast`, идёт от конструктора DAG по локальным импортам и пишет
+  `EXTRACTION_SOURCE (DAG) -> PROCESS (DAG) -> TABLE`. Режим
+  `catalog` (по умолчанию) линкует только таблицы из снимка каталога;
+  режим `code` материализует цели из AST, включая unresolved.
+  Переключение: `APP_DWH_AIRFLOW_LINEAGE_MODE`, CLI и
+  `POST /api/v1/collect`.
+- `POST /api/v1/collect` запускает тот же сбор, что CLI, с флагами
+  `reset` и `airflow_lineage_mode` (вызов из Airflow DAG).
 - Каноническая модель, Portal API чтения lineage и UI не меняют форму
-  контракта: новые рёбра вливаются в уже существующие типы
-  `DERIVED_FROM` / `READS_FROM` / `WRITES_TO`.
+  контракта чтения: новые рёбра вливаются в уже существующие типы
+  `DERIVED_FROM` / `READS_FROM` / `WRITES_TO`. Collect HTTP — аддитивный
+  операторский метод.
 
 Нет **BREAKING** изменений публичного HTTP API.
 
@@ -54,6 +59,7 @@
 - `backend/core-service/src/domains/catalog/providers/postgres.py`
 - `backend/core-service/src/domains/catalog/providers/extraction_registry.py`
 - `backend/core-service/src/settings/portal.py`
+- `backend/core-service/src/api/portal/**`
 - `backend/core-service/tests/unit/test_catalog/**`
 - current specs `openspec/specs/ingestion/spec.md`, `openspec/specs/catalog/spec.md`
 - frontend catalog lineage consumers — без смены generated API, если
@@ -69,31 +75,26 @@ collection-status уже произвольный по `collector_name`.
 
 ## Change types
 
-- `business_or_contract_semantic` — новые источники lineage и правило
-  «реестр необязателен»
-- не `public_api_semantic`, пока форма `/api/v1` не меняется
+- `business_or_contract_semantic` — новые источники lineage, режимы
+  Airflow `catalog`/`code` и правило «реестр необязателен»
+- `public_api_semantic` — аддитивный `POST /api/v1/collect`
 
 ## Applicable routing
 
 - topics: `catalog`, `ingestion`
 - workflow: `SPEC-WF-HIGH-RISK-SEMANTICS` (consumer-visible lineage meaning)
-- contract `http-api`: не активируется, пока authoring FastAPI shape не
-  меняется
-- `approval_policy`: `human_required` по классу бизнес-семантики
+- contract `http-api`: `SPEC-WF-API-CONTRACT` из-за `POST /api/v1/collect`
+- `approval_policy`: `human_required` по классу бизнес-семантики и
+  публичному HTTP
 
 ## Approval
 
-Пользователь явно поручил сделать портал универсальным без extraction
-sources, восстановить цепочку из кода Airflow и реализовать это на
-адаптерах/плагинах. После этой фиксации механическая реализация
-адаптеров и тесты продолжаются без повторного выбора архитектуры.
-
-Не выбираются в этой задаче: column-level lineage, исполнение DAG-кода,
-клонирование git-репозитория (только локальный корень), OpenMetadata
-provider.
+Пользователь явно поручил два переключаемых режима Airflow lineage
+(`catalog` / `code`) и HTTP-метод collect с этими флагами для вызова
+из DAG.
 
 ## Downstream
 
-Generated OpenAPI/frontend client не входят в обязательную цепочку, пока
-authoring API не изменён. Verification: `CORE-PYTEST-TARGET` для
-`tests/unit/test_catalog`.
+Generated OpenAPI/frontend client входят в цепочку из-за
+`POST /api/v1/collect`. Verification: `CORE-PYTEST-TARGET` для
+`tests/unit/test_catalog`, затем `OPENAPI-EXPORT` и `FRONTEND-GEN-API`.

@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { GetScenariosListApiManagementScenariosGetResponse, GetReportStatusApiRequestsRequestIdGetData, GetReportStatusApiRequestsRequestIdGetResponse, GetRequestsApiRequestsApiRequestsGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse } from './types.gen';
+import type { GetScenariosListApiManagementScenariosGetResponse, GetReportStatusApiRequestsRequestIdGetData, GetReportStatusApiRequestsRequestIdGetResponse, GetRequestsApiRequestsApiRequestsGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse, RunPortalCollectData, RunPortalCollectResponse } from './types.gen';
 
 /**
  * Get Scenarios List
@@ -318,4 +318,29 @@ export const getChange = (data: GetChangeData): CancelablePromise<GetChangeRespo
 export const getCollectionStatus = (): CancelablePromise<GetCollectionStatusResponse> => { return __request(OpenAPI, {
     method: 'GET',
     url: '/api/v1/collection-status'
+}); };
+
+/**
+ * Run Portal Collect
+ * Trigger snapshot collection. Intended for Airflow DAGs, not UI page loads.
+ * @param data The data for the request.
+ * @param data.reset Purge sol_dwh_portal snapshots before collecting
+ * @param data.airflowLineageMode Airflow WRITES_TO matching: catalog (snapshot tables only) or code (DAG AST)
+ * @param data.requestBody
+ * @returns CollectResponse Successful Response
+ * @throws ApiError
+ */
+export const runPortalCollect = (data: RunPortalCollectData = {}): CancelablePromise<RunPortalCollectResponse> => { return __request(OpenAPI, {
+    method: 'POST',
+    url: '/api/v1/collect',
+    query: {
+        reset: data.reset,
+        airflow_lineage_mode: data.airflowLineageMode
+    },
+    body: data.requestBody,
+    mediaType: 'application/json',
+    errors: {
+        422: 'Validation Error',
+        500: 'Internal Server Error'
+    }
 }); };

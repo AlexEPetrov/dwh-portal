@@ -11,9 +11,14 @@
 
 ### Requirement: Снимочный сбор отдельно от чтения API
 
-Коллекторы MUST выполняться вне пользовательского запроса. Нормальный
-путь `UI -> Portal API -> Portal DB` MUST NOT запускать полное
-сканирование DWH.
+Коллекторы MUST выполняться вне пользовательского запроса страницы.
+Нормальный путь `UI -> Portal API -> Portal DB` MUST NOT запускать
+полное сканирование DWH.
+
+Операторский запуск MUST быть доступен через CLI
+`python -m domains.catalog.collect` и через `POST /api/v1/collect`,
+чтобы Airflow DAG мог инициировать снимочный сбор. Этот путь MUST
+запускать полный сбор и MUST NOT вызываться страницами UI.
 
 Коллектор каталога MUST читать PostgreSQL system catalog через
 выделенное read-only соединение и MUST NOT выполнять `COUNT(*)` по
@@ -33,8 +38,9 @@
 удалять только снимки схемы `sol_dwh_portal` и MUST NOT изменять
 сканируемый DWH.
 
-Сброс MUST включаться флагом `--reset` или
-`APP_PORTAL_RESET_ON_COLLECT=true` и MUST быть выключен по умолчанию.
+Сброс MUST включаться флагом `--reset`, полем `reset` в
+`POST /api/v1/collect` или `APP_PORTAL_RESET_ON_COLLECT=true` и MUST
+быть выключен по умолчанию.
 
 #### Scenario: Collect с --reset очищает старый lineage
 
@@ -191,29 +197,63 @@ runtime payload.
 ### Requirement: Обратная цепочка из исходников Airflow
 
 Адаптер `airflow_dags` MUST сканировать локальный корень исходников DAG
-как текст и MUST NOT импортировать и MUST NOT исполнять Python DAG.
+через синтаксический разбор (`ast`) и MUST NOT импортировать и MUST NOT
+исполнять Python DAG. Неразбираемый файл MUST пропускаться.
 
-Для каждой каталожной `TABLE` или `MATERIALIZED_VIEW` адаптер MUST
-искать Python-модуль, в котором встречается имя объекта:
+Адаптер MUST начинать с модулей, где есть конструктор `DAG(...)` /
+`@dag(...)`, и MUST строить замыкание локальных импортов под корнем
+DAG (`dags.*` относительно корня, относительные импорты). Импорты
+`airflow` / `plugins` / `shared` и сторонних пакетов MUST NOT
+входить в замыкание. Соседний файл MUST учитываться только если DAG
+(прямо или транзитивно) его импортирует.
 
-- квалифицированное `schema.name` или `database.schema.name` как токен;
-- неквалифицированное имя только если оно уникально в каталоге, длиной
-  не менее 4 символов и встречается как строковый литерал или токен с
-  границами слова;
-- имена из стоп-списка (`data`, `table`, `name`, `value`, `type`,
-  `date`, `test`, `main`, `config`, `source`, `target`, `user`, `file`,
-  `path`, `sql`, `dag`, `task`) MUST NOT сопоставляться неквалифицированно.
+`PROCESS` MUST называться по модулю файла с конструктором DAG
+относительно корня. `EXTRACTION_SOURCE` MUST брать `description` из
+`DAG(...)`, если он есть, и MUST иметь `EXTRACTS_TO` на `PROCESS`.
 
-`PROCESS` MUST называться по имени модуля файла с конструктором
-`DAG(...)` / `@dag(...)` в той же папке (stem / путь относительно корня
-DAG). Если конструктора в папке нет, MUST использоваться модуль, где
-найдено имя таблицы. `PROCESS` MUST иметь `WRITES_TO` на сопоставленную
-таблицу.
+Режим сопоставления целей `WRITES_TO` MUST задаваться
+`APP_DWH_AIRFLOW_LINEAGE_MODE`, CLI `--airflow-lineage-mode` или
+полем `airflow_lineage_mode` в `POST /api/v1/collect`. Допустимые
+значения:
 
-В той же папке адаптер MUST искать конструктор `DAG(...)` / `@dag(...)`
-и MUST материализовать `EXTRACTION_SOURCE` с `description` из аргумента
-`description`, если он есть. `EXTRACTION_SOURCE` MUST иметь `EXTRACTS_TO`
-на `PROCESS`.
+```text
+catalog
+code
+```
+
+По умолчанию MUST быть `catalog`. Неизвестный режим MUST
+отклоняться на границе конфигурации или HTTP.
+
+В режиме `catalog` таблица MUST попадать в `WRITES_TO` только если она
+уже есть в снимке каталога (уникальное совпадение schema+name или
+уникальное имя) и в замыкании DAG есть свидетельство записи.
+Отсутствие таблицы в снимке MUST пропускать этот DAG, а не создавать
+узел.
+
+В режиме `code` адаптер MUST материализовать цель из исходников DAG даже
+если таблицы нет в снимке каталога: при уникальном совпадении MUST
+использовать каталожный объект, иначе MUST создать unresolved `TABLE`.
+Адаптер MUST NOT запрашивать сканируемый DWH, чтобы решить, существует
+ли таблица.
+
+В обоих режимах таблица MUST попадать в `WRITES_TO` только если в
+замыкании DAG есть и идентичность таблицы, и свидетельство записи.
+Идентичность MAY браться из:
+
+- `__tablename__` / `__table_args__['schema']` SQLAlchemy-класса
+  (в том числе из констант модуля);
+- `DbModelAdapter(..., table, schema)`;
+- аргументов `schema=` / `table=` / `tablename=` / `name=` у
+  `insert_to_db`, `to_sql`, `CSVtoPostgresUpsert` и родственных вызовов;
+- SQL `INSERT INTO` / `UPDATE` / `MERGE` `schema.table`.
+
+Свидетельство записи MUST быть вызовом `INSERT`/`UPDATE` SQL,
+`postgresql.insert` / `on_conflict_do_update`, `session.merge` /
+`session.add`, `upsert` / `upsert_db` / `insert_to_db` /
+`insert_values_to_db` / `to_sql` / `CSVtoPostgresUpsert` в том же
+замыкании. Упоминание таблицы в `SELECT` или в модуле без записи
+MUST NOT создавать `WRITES_TO`. HTTP-константы в `scrapers/` MUST NOT
+становиться `DATA_SOURCE`.
 
 Адаптер MUST NOT создавать `DATA_SOURCE` и MUST NOT создавать
 `STORAGE_LOCATION`. Цепочка Airflow MUST быть:
@@ -223,32 +263,66 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE
 ```
 
 Рёбра `VIEW` / `MATERIALIZED_VIEW` `DERIVED_FROM` таблицу MUST писать
-адаптер `postgres_sql`, а не `airflow_dags`. Вместе адаптеры MUST
-образовывать:
+адаптер `postgres_sql`. Вместе адаптеры MUST образовывать:
 
 ```text
 EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
 ```
 
-Несколько папок/DAG на одну таблицу MUST сохраняться как несколько
+Несколько DAG на одну таблицу MUST сохраняться как несколько
 процессов. Отсутствие корня исходников MUST быть пропуском адаптера,
 не `FAILED`.
 
 #### Scenario: Имя модуля DAG становится PROCESS
 
 - GIVEN каталог содержит таблицу `raw.ice_brent`
-- AND файл `load_platts_egd.py` содержит токен `raw.ice_brent` и
-  `DAG(dag_id="load_platts_egd", description="Загрузка Platts")`
+- AND файл `load_platts_egd.py` содержит `DAG(dag_id="load_platts_egd",
+  description="Загрузка Platts")` и запись в `raw.ice_brent`
 - WHEN выполняется адаптер `airflow_dags`
 - THEN создаётся `PROCESS` с именем `load_platts_egd`
 - AND создаётся `EXTRACTION_SOURCE` с description «Загрузка Platts»
 - AND есть ребро `EXTRACTS_TO` на процесс и `WRITES_TO` на таблицу
 - AND `DATA_SOURCE` и `STORAGE_LOCATION` не создаются
 
+#### Scenario: DAG импортирует scraper и модуль записи
+
+- GIVEN DAG уровнем выше импортирует `scrapers.fetch.get_online_data`
+  с HTTP-константой и отдельно `db_models` с `__tablename__` и
+  `insert`/`upsert`
+- WHEN выполняется адаптер `airflow_dags`
+- THEN `PROCESS` — модуль DAG
+- AND `WRITES_TO` указывает на таблицу из `db_models`
+- AND HTTP из scraper не становится `DATA_SOURCE`
+
+#### Scenario: SELECT без записи не создаёт lineage
+
+- GIVEN DAG содержит `SELECT ... FROM raw.ice_brent` и не содержит
+  команд записи
+- WHEN выполняется адаптер
+- THEN ребра `WRITES_TO` нет
+
+#### Scenario: Режим catalog не создаёт таблицу вне снимка
+
+- GIVEN режим `catalog`
+- AND DAG пишет в `src_gassco.gassco_flows`
+- AND этой таблицы нет в снимке каталога
+- WHEN выполняется адаптер `airflow_dags`
+- THEN `PROCESS` и `WRITES_TO` для этого DAG не создаются
+
+#### Scenario: Режим code материализует unresolved цель
+
+- GIVEN режим `code`
+- AND DAG содержит `INSERT INTO src_gassco.gassco_flows`
+- AND этой таблицы нет в снимке каталога
+- WHEN выполняется адаптер `airflow_dags`
+- THEN создаётся `PROCESS` и unresolved `TABLE`
+- AND есть ребро `WRITES_TO` на эту цель
+
 #### Scenario: Пути в DAG не становятся storage
 
-- GIVEN имя таблицы найдено в `load_platts_egd.py`
-- AND соседний `paths.py` содержит `"/data/landing/platts/egd"`
+- GIVEN DAG пишет в таблицу
+- AND соседний неимпортируемый `paths.py` содержит
+  `"/data/landing/platts/egd"`
 - WHEN выполняется адаптер `airflow_dags`
 - THEN `STORAGE_LOCATION` не создаётся
 - AND цепочка остаётся `EXTRACTION_SOURCE -> PROCESS -> TABLE`
@@ -259,6 +333,41 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
 - WHEN выполняется адаптер
 - THEN прогон `SUCCESS` со `skipped`
 - AND каталог и SQL lineage остаются доступны
+
+### Requirement: HTTP-запуск снимочного сбора
+
+`POST /api/v1/collect` MUST запускать ту же последовательность сборщиков,
+что и CLI. Запрос MUST принимать:
+
+```text
+reset
+airflow_lineage_mode
+```
+
+Флаги MUST приниматься как query-параметры и как JSON-тело. Если поле
+задано в теле, оно MUST иметь приоритет над query. Опущенный
+`airflow_lineage_mode` MUST брать значение из
+`APP_DWH_AIRFLOW_LINEAGE_MODE`.
+
+Ответ MUST содержать применённые `reset` и `airflow_lineage_mode`,
+сводку прогонов по имени коллектора и `failed`. HTTP-статус MUST быть
+`200`, если ни один коллектор не `FAILED`, и `500`, если хотя бы один
+прогон `FAILED`. Страницы UI MUST NOT вызывать этот метод.
+
+#### Scenario: DAG запускает collect в режиме code
+
+- GIVEN оператор вызывает `POST /api/v1/collect` с
+  `airflow_lineage_mode=code` и `reset=true`
+- WHEN сбор завершается без `FAILED`
+- THEN ответ `200` содержит `airflow_lineage_mode=code` и `reset=true`
+- AND снимки собраны в выбранном режиме
+
+#### Scenario: Отказ коллектора виден DAG
+
+- GIVEN хотя бы один коллектор завершился `FAILED`
+- WHEN DAG вызывает `POST /api/v1/collect`
+- THEN HTTP-статус `500`
+- AND тело содержит сводку прогонов
 
 ### Requirement: Изменения структуры
 

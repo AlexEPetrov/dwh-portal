@@ -9,9 +9,12 @@
 - [x] 2.2 Add `postgres_sql` view/table `DERIVED_FROM` from `pg_depend`; verify a fake dependency becomes a lineage edge between catalog assets
 - [x] 2.3 Add `airflow_dags` reverse reconstruction (DAG process, URL data source, no DAG execution); verify table-name and URL fixtures
 - [x] 2.4 Drop Airflow `STORAGE_LOCATION`; chain is `EXTRACTION_SOURCE -> PROCESS -> TABLE`, with `VIEW` via `postgres_sql`
+- [x] 2.5 Parse DAGs with `ast`, follow local imports, require INSERT/UPDATE/SQLAlchemy write evidence
+- [x] 2.6 Add switchable Airflow write modes `catalog` (snapshot-only) and `code` (AST/unresolved) via `APP_DWH_AIRFLOW_LINEAGE_MODE`
 
 ## 3. Runner and specs
 
 - [x] 3.1 Wire adapters into `run_daily_collection` after catalog/storage; verify one adapter failure does not hide catalog assets
 - [x] 3.2 Update current `openspec/specs/catalog` and `openspec/specs/ingestion` to the approved adapter behavior
 - [x] 3.3 `CORE-PYTEST-TARGET` for `tests/unit/test_catalog` via `cd backend/core-service && PYTHONPATH=. .venv/bin/pytest tests/unit/test_catalog -v`
+- [x] 3.4 Add `POST /api/v1/collect` with `reset` and `airflow_lineage_mode` for Airflow DAG triggers; reconcile OpenAPI/frontend client

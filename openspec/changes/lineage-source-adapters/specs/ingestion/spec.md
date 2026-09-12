@@ -80,28 +80,20 @@ MUST использоваться `postgres_sql` и `extraction_registry`, а
 ### Requirement: Обратная цепочка из исходников Airflow
 
 Адаптер `airflow_dags` MUST сканировать локальный корень исходников DAG
-как текст и MUST NOT импортировать и MUST NOT исполнять Python DAG.
-
-Для каждой каталожной `TABLE` или `MATERIALIZED_VIEW` адаптер MUST
-искать Python-модуль, в котором встречается имя объекта:
-
-- квалифицированное `schema.name` или `database.schema.name` как токен;
-- неквалифицированное имя только если оно уникально в каталоге, длиной
-  не менее 4 символов и встречается как строковый литерал или токен с
-  границами слова;
-- имена из стоп-списка (`data`, `table`, `name`, `value`, `type`,
-  `date`, `test`, `main`, `config`, `source`, `target`, `user`, `file`,
-  `path`, `sql`, `dag`, `task`) MUST NOT сопоставляться неквалифицированно.
+через `ast` и MUST NOT импортировать и MUST NOT исполнять Python DAG.
 
 `PROCESS` MUST называться по имени модуля файла с конструктором
-`DAG(...)` / `@dag(...)` в той же папке. Если конструктора в папке нет,
-MUST использоваться модуль, где найдено имя таблицы. `PROCESS` MUST
-иметь `WRITES_TO` на сопоставленную таблицу.
+`DAG(...)` / `@dag(...)` относительно корня DAG. Адаптер MUST
+начинать с DAG и MUST строить замыкание локальных импортов (`ast`,
+без исполнения). Режим `APP_DWH_AIRFLOW_LINEAGE_MODE` MUST быть
+`catalog` (цель только из снимка каталога) или `code` (цель из AST,
+unresolved если нет в снимке). По умолчанию `catalog`. Таблица MUST
+попадать в `WRITES_TO` только вместе со свидетельством записи
+(`INSERT`/`UPDATE`/`merge`/`upsert`/`to_sql`/ SQLAlchemy insert) в этом
+замыкании.
 
-В той же папке адаптер MUST искать конструктор `DAG(...)` и MUST
-материализовать `EXTRACTION_SOURCE` с `description` из аргумента
-`description`, если он есть. `EXTRACTION_SOURCE` MUST иметь `EXTRACTS_TO`
-на `PROCESS`.
+Адаптер MUST материализовать `EXTRACTION_SOURCE` с `description` из
+`DAG(...)`. `EXTRACTION_SOURCE` MUST иметь `EXTRACTS_TO` на `PROCESS`.
 
 Адаптер MUST NOT создавать `DATA_SOURCE` и MUST NOT создавать
 `STORAGE_LOCATION`. Цепочка Airflow MUST быть:
@@ -124,13 +116,21 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
 #### Scenario: Имя модуля DAG становится PROCESS
 
 - GIVEN каталог содержит таблицу `raw.ice_brent`
-- AND файл `load_platts_egd.py` содержит токен `raw.ice_brent` и
+- AND файл `load_platts_egd.py` содержит запись в таблицу и
   `DAG(dag_id="load_platts_egd", description="Загрузка Platts")`
 - WHEN выполняется адаптер `airflow_dags`
 - THEN создаётся `PROCESS` с именем `load_platts_egd`
 - AND создаётся `EXTRACTION_SOURCE` с description «Загрузка Platts»
 - AND есть ребро `WRITES_TO` на таблицу
 - AND `DATA_SOURCE` и `STORAGE_LOCATION` не создаются
+
+#### Scenario: DAG импортирует scraper и модуль записи
+
+- GIVEN DAG импортирует scraper с HTTP-константой и отдельный
+  `db_models` с `__tablename__` и `upsert`
+- WHEN выполняется адаптер
+- THEN `WRITES_TO` указывает на таблицу из `db_models`
+- AND HTTP не становится `DATA_SOURCE`
 
 #### Scenario: Пути в DAG не становятся storage
 
@@ -146,6 +146,32 @@ EXTRACTION_SOURCE -> PROCESS -> TABLE -> VIEW
 - WHEN выполняется адаптер
 - THEN прогон `SUCCESS` со `skipped`
 - AND каталог и SQL lineage остаются доступны
+
+#### Scenario: Режим catalog не создаёт таблицу вне снимка
+
+- GIVEN режим `catalog`
+- AND DAG пишет в таблицу, которой нет в снимке
+- WHEN выполняется адаптер
+- THEN `WRITES_TO` нет
+
+#### Scenario: Режим code материализует unresolved цель
+
+- GIVEN режим `code`
+- AND DAG пишет в таблицу, которой нет в снимке
+- WHEN выполняется адаптер
+- THEN создаётся unresolved `TABLE` и `WRITES_TO`
+
+### Requirement: HTTP-запуск снимочного сбора
+
+`POST /api/v1/collect` MUST запускать ту же последовательность, что CLI,
+с флагами `reset` и `airflow_lineage_mode` (query или JSON). HTTP `500`,
+если есть `FAILED`. UI MUST NOT вызывать этот метод.
+
+#### Scenario: DAG запускает collect в режиме code
+
+- GIVEN `POST /api/v1/collect` с `airflow_lineage_mode=code`
+- WHEN сбор успешен
+- THEN ответ `200` и режим `code`
 
 ## MODIFIED Requirements
 

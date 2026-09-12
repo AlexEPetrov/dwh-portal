@@ -38,3 +38,6 @@ class DwhCollectorSettings(BaseSettings):
     lineage_adapters: str | None = None
     # Local Airflow DAG sources for reverse lineage; never executed.
     airflow_dags_root: str | None = None
+    # catalog: WRITES_TO only tables already in the catalog snapshot.
+    # code: materialize write targets from DAG AST even if absent from the snapshot.
+    airflow_lineage_mode: Literal["catalog", "code"] = "catalog"

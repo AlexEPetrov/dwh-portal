@@ -18,6 +18,7 @@ export APP_DB_PSG_DB="${APP_DB_PSG_DB:-dwh}"
 export APP_DB_PSG_USER="${APP_DB_PSG_USER:-postgres}"
 export APP_DB_PSG_PASS="${APP_DB_PSG_PASS:-postgres}"
 export APP_DWH_AIRFLOW_DAGS_ROOT="${APP_DWH_AIRFLOW_DAGS_ROOT:-/app2/dags_code}"
+export APP_DWH_AIRFLOW_LINEAGE_MODE="${APP_DWH_AIRFLOW_LINEAGE_MODE:-catalog}"
 
 cd src && alembic upgrade head && cd ..
 PYTHONPATH=./src python -m domains.catalog.collect "$@"

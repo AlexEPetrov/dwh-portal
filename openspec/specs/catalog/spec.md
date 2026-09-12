@@ -155,7 +155,9 @@ MUST всё равно показывать SQL-зависимости `DERIVED_
 ### Requirement: Браузер говорит только с Portal API
 
 Веб-приложение MUST читать каталог, хранение, lineage и изменения
-только через `/api/v1/*`. UI MUST NOT выполнять metadata-сканирование DWH.
+только через `/api/v1/*`. UI MUST NOT выполнять metadata-сканирование DWH
+и MUST NOT вызывать `POST /api/v1/collect`. Операторский сбор запускает
+Airflow или CLI.
 
 #### Scenario: Страница объектов использует канонический список
 

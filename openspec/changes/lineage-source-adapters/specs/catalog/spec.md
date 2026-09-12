@@ -39,3 +39,8 @@ MUST всё равно показывать SQL-зависимости `DERIVED_
 - WHEN клиент запрашивает lineage представления
 - THEN в ответе есть `EXTRACTION_SOURCE`, `PROCESS`, `TABLE` и `VIEW`
 - AND `DATA_SOURCE` и `STORAGE_LOCATION` отсутствуют
+
+### Requirement: Браузер говорит только с Portal API
+
+Веб-приложение MUST читать каталог только через `/api/v1/*`.
+UI MUST NOT вызывать `POST /api/v1/collect`.

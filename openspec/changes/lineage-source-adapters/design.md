@@ -74,15 +74,29 @@ catalog identities.
 collector records `SUCCESS` + `details.skipped=true`. Unexpected
 errors remain `FAILED` (existing runner test with `RuntimeError`).
 
-### 5. Airflow chain is EXTRACTION_SOURCE → PROCESS → TABLE
+### 5. Airflow is DAG-first AST, write-gated
 
-`PROCESS` is named after the DAG Python module. `EXTRACTION_SOURCE`
-takes `description=` from `DAG(...)` and `EXTRACTS_TO` the process.
-The adapter does not create `DATA_SOURCE` or `STORAGE_LOCATION`.
-Views attach via `postgres_sql` `DERIVED_FROM`, so the visible chain is
-`EXTRACTION_SOURCE → PROCESS → TABLE → VIEW`.
+The adapter parses DAG sources with `ast` (never executes them).
+It starts from `DAG()` / `@dag()` modules and follows local imports
+under the DAG root. `PROCESS` is the DAG module. `EXTRACTION_SOURCE`
+takes `description=` from `DAG(...)`. Write matching has two operator
+modes via `APP_DWH_AIRFLOW_LINEAGE_MODE` / `--airflow-lineage-mode` /
+`POST /api/v1/collect`:
 
-### 6. Human approval checkpoint
+- `catalog` (default): `WRITES_TO` only if the table already exists in
+  the catalog snapshot.
+- `code`: materialize the table from DAG AST; unresolved `TABLE` if it
+  is absent from the snapshot. Do not query the scanned DWH to decide.
+
+A table is linked only when the import closure both names it and
+contains write evidence. HTTP in `scrapers/` is not a `DATA_SOURCE`.
+
+### 6. Collect is triggerable by HTTP for Airflow
+
+`POST /api/v1/collect` runs the same sequence as the CLI so a DAG can
+pass `reset` and `airflow_lineage_mode`. UI pages must not call it.
+
+### 7. Human approval checkpoint
 
 Intended semantics were given by the product request: adapter/plugin
 architecture, SQL-only lineage without extraction sources, reverse
@@ -109,6 +123,8 @@ re-opens the gate.
 - Deployments without the table start showing SQL lineage after the
   next collector run.
 - Enable Airflow by setting `APP_DWH_AIRFLOW_DAGS_ROOT`.
+- Switch write matching with `APP_DWH_AIRFLOW_LINEAGE_MODE=catalog|code`
+  or `POST /api/v1/collect`.
 - Rollback: omit new adapters via `APP_DWH_LINEAGE_ADAPTERS=extraction_registry`
   (loses SQL/Airflow edges on subsequent runs only if those adapters
   stop writing; existing edges remain until a future cleanup — adapters
@@ -117,9 +133,8 @@ re-opens the gate.
 ## Verification IDs
 
 - `CORE-PYTEST-TARGET` for `tests/unit/test_catalog`
-
-`OPENAPI-EXPORT` / `FRONTEND-GEN-API` / `FRONTEND-BUILD` are not
-required unless authoring API shape changes during implementation.
+- `OPENAPI-EXPORT` then `FRONTEND-GEN-API` because `POST /api/v1/collect`
+  changes the public HTTP shape. `FRONTEND-BUILD` if generated client files change.
 
 ## Open Questions
 

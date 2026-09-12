@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -211,6 +211,24 @@ class ChangeDetailResponse(BaseModel):
 
 class CollectionStatusResponse(BaseModel):
     items: list[FreshnessItem]
+
+
+class CollectRequest(BaseModel):
+    reset: bool = False
+    airflow_lineage_mode: Literal["catalog", "code"] | None = None
+
+
+class CollectRunItem(BaseModel):
+    status: str
+    message: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class CollectResponse(BaseModel):
+    reset: bool
+    airflow_lineage_mode: str
+    failed: bool
+    runs: dict[str, CollectRunItem]
 
 
 def freshness_items(rows: list[dict]) -> list[FreshnessItem]:

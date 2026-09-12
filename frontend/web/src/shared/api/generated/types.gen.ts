@@ -122,6 +122,28 @@ export type ChangeSummaryItem = {
 
 export type ChangeType = 'ADDED' | 'REMOVED' | 'RENAMED' | 'STRUCTURE_CHANGED' | 'DESCRIPTION_CHANGED';
 
+export type CollectRequest = {
+    reset?: boolean;
+    airflow_lineage_mode?: 'catalog' | 'code' | null;
+};
+
+export type CollectResponse = {
+    reset: boolean;
+    airflow_lineage_mode: string;
+    failed: boolean;
+    runs: {
+        [key: string]: CollectRunItem;
+    };
+};
+
+export type CollectRunItem = {
+    status: string;
+    message?: string | null;
+    details?: {
+        [key: string]: unknown;
+    };
+};
+
 export type CollectionStatusResponse = {
     items: Array<FreshnessItem>;
 };
@@ -388,6 +410,20 @@ export type GetChangeResponse = ChangeDetailResponse;
 
 export type GetCollectionStatusResponse = CollectionStatusResponse;
 
+export type RunPortalCollectData = {
+    /**
+     * Airflow WRITES_TO matching: catalog (snapshot tables only) or code (DAG AST)
+     */
+    airflowLineageMode?: 'catalog' | 'code' | null;
+    requestBody?: CollectRequest | null;
+    /**
+     * Purge sol_dwh_portal snapshots before collecting
+     */
+    reset?: boolean;
+};
+
+export type RunPortalCollectResponse = CollectResponse;
+
 export type $OpenApiTs = {
     '/api/management/scenarios/': {
         get: {
@@ -636,6 +672,25 @@ export type $OpenApiTs = {
                  * Successful Response
                  */
                 200: CollectionStatusResponse;
+            };
+        };
+    };
+    '/api/v1/collect': {
+        post: {
+            req: RunPortalCollectData;
+            res: {
+                /**
+                 * Successful Response
+                 */
+                200: CollectResponse;
+                /**
+                 * Validation Error
+                 */
+                422: HTTPValidationError;
+                /**
+                 * Internal Server Error
+                 */
+                500: CollectResponse;
             };
         };
     };

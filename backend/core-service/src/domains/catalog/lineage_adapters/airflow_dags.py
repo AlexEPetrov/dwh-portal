@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import datetime
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
 from domains.catalog.identity import (
     airflow_extraction_identity,
     airflow_process_identity,
+    unresolved_target_identity,
+)
+from domains.catalog.lineage_adapters.airflow_syntax import (
+    DagMeta,
+    TableRef,
+    bind_imported_constants,
+    dag_closure,
+    parse_module,
+    rescan_writes,
+    write_targets_for_closure,
 )
 from domains.catalog.lineage_adapters.runs import record_adapter_run, skipped_run
 from domains.catalog.models import (
@@ -64,14 +73,8 @@ _POS_STRING = re.compile(
 )
 
 
-@dataclass(frozen=True)
-class DagMeta:
-    dag_id: str | None = None
-    description: str | None = None
-
-
 class AirflowDagsLineageAdapter:
-    """Reverse-reconstruct EXTRACTION_SOURCE -> PROCESS -> TABLE from DAG text."""
+    """Reverse-reconstruct EXTRACTION_SOURCE -> PROCESS -> TABLE from DAG AST."""
 
     name = "airflow_dags"
 
@@ -104,29 +107,59 @@ class AirflowDagsLineageAdapter:
                 reason="DAGS_ROOT_MISSING",
                 message=f"Airflow DAG root does not exist: {root}",
             )
+        mode = _lineage_mode(self._settings)
         details = {
             "files": 0,
+            "dags": 0,
             "processes": 0,
             "extraction_sources": 0,
             "writes": 0,
+            "unresolved": 0,
+            "mode": mode,
         }
         try:
-            tables = self._catalog_write_targets()
+            catalog_tables = self._catalog_write_targets()
             files = list(self._iter_python_files(path))
             details["files"] = len(files)
-            by_dir: dict[Path, list[tuple[Path, str]]] = {}
+            facts_by_path = {}
             for file_path, text in files:
-                by_dir.setdefault(file_path.parent, []).append((file_path, text))
+                facts = parse_module(file_path.resolve(), text)
+                if facts is not None:
+                    facts_by_path[file_path.resolve()] = facts
+            resolved_root = path.resolve()
+            bind_imported_constants(facts_by_path, resolved_root)
+            for facts in facts_by_path.values():
+                rescan_writes(facts)
             seen_processes: set[str] = set()
-            for file_path, text in files:
-                created = self._ingest_file(
-                    path, file_path, text, tables, by_dir.get(file_path.parent, []), started, details
-                )
-                if created and created not in seen_processes:
-                    seen_processes.add(created)
+            for dag_path, facts in facts_by_path.items():
+                if not facts.is_dag:
+                    continue
+                details["dags"] += 1
+                closure = dag_closure(dag_path, facts_by_path, resolved_root)
+                if not any(facts_by_path[item].has_write for item in closure if item in facts_by_path):
+                    continue
+                refs = write_targets_for_closure(closure, facts_by_path)
+                matched = self._match_tables(refs, catalog_tables, started, mode)
+                if not matched:
+                    continue
+                meta = facts.dag_meta
+                if not meta.dag_id and not meta.description:
+                    meta = parse_dag_meta(facts.source)
+                module_name = _module_name(dag_path, resolved_root)
+                process = self._upsert_process(module_name, dag_path, meta, started)
+                extraction = self._upsert_extraction(module_name, meta, dag_path, started)
+                details["extraction_sources"] += 1
+                self._rel(extraction.id, process.id, RelationshipType.EXTRACTS_TO)
+                for table in matched:
+                    self._rel(process.id, table.id, RelationshipType.WRITES_TO)
+                    details["writes"] += 1
+                    if table.attributes.get("unresolved"):
+                        details["unresolved"] += 1
+                if module_name not in seen_processes:
+                    seen_processes.add(module_name)
                     details["processes"] += 1
             message = (
-                f"Scanned {details['files']} DAG files, "
+                f"Scanned {details['files']} files, {details['dags']} DAGs, "
                 f"{details['processes']} processes, {details['writes']} writes"
             )
             status = CollectorStatus.SUCCESS
@@ -154,45 +187,90 @@ class AirflowDagsLineageAdapter:
         )
         return [item for item in assets if item.asset_type in WRITE_TYPES]
 
-    def _ingest_file(
+    def _match_tables(
         self,
-        root: Path,
-        file_path: Path,
-        text: str,
+        refs: list[TableRef],
         tables: list[Asset],
-        dir_files: list[tuple[Path, str]],
         now: datetime.datetime,
-        details: dict,
-    ) -> str | None:
-        matched = [asset for asset in tables if self._mentions(text, asset, tables)]
-        if not matched:
-            return None
-        dag_path, dag_text = _resolve_dag_module(file_path, text, dir_files)
-        process_path = dag_path or file_path
-        meta = parse_dag_meta(dag_text if dag_path else text)
-        module_name = _module_name(process_path, root)
-        process = self._upsert_process(module_name, process_path, meta, now)
-        extraction = self._upsert_extraction(module_name, meta, process_path, now)
-        details["extraction_sources"] += 1
-        self._rel(extraction.id, process.id, RelationshipType.EXTRACTS_TO)
-        for table in matched:
-            self._rel(process.id, table.id, RelationshipType.WRITES_TO)
-            details["writes"] += 1
-        return module_name
+        mode: str,
+    ) -> list[Asset]:
+        matched: list[Asset] = []
+        seen: set[str] = set()
+        for ref in refs:
+            asset = self._match_table(ref, tables, now, mode)
+            if asset is None or str(asset.id) in seen:
+                continue
+            seen.add(str(asset.id))
+            matched.append(asset)
+        return matched
 
-    def _mentions(self, text: str, asset: Asset, all_tables: list[Asset]) -> bool:
-        schema = str(asset.attributes.get("schema") or "")
-        database = str(asset.attributes.get("database") or "")
-        name = asset.name
-        if schema and _has_token(text, f"{schema}.{name}"):
-            return True
-        if database and schema and _has_token(text, f"{database}.{schema}.{name}"):
-            return True
-        if len(name) < 4 or name.lower() in UNQUALIFIED_STOPLIST:
-            return False
-        if sum(1 for item in all_tables if item.name == name) != 1:
-            return False
-        return _has_quoted(text, name) or _has_token(text, name)
+    def _match_table(
+        self,
+        ref: TableRef,
+        tables: list[Asset],
+        now: datetime.datetime,
+        mode: str,
+    ) -> Asset | None:
+        name = ref.name
+        schema = ref.schema
+        if "." in name and schema is None:
+            parts = name.split(".")
+            if len(parts) == 2:
+                schema, name = parts
+            elif len(parts) == 3:
+                schema, name = parts[1], parts[2]
+        if not name or name.lower() in UNQUALIFIED_STOPLIST:
+            return None
+        if schema:
+            hits = [
+                item
+                for item in tables
+                if item.name.lower() == name.lower()
+                and str(item.attributes.get("schema") or "").lower() == schema.lower()
+                and not item.attributes.get("unresolved")
+            ]
+            if len(hits) == 1:
+                return hits[0]
+        if len(name) >= 4:
+            hits = [
+                item
+                for item in tables
+                if item.name.lower() == name.lower() and not item.attributes.get("unresolved")
+            ]
+            if len(hits) == 1:
+                return hits[0]
+        if mode == "code":
+            return self._unresolved_table(schema or "_", name, now)
+        return None
+
+    def _unresolved_table(self, schema: str, name: str, now: datetime.datetime) -> Asset:
+        database = self._settings.connection_identity or "dwh"
+        qualified_name, identity_key = unresolved_target_identity(database, schema, name)
+        existing = self._store.find_by_identity(PROVIDER, identity_key)
+        attributes = {
+            "unresolved": True,
+            "target_ref": {"database": database, "schema": schema, "name": name},
+            "database": database,
+            "schema": schema,
+            "display_name": f"{schema}.{name}",
+        }
+        if existing is not None:
+            existing.last_seen_at = now
+            existing.deleted_at = None
+            existing.attributes = {**existing.attributes, **attributes}
+            return self._store.upsert_asset(existing)
+        return self._store.upsert_asset(
+            Asset(
+                asset_type=AssetType.TABLE,
+                qualified_name=qualified_name,
+                name=name,
+                source_provider=PROVIDER,
+                identity_key=identity_key,
+                first_seen_at=now,
+                last_seen_at=now,
+                attributes=attributes,
+            )
+        )
 
     def _upsert_process(
         self, module_name: str, file_path: Path, meta: DagMeta, now: datetime.datetime
@@ -297,29 +375,17 @@ class AirflowDagsLineageAdapter:
             yield path, text
 
 
+def _lineage_mode(settings: DwhCollectorSettings) -> str:
+    mode = (settings.airflow_lineage_mode or "catalog").strip().lower()
+    return mode if mode in {"catalog", "code"} else "catalog"
+
+
 def _module_name(file_path: Path, root: Path) -> str:
     try:
         relative = file_path.resolve().relative_to(root.resolve())
     except ValueError:
         return file_path.stem
     return relative.with_suffix("").as_posix()
-
-
-def is_dag_module(text: str) -> bool:
-    return _DAG_START.search(text) is not None
-
-
-def _resolve_dag_module(
-    file_path: Path, text: str, dir_files: list[tuple[Path, str]]
-) -> tuple[Path | None, str]:
-    if is_dag_module(text):
-        return file_path, text
-    for other_path, other_text in sorted(dir_files, key=lambda item: str(item[0])):
-        if other_path == file_path:
-            continue
-        if is_dag_module(other_text):
-            return other_path, other_text
-    return None, text
 
 
 def parse_dag_meta(text: str) -> DagMeta:
@@ -388,12 +454,3 @@ def _first_string(match: re.Match[str] | None) -> str | None:
         if group is not None and group != "":
             return group
     return None
-
-
-def _has_token(text: str, needle: str) -> bool:
-    pattern = r"(?<![A-Za-z0-9_])" + re.escape(needle) + r"(?![A-Za-z0-9_])"
-    return re.search(pattern, text) is not None
-
-
-def _has_quoted(text: str, name: str) -> bool:
-    return re.search(r"['\"]" + re.escape(name) + r"['\"]", text) is not None

@@ -554,6 +554,84 @@ export const $ChangeType = {
     title: 'ChangeType'
 } as const;
 
+export const $CollectRequest = {
+    properties: {
+        reset: {
+            type: 'boolean',
+            title: 'Reset',
+            default: false
+        },
+        airflow_lineage_mode: {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: ['catalog', 'code']
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Airflow Lineage Mode'
+        }
+    },
+    type: 'object',
+    title: 'CollectRequest'
+} as const;
+
+export const $CollectResponse = {
+    properties: {
+        reset: {
+            type: 'boolean',
+            title: 'Reset'
+        },
+        airflow_lineage_mode: {
+            type: 'string',
+            title: 'Airflow Lineage Mode'
+        },
+        failed: {
+            type: 'boolean',
+            title: 'Failed'
+        },
+        runs: {
+            additionalProperties: {
+                '$ref': '#/components/schemas/CollectRunItem'
+            },
+            type: 'object',
+            title: 'Runs'
+        }
+    },
+    type: 'object',
+    required: ['reset', 'airflow_lineage_mode', 'failed', 'runs'],
+    title: 'CollectResponse'
+} as const;
+
+export const $CollectRunItem = {
+    properties: {
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        message: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Message'
+        },
+        details: {
+            type: 'object',
+            title: 'Details'
+        }
+    },
+    type: 'object',
+    required: ['status'],
+    title: 'CollectRunItem'
+} as const;
+
 export const $CollectionStatusResponse = {
     properties: {
         items: {

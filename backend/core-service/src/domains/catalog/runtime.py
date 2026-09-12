@@ -8,6 +8,7 @@ from domains.catalog.repositories.sql import SqlPortalStore
 from domains.catalog.seed import seed_demo_catalog
 from domains.catalog.services.asset_service import AssetService
 from domains.catalog.services.change_service import ChangeService
+from domains.catalog.services.collection_service import CollectionService
 from domains.catalog.services.collection_status_service import CollectionStatusService
 from domains.catalog.services.lineage_service import LineageService
 from domains.catalog.services.overview_service import OverviewService
@@ -71,3 +72,7 @@ def get_collection_status_service() -> CollectionStatusService:
     return CollectionStatusService(
         get_portal_store(), stale_after_hours=get_portal_settings().stale_after_hours
     )
+
+
+def get_collection_service() -> CollectionService:
+    return CollectionService(get_portal_store(), get_portal_settings())
