@@ -33,10 +33,8 @@
     "plotly.js-dist": "^2.33.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-markdown": "^10.1.0",
     "react-plotly.js": "^2.6.0",
     "react-router-dom": "^6.26.0",
-    "remark-gfm": "^4.0.1",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

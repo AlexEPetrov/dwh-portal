@@ -1,23 +1,10 @@
 services:
   core-service:
     restart: always
-    image: 134/pvs-core-service:1.2
+    image: 134/dwh-portal-core-service:1.2
     environment:
-      APP_SCHEDULE_LOAD_CURVES: "45 17 * * *"
-      APP_SCHEDULE_LOAD_OBJECTS: ""
-      APP_SCHEDULE_RUN_VALUATION: "04 2 * * *"
-      APP_SCHEDULE_RUN_SIMULATION: "04 2 * * *"
-      APP_LOC_LOAD_FILES_PATH: "/app/loads"
-      APP_LOC_ARCHIVE_PATH: "/app/archive"
       APP_LOC_TEMP_PATH: "/app/temp"
       APP_LOC_REPOSITORY_PATH: "/app/local_storage"
-      APP_LOC_SIMULATION_SOURCE_ROOT: "s3://module-f"
-      APP_LOC_SIMULATION_SOURCE_PATH: "executions/mcmf/observation_date={observation_date}/operation_id={operation_id}"
-      APP_LOC_STORAGE_ROOT: "s3://module-f"
-      APP_LOC_EXECUTIONS_PATH: "executions/data"
-      APP_LOC_EXECUTION_PRESETS_PATH: "/app/local_storage/presets/commands"
-      APP_LOC_FILTER_PRESETS_PATH: "/app/local_storage/presets/valuation-scenario-filters.json"
-      APP_LOC_ENABLE_HIVE_PARQUET: "True"
       APP_S3_ENDPOINT_URL: $APP_S3_ENDPOINT_URL
       APP_S3_KEY: $APP_S3_KEY
       APP_S3_SECRET: $APP_S3_SECRET
@@ -38,7 +25,7 @@ services:
       PYTHONDONTWRITEBYTECODE: 1
       LOGS_PATH: "/app/logs"
     ports:
-      - "5022:5011"
+      - "5052:5051"
     volumes:
       -  ./frontend-dist:/app/frontend-dist
       -  $APP_LOC_LOGS_PATH_HOST:/app/logs
@@ -75,8 +62,8 @@ services:
       - gtrm_backend
 
     expose:
-      - "5020"   # только для internal сети
-      - "5021"
+      - "5050"   # только для internal сети
+      - "5051"
 
 networks:
   gtrm_backend:

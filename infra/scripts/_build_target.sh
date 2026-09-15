@@ -47,9 +47,9 @@ cd ..
 
 # генерация миграций - забираем из СОБРАННОГО образа!
 
-docker create --name=temp-pvs-core-service 134/pvs-core-service:1.2
-docker cp temp-pvs-core-service:/app/migrations/all.sql ./.build/$CI_ENVIRONMENT/migrations/all.sql
-docker rm temp-pvs-core-service
+docker create --name=temp-dwh-portal-core-service 134/dwh-portal-core-service:1.2
+docker cp temp-dwh-portal-core-service:/app/migrations/all.sql ./.build/$CI_ENVIRONMENT/migrations/all.sql
+docker rm temp-dwh-portal-core-service
 
 # Копируем все что считаем артифактом
 
@@ -63,8 +63,7 @@ cp ./backend/core-service/frontend-dist ./.build/$CI_ENVIRONMENT -r
 # сохраняем образа
 
 cd ./.build/$CI_ENVIRONMENT
-docker save -o ./pvs-core-service.img 134/pvs-core-service:1.2
-docker save -o ./pvs-calc-service.img 134/pvs-calc-service:1.2
+docker save -o ./dwh-portal-core-service.img 134/dwh-portal-core-service:1.2
 git rev-parse HEAD > commit-sh.txt
 
 

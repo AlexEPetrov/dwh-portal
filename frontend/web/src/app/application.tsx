@@ -1,7 +1,6 @@
 import { HomeOutlined } from '@ant-design/icons';
 import type { ApplicationLayoutProps } from '@asset-management/app-shell/layout';
 import { pluginRegistry } from '@asset-management/app-shell/plugin';
-import { HELP_TOPICS } from '../help/topics';
 
 const MENU_LABEL_REFRESH_EVENT = 'atrm:menu-label-refresh';
 
@@ -14,7 +13,6 @@ export const applicationLayout = {
   subtitle: 'Каталог объектов DWH, хранение, lineage и структурные изменения.',
   expandSidebarLabel: 'Развернуть меню',
   collapseSidebarLabel: 'Свернуть меню',
-  help: { topics: HELP_TOPICS },
   navigation: {
     registry: pluginRegistry,
     prependItems: [
