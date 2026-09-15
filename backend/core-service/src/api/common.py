@@ -1,11 +1,11 @@
 import csv
 import io
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List
 from uuid import UUID
 
-from attr import dataclass
 from fastapi.responses import PlainTextResponse
 
 
