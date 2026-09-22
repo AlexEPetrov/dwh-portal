@@ -2,8 +2,13 @@
 
 Status: Accepted
 Owner: platform
-Last reviewed: 2026-09-09
+Last reviewed: 2026-09-11
 Applies to: `openspec/**`, `rules/**`, `docs/**`, `AGENTS.md`
+
+**Входной index:** [`docs/README.md`](README.md) — читать сначала.
+Этот файл — полный reference. Агентам: не preload на каждую задачу; грузить
+при создании/переносе/переклассификации документов или при сомнении в
+размещении.
 
 Этот документ определяет, **какие виды документации используются в проекте, где они хранятся и для чего нужны**.
 
@@ -58,6 +63,7 @@ AGENTS.md
 
 ```text
 backend/core-service/AGENTS.md
+backend/calc-service/AGENTS.md
 frontend/web/AGENTS.md
 ```
 
@@ -353,9 +359,44 @@ ADR отвечает на вопрос:
 
 ```text
 docs/adr/
+├── TEMPLATE.md      шаблон нового ADR (Nygard, English headings)
 ├── active/
 └── superseded/
 ```
+
+Формат — простой Nygard/MADR-lite. Заголовки секций **на английском**:
+
+```text
+## Status
+## Context
+## Decision
+## Consequences
+```
+
+Статусы в `## Status`: `Proposed` | `Accepted` | `Superseded`
+(допустимо `Draft` для черновиков). Текст тела может оставаться русским.
+YAML frontmatter и `adr-capability-map.yaml` не используются.
+
+Публикация на product-site — тегами в теле ADR (обычно под `## Status`):
+
+```text
+Product-publish: yes
+Product-capabilities: valuation/service, reporting/valuation
+Product-summary: optional one-liner
+```
+
+`PRODUCT-DOCS-SYNC` сам находит такие файлы в `docs/adr/active/**`.
+
+### Новый ADR
+
+1. Копировать `docs/adr/TEMPLATE.md` →
+   `docs/adr/active/<domain>/<slug>.md` (для `platform/` — только
+   cross-service; для `governance/` — устройство docs/process слоя).
+2. Заполнить Status / Context / Decision / Consequences.
+3. Поведение, следующее из решения, отразить в `openspec/specs/**` (или
+   change), а не оставлять только в ADR.
+4. Если ADR нужен на product-site — добавить теги `Product-publish` /
+   `Product-capabilities` и прогнать `PRODUCT-DOCS-SYNC`.
 
 ### `docs/adr/active/**`
 
@@ -374,9 +415,15 @@ docs/adr/active/
 
 ```text
 docs/adr/active/
-├── ingestion/
-├── lineage/
-├── data-catalog/
+├── api/
+├── calc-service/
+├── core-service/
+├── frontend/
+├── management/
+├── platform/      только cross-service решения
+├── reporting/
+├── risk/
+├── valuation/
 └── governance/    правила работы с документацией и изменениями
 ```
 
@@ -393,7 +440,10 @@ ADR остаётся действующим, пока само архитект�
 
 Старые ADR не удаляются, потому что они объясняют историю развития архитектуры.
 
-Если решение заменено, старый ADR должен явно ссылаться на новый.
+Если решение заменено, старый ADR должен явно ссылаться на новый и
+**переезжает** из `docs/adr/active/**` в `docs/adr/superseded/**`. Статус
+`Superseded` в тексте без смены каталога недопустим: путь — фильтр для
+агентов.
 
 ### Связь ADR и OpenSpec
 
@@ -425,7 +475,8 @@ docs/plans/**
 
 ```text
 docs/plans/
-  dbt-migration-plan.md
+  market-data-modernization.md
+  liquidity-risk-rollout.md
   monorepo-migration.md
 ```
 
@@ -487,7 +538,7 @@ Abandoned
 
 Содержит вытесненные редакции документа, у которого есть более новая
 действующая версия, когда сравнение версий сохраняет смысл. Пример — цепочка
-`etrm_financial_model_v2..v8`, действующая редакция которой живёт в
+`etrm_financial_model_v2..v9.1`, действующая редакция `v9.2` живёт в
 `docs/methodology/`.
 
 Завершённые планы сюда не складываются: по
@@ -568,9 +619,10 @@ docs/product/**
 Правила:
 
 * мало страниц; без MUST/SHALL и без дублей userguide;
-* **язык продуктового сайта и spine — русский**; английский в OpenSpec допустим, но на end-user витрине сводится к минимуму (идентификаторы не переводятся);
+* **язык продуктового сайта и spine — русский**; на end-user витрине английский сводится к минимуму (идентификаторы не переводятся);
 * ссылки на справку — схемой `help:<id>`;
-* curated ADR для внешней публикации — только через `docs/product/adr-capability-map.yaml`;
+* curated ADR для внешней публикации — тег `Product-publish: yes` в теле
+  ADR (`Product-capabilities` обязателен); sync ищет сам;
 * привязка capability → help — через `docs/product/capability-help-map.yaml`.
 
 Обоснование пайплайна: `docs/adr/active/governance/product-docs-pipeline.md`.
@@ -625,7 +677,7 @@ CLI не вызывает модель сам: текст пишет агент 
 Направление обновления:
 
 ```text
-спецификации + product spine + curated ADR maps
+спецификации + product spine + ADR с Product-publish: yes
                 ↓
         docs/generated/**
 ```
@@ -767,6 +819,11 @@ openspec/specs/**
 
 Внутренняя документация проекта по умолчанию пишется **на русском языке**.
 
+Исключение: структурные заголовки ADR (`## Status`, `## Context`,
+`## Decision`, `## Consequences`) и значения статуса (`Proposed` /
+`Accepted` / `Superseded`) — на английском (Nygard/MADR). Текст в секциях
+может оставаться русским.
+
 Исключение:
 
 ```text
@@ -776,7 +833,6 @@ AGENTS.md
 пишутся на английском языке как инструкции для ИИ-агентов.
 
 Для **продуктовой end-user витрины** (`docs/product/**`, `docs/generated/product/**`, enrich-слой) требование жёстче: английский сводится к минимуму.
-Допустим английский в OpenSpec Purpose как исходник; на сайте он уходит во вторичную секцию, а основной текст — русский enrich/spine.
 Идентификаторы, API, enum и `help:<id>` не переводятся.
 
 Не переводятся:

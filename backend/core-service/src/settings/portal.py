@@ -35,8 +35,10 @@ class DwhCollectorSettings(BaseSettings):
     rest_metadata_timeout_seconds: float = 3.0
     rest_metadata_retries: int = 1
     # Comma-separated built-in names and/or module:Class plugin paths.
+    # Default (unset/empty): postgres_sql,extraction_registry,airflow_dags.
     lineage_adapters: str | None = None
     # Local Airflow DAG sources for reverse lineage; never executed.
+    # Required for airflow_dags to produce lineage (otherwise the adapter skips).
     airflow_dags_root: str | None = None
     # catalog: WRITES_TO only tables already in the catalog snapshot.
     # code: materialize write targets from DAG AST even if absent from the snapshot.

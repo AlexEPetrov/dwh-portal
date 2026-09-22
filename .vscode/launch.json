@@ -65,7 +65,9 @@
                 "APP_DWH_PSG_PASS": "postgres",
                 "APP_API_PORT": "5051",
                 "APP_API_HOST": "localhost",
-                "APP_DWH_AIRFLOW_DAGS_ROOT": "/app2/dags_code"
+                "APP_DWH_LINEAGE_ADAPTERS": "postgres_sql,extraction_registry,airflow_dags",
+                "APP_DWH_AIRFLOW_DAGS_ROOT": "/app2/dags_code",
+                "APP_DWH_AIRFLOW_LINEAGE_MODE": "catalog"
             }
         },
         {
@@ -96,8 +98,8 @@
                 "APP_LOC_EXECUTION_PRESETS_PATH": "/app/local_storage/presets/commands/",
                 "APP_LOC_FILTER_PRESETS_PATH": "/app/local_storage/presets/valuation-filter-presets.json",
                 "APP_S3_ENDPOINT_URL": "http://0.0.0.0:9000",
-                "APP_S3_KEY": "cd5Nag3nF64tAv8a6ROE",
-                "APP_S3_SECRET": "NCJKTUr7bRAZPDdeF7hbbkh5PHgYrYQGw9zOIV2b",
+                "APP_S3_KEY": "",
+                "APP_S3_SECRET": "",
                 // "APP_S3_ENDPOINT_URL": "http://192.168.1.38:9009",
                 // "APP_S3_KEY": "IBPZ0KNDMNFV4Z4HF14N",
                 // "APP_S3_SECRET": "D8nJrsQUbVQYFqq9QrtkWaoeHLytX4srr+LfUNt+",
@@ -129,7 +131,9 @@
                 "APP_DWH_PSG_PASS": "postgres",
                 "APP_API_PORT": "5051",
                 "APP_API_HOST": "localhost",
-                "APP_DWH_AIRFLOW_DAGS_ROOT": "/app2/dags_code"
+                "APP_DWH_LINEAGE_ADAPTERS": "postgres_sql,extraction_registry,airflow_dags",
+                "APP_DWH_AIRFLOW_DAGS_ROOT": "/app2/dags_code",
+                "APP_DWH_AIRFLOW_LINEAGE_MODE": "catalog"
             }
         },
         {

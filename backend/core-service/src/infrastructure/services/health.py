@@ -13,7 +13,12 @@ from settings.location import LocationsSettings
 
 
 def check_database_availability() -> List[Tuple[str, str, str]]:
-    return [("database", "healthy", "OK")]
+    try:
+        with SessionProvider().create_session() as s:
+            s.execute(text("SELECT 1"))
+            return [("database", "healthy", "OK")]
+    except Exception as ex:
+        return [("database", "unhealthy", str(ex))]
 
 
 def check_folder_availability() -> List[Tuple[str, str, str]]:

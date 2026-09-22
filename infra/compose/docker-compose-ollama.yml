@@ -5,12 +5,12 @@ services:
     container_name: ollama
     restart: unless-stopped
     networks:
-      - backend
+      - dwh_portal
     volumes:
       - ${APP_OLLAMA_MODELS_PATH_HOST:-./ollama-models}:/root/.ollama:ro
     expose:
       - "11434"
 
 networks:
-  gtrm_backend:
+  dwh_portal:
     external: true

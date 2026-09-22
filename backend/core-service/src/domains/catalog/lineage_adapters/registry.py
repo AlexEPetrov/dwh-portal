@@ -20,11 +20,12 @@ BUILTIN_ADAPTERS = {
 
 
 def default_adapter_specs(settings: DwhCollectorSettings) -> list[str]:
-    """Built-in adapters when APP_DWH_LINEAGE_ADAPTERS is unset."""
-    specs = ["postgres_sql", "extraction_registry"]
-    if settings.airflow_dags_root:
-        specs.append("airflow_dags")
-    return specs
+    """Built-in adapters when APP_DWH_LINEAGE_ADAPTERS is unset.
+
+    ``airflow_dags`` is always included; without ``APP_DWH_AIRFLOW_DAGS_ROOT``
+    the adapter records a skipped run instead of being omitted from the pipeline.
+    """
+    return ["postgres_sql", "extraction_registry", "airflow_dags"]
 
 
 def parse_adapter_specs(settings: DwhCollectorSettings) -> list[str]:

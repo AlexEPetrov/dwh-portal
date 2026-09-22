@@ -3,73 +3,94 @@ services:
     restart: always
     image: 134/dwh-portal-core-service:1.2
     environment:
-      APP_LOC_TEMP_PATH: "/app/temp"
-      APP_LOC_REPOSITORY_PATH: "/app/local_storage"
-      APP_S3_ENDPOINT_URL: $APP_S3_ENDPOINT_URL
-      APP_S3_KEY: $APP_S3_KEY
-      APP_S3_SECRET: $APP_S3_SECRET
-      APP_S3_VERIFY_TLS: "False"
-      APP_S3_REGION: "us-east-1"
+      # Process
+      PYTHONDONTWRITEBYTECODE: "1"
+      LOGS_PATH: "/app/logs"
+
+      # HTTP listen (container)
+      APP_API_HOST: $APP_API_HOST
+      APP_API_PORT: $APP_API_PORT
+
+      # Portal snapshot store (app DB)
+      APP_PORTAL_STORE: $APP_PORTAL_STORE
+      APP_PORTAL_SEED_DEMO: $APP_PORTAL_SEED_DEMO
+      APP_PORTAL_RESET_ON_COLLECT: $APP_PORTAL_RESET_ON_COLLECT
+      APP_PORTAL_STALE_AFTER_HOURS: $APP_PORTAL_STALE_AFTER_HOURS
+      APP_PORTAL_LINEAGE_MAX_DEPTH: $APP_PORTAL_LINEAGE_MAX_DEPTH
+      APP_PORTAL_DEFAULT_PAGE_SIZE: $APP_PORTAL_DEFAULT_PAGE_SIZE
+      APP_PORTAL_MAX_PAGE_SIZE: $APP_PORTAL_MAX_PAGE_SIZE
+
+      # App DB (Portal SQL store / alembic)
       APP_DB_PSG_HOST: $APP_DB_PSG_HOST
       APP_DB_PSG_PORT: $APP_DB_PSG_PORT
       APP_DB_PSG_DB: $APP_DB_PSG_DB
       APP_DB_PSG_USER: $APP_DB_PSG_USER
       APP_DB_PSG_PASS: $APP_DB_PSG_PASS
-      APP_API_HOST: $APP_API_HOST
-      APP_API_PORT: $APP_API_PORT
-      APP_AI_ENABLED: "True"
-      APP_AI_PROVIDER: "ollama"
-      APP_AI_BASE_URL: $APP_AI_BASE_URL_HOST
+
+      # Read-only DWH (collectors + live load journal)
+      APP_DWH_PSG_HOST: $APP_DWH_PSG_HOST
+      APP_DWH_PSG_PORT: $APP_DWH_PSG_PORT
+      APP_DWH_PSG_DB: $APP_DWH_PSG_DB
+      APP_DWH_PSG_USER: $APP_DWH_PSG_USER
+      APP_DWH_PSG_PASS: $APP_DWH_PSG_PASS
+      APP_DWH_CONNECTION_IDENTITY: $APP_DWH_CONNECTION_IDENTITY
+      APP_DWH_REST_METADATA_TIMEOUT_SECONDS: $APP_DWH_REST_METADATA_TIMEOUT_SECONDS
+      APP_DWH_REST_METADATA_RETRIES: $APP_DWH_REST_METADATA_RETRIES
+      APP_DWH_LINEAGE_ADAPTERS: $APP_DWH_LINEAGE_ADAPTERS
+      APP_DWH_AIRFLOW_DAGS_ROOT: $APP_DWH_AIRFLOW_DAGS_ROOT
+      APP_DWH_AIRFLOW_LINEAGE_MODE: $APP_DWH_AIRFLOW_LINEAGE_MODE
+
+      # Auth
+      APP_AUTH_SESSION_COOKIE_NAME: $APP_AUTH_SESSION_COOKIE_NAME
+      APP_AUTH_SESSION_TTL_SECONDS: $APP_AUTH_SESSION_TTL_SECONDS
+      APP_AUTH_SESSION_SECRET_KEY: $APP_AUTH_SESSION_SECRET_KEY
+      APP_AUTH_SESSION_SECURE_COOKIE: $APP_AUTH_SESSION_SECURE_COOKIE
+      APP_AUTH_SESSION_SAMESITE: $APP_AUTH_SESSION_SAMESITE
+      APP_AUTH_LOCAL_USERNAME: $APP_AUTH_LOCAL_USERNAME
+      APP_AUTH_LOCAL_PASSWORD: $APP_AUTH_LOCAL_PASSWORD
+      APP_AUTH_VIEWER_USERNAME: $APP_AUTH_VIEWER_USERNAME
+      APP_AUTH_VIEWER_PASSWORD: $APP_AUTH_VIEWER_PASSWORD
+      APP_AUTH_SERVICE_API_KEYS: $APP_AUTH_SERVICE_API_KEYS
+
+      # AI (Phase 2 stub; keep configurable)
+      APP_AI_ENABLED: $APP_AI_ENABLED
+      APP_AI_PROVIDER: $APP_AI_PROVIDER
+      APP_AI_BASE_URL: $APP_AI_BASE_URL
+      APP_AI_API_KEY: $APP_AI_API_KEY
       APP_AI_MODEL: $APP_AI_MODEL
-      APP_AI_TIMEOUT_SEC: "90"
-      PYTHONDONTWRITEBYTECODE: 1
-      LOGS_PATH: "/app/logs"
+      APP_AI_TIMEOUT_SEC: $APP_AI_TIMEOUT_SEC
+
+      # Local paths inside container
+      APP_LOC_TEMP_PATH: "/app/temp"
+      APP_LOC_REPOSITORY_PATH: "/app/local_storage"
     ports:
-      - "5052:5051"
+      - "${APP_API_HOST_PORT:-5052}:${APP_API_PORT:-5051}"
     volumes:
-      -  ./frontend-dist:/app/frontend-dist
-      -  $APP_LOC_LOGS_PATH_HOST:/app/logs
-      -  $APP_LOC_REPOSITORY_PATH_HOST:/app/local_storage
-      -  $APP_LOC_DATASETS_PATH_HOST:/app/datasets
+      - ./frontend-dist:/app/frontend-dist
+      - ${APP_LOC_LOGS_PATH_HOST}:/app/logs
+      - ${APP_LOC_REPOSITORY_PATH_HOST}:/app/local_storage
+      - ${APP_DWH_AIRFLOW_DAGS_ROOT_HOST}:${APP_DWH_AIRFLOW_DAGS_ROOT}:ro
     extra_hosts:
-      -  "host.docker.internal:host-gateway"
+      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: curl --fail http://localhost:5011/health || exit 1
+      test: curl --fail http://localhost:${APP_API_PORT:-5051}/health || exit 1
       interval: 60s
       retries: 5
       start_period: 20s
       timeout: 10s
     networks:
-      - gtrm_backend
+      - dwh_portal
     deploy:
       resources:
         limits:
-          cpus: '4.0'
-
-    environment:
-      RUST_LOG: info
-      APP_SERVER_HOST: 0.0.0.0
-
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-    deploy:
-      resources:
-        limits:
-          cpus: '8.0'
-
-    networks:
-      - gtrm_backend
-
+          cpus: "4.0"
     expose:
-      - "5050"   # только для internal сети
-      - "5051"
+      - "${APP_API_PORT:-5051}"
 
 networks:
-  gtrm_backend:
-    name: gtrm_backend  # Принудительно задаем имя в системе
+  dwh_portal:
+    name: dwh_portal
     driver: bridge
-    # ИСПРАВЛЕНО: Явно связываем шлюз кастомной сети с хостом
     ipam:
       config:
         - subnet: 172.28.0.0/16
