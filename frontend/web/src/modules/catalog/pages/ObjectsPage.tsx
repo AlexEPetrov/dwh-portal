@@ -1,6 +1,7 @@
 import { listAssets } from '@shared/api/generated';
-import type { AssetListItem, AssetListResponse } from '@shared/api/generated';
-import { Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import type { AssetListItem } from '@shared/api/generated';
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -26,34 +27,19 @@ const PAGE_SIZE = 25;
 
 const ObjectsPage = () => {
   const navigate = useNavigate();
-  /** Empty = show all types. */
+  /** Empty = show all types. Client/UI state — stays in useState, not Query. */
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'active' | 'deleted'>('active');
   const [page, setPage] = useState(1);
-  const [items, setItems] = useState<AssetListItem[]>([]);
-  const [freshness, setFreshness] = useState<AssetListResponse['collector_freshness']>([]);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    listAssets({ status, page: 1, pageSize: 200 })
-      .then((payload) => {
-        if (!cancelled) {
-          setItems(payload.items);
-          setFreshness(payload.collector_freshness);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [status]);
+  const assetsQuery = useQuery({
+    queryKey: ['catalog', 'assets', { status }],
+    queryFn: () => listAssets({ status, page: 1, pageSize: 200 }),
+  });
+
+  const items = assetsQuery.data?.items ?? [];
+  const freshness = assetsQuery.data?.collector_freshness ?? [];
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -157,6 +143,14 @@ const ObjectsPage = () => {
         </Typography.Title>
         <FreshnessBar items={freshness} />
       </div>
+      {assetsQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить список объектов"
+          description={assetsQuery.error instanceof Error ? assetsQuery.error.message : undefined}
+        />
+      ) : null}
       <FilterToolbar>
         <FilterChipGroup
           options={TYPE_TOGGLES}
@@ -192,7 +186,7 @@ const ObjectsPage = () => {
       </FilterToolbar>
       <Table
         rowKey="id"
-        loading={loading}
+        loading={assetsQuery.isPending || assetsQuery.isFetching}
         columns={columns}
         dataSource={pageItems}
         pagination={{

@@ -73,17 +73,9 @@ class ExtractionRegistryProvider:
         )
 
     def _connect(self):
-        import psycopg2
+        from domains.catalog.providers.connection import connect_dwh_readonly
 
-        if not self._settings.psg_host or not self._settings.psg_db:
-            raise RuntimeError("DWH collector connection is not configured")
-        return psycopg2.connect(
-            host=self._settings.psg_host,
-            port=self._settings.psg_port,
-            user=self._settings.psg_user,
-            password=self._settings.psg_pass,
-            dbname=self._settings.psg_db,
-        )
+        return connect_dwh_readonly(self._settings)
 
     def _read_registry(self, connection) -> list[ExtractionSourceRecord]:
         # Live DWH columns drift between environments (descr vs description,

@@ -87,15 +87,9 @@ class LogFilesProvider:
                 connection.close()
 
     def _connect(self):
-        import psycopg2
+        from domains.catalog.providers.connection import connect_dwh_readonly
 
-        return psycopg2.connect(
-            host=self._settings.psg_host,
-            port=self._settings.psg_port,
-            user=self._settings.psg_user,
-            password=self._settings.psg_pass,
-            dbname=self._settings.psg_db,
-        )
+        return connect_dwh_readonly(self._settings)
 
     def _read_page(
         self, connection, extraction_source_id: str, page: int, page_size: int
