@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "extraction_options",
+  "$defs": {
+    "ExtractEmailOptions": {
+      "title": "ExtractEmailOptions",
+      "type": "object",
+      "properties": {
+        "attachment_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subject_patterns": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExtractFolderSourceOptions": {
+      "title": "ExtractFolderSourceOptions",
+      "type": "object",
+      "properties": {
+        "folder_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "filename_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExtractStorageOptions": {
+      "title": "ExtractStorageOptions",
+      "type": "object",
+      "properties": {
+        "remove_strings": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "filename_template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "archive_subfolder_template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inbox_subfolder_template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "need_to_unpack": {
+          "type": "boolean"
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LoadHandlerOption": {
+      "title": "LoadHandlerOption",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/LoadPythonHandlerOption"
+        },
+        {
+          "$ref": "#/$defs/LoadPythonExtendedHandlerOption"
+        },
+        {
+          "$ref": "#/$defs/LoadRestApiHandlerOption"
+        }
+      ]
+    },
+    "ExtractLoadOptions": {
+      "title": "ExtractLoadOptions",
+      "type": "object",
+      "properties": {
+        "handlers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LoadHandlerOption"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LoadPythonHandlerOption": {
+      "title": "LoadPythonHandlerOption",
+      "type": "object",
+      "properties": {
+        "handler_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "const": "PythonV0"
+        },
+        "module": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entry_point": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dependent_matviews": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "LoadPythonExtendedHandlerOption": {
+      "title": "LoadPythonExtendedHandlerOption",
+      "type": "object",
+      "properties": {
+        "handler_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "const": "Python"
+        },
+        "module": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entry_point": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LoadRestApiHandlerOption": {
+      "title": "LoadRestApiHandlerOption",
+      "type": "object",
+      "properties": {
+        "handler_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "const": "RestApi"
+        },
+        "connection_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "type": "integer"
+        },
+        "method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query_string": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headers": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_count": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "ExtractEmailOptions": {
+    "$ref": "#/$defs/ExtractEmailOptions"
+  },
+  "ExtractStorageOptions": {
+    "$ref": "#/$defs/ExtractStorageOptions"
+  },
+  "ExtractLoadOptions": {
+    "$ref": "#/$defs/ExtractLoadOptions"
+  }
+}

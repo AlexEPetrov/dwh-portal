@@ -1,4 +1,3 @@
-import { HomeOutlined } from '@ant-design/icons';
 import type { ApplicationLayoutProps } from '@asset-management/app-shell/layout';
 import { pluginRegistry } from '@asset-management/app-shell/plugin';
 
@@ -15,14 +14,7 @@ export const applicationLayout = {
   collapseSidebarLabel: 'Свернуть меню',
   navigation: {
     registry: pluginRegistry,
-    prependItems: [
-      {
-        path: '/',
-        label: 'Overview',
-        icon: <HomeOutlined />,
-      },
-    ],
-    defaultOpenKeys: ['/objects', '/storage'],
+    defaultOpenKeys: ['/catalog'],
     labelRefreshEvents: [MENU_LABEL_REFRESH_EVENT],
     refreshLabelsOnStorage: true,
   },

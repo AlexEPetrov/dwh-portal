@@ -1,0 +1,112 @@
+.extraction-options-form {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.extraction-options-form,
+.extraction-options-form * {
+  box-sizing: border-box;
+}
+
+.extraction-options-form .rjsf,
+.extraction-options-form form.rjsf {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.extraction-options-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.extraction-options-stack__item {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.extraction-options-field {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 16px;
+}
+
+.extraction-options-field--root {
+  margin-bottom: 0;
+}
+
+.extraction-options-field__label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.extraction-options-field__hint {
+  margin-bottom: 8px !important;
+  font-size: 12px;
+}
+
+.extraction-options-field__control {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.extraction-options-field__error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+/* If antd/RJSF still injects Row/Col, force a simple block flow. */
+.extraction-options-form .ant-row {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+.extraction-options-form .ant-col {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  flex: none !important;
+}
+
+.extraction-options-form .ant-form-item {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 0;
+}
+
+.extraction-options-form .ant-form-item-row {
+  display: block !important;
+}
+
+.extraction-options-form .ant-form-item-label,
+.extraction-options-form .ant-form-item-control {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+}
+
+.extraction-options-form .ant-input,
+.extraction-options-form .ant-input-affix-wrapper,
+.extraction-options-form textarea.ant-input {
+  width: 100%;
+  max-width: 100%;
+}
+
+.extraction-source-drawer .ant-typography {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}

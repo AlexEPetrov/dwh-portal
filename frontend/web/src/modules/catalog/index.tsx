@@ -9,6 +9,9 @@ const ObjectDetailPage = lazy(() => import('./pages/ObjectDetailPage'));
 const StoragePage = lazy(() => import('./pages/StoragePage'));
 const LineagePage = lazy(() => import('./pages/LineagePage'));
 const ChangesPage = lazy(() => import('./pages/ChangesPage'));
+const DocumentUploadPage = lazy(() => import('./pages/DocumentUploadPage'));
+const ExtractionSourcesEditPage = lazy(() => import('./pages/ExtractionSourcesEditPage'));
+const AssistantPage = lazy(() => import('./pages/AssistantPage'));
 
 const wrap = (el: ReactNode) => <RouteSuspense>{el}</RouteSuspense>;
 
@@ -20,6 +23,9 @@ const routes: ModuleRegistration['routes'] = () => [
   { path: '/lineage', element: wrap(<LineagePage />) },
   { path: '/lineage/:assetId', element: wrap(<LineagePage />) },
   { path: '/changes', element: wrap(<ChangesPage />) },
+  { path: '/documents/upload', element: wrap(<DocumentUploadPage />) },
+  { path: '/admin/extraction-sources', element: wrap(<ExtractionSourcesEditPage />) },
+  { path: '/assistant', element: wrap(<AssistantPage />) },
 ];
 
 export default {
