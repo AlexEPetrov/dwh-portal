@@ -13,6 +13,12 @@ Airflow lineage matching:
     python -m domains.catalog.collect --airflow-lineage-mode catalog
     python -m domains.catalog.collect --airflow-lineage-mode code
 
+Limit the catalog scan to a growing schema list. The list is the full
+active scope: a schema omitted from a later run is soft-deleted.
+
+    python -m domains.catalog.collect --schemas raw
+    python -m domains.catalog.collect --schemas raw,core
+
 Optional DWH connection for live collectors:
 
     APP_DWH_PSG_HOST=... APP_DWH_PSG_DB=... APP_DWH_PSG_USER=... APP_DWH_PSG_PASS=...
@@ -26,7 +32,11 @@ import sys
 from typing import Literal
 
 from domains.catalog.runtime import create_portal_store, get_portal_settings
-from domains.catalog.services.collection_service import CollectionService, CollectOptions
+from domains.catalog.services.collection_service import (
+    CollectionService,
+    CollectOptions,
+    normalize_schema_names,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -42,6 +52,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Airflow WRITES_TO matching: catalog (snapshot tables) or code (DAG AST)",
     )
+    parser.add_argument(
+        "--schemas",
+        default=None,
+        help=(
+            "Comma-separated PostgreSQL schemas. Omit to collect every user schema. "
+            "Grow the list across runs; a schema left out later is soft-deleted."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -50,14 +68,16 @@ def main(argv: list[str] | None = None) -> int:
     settings = get_portal_settings()
     store = create_portal_store(settings)
     mode: Literal["catalog", "code"] | None = args.airflow_lineage_mode
+    schemas = normalize_schema_names([args.schemas] if args.schemas else None)
     reset = args.reset or settings.reset_on_collect
     print(
         f"portal store={settings.store} seed_demo={settings.seed_demo and settings.store == 'memory'} "
-        f"reset={reset} airflow_lineage_mode={mode or 'env'}",
+        f"reset={reset} airflow_lineage_mode={mode or 'env'} "
+        f"schemas={','.join(schemas) if schemas else 'all'}",
         file=sys.stderr,
     )
     result = CollectionService(store, settings).run(
-        CollectOptions(reset=args.reset, airflow_lineage_mode=mode)
+        CollectOptions(reset=args.reset, airflow_lineage_mode=mode, schemas=schemas)
     )
     if result.reset:
         print("purged previous portal snapshots", file=sys.stderr)

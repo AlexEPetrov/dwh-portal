@@ -586,6 +586,20 @@ export const $CollectRequest = {
                 }
             ],
             title: 'Airflow Lineage Mode'
+        },
+        schemas: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Schemas'
         }
     },
     type: 'object',
@@ -601,6 +615,20 @@ export const $CollectResponse = {
         airflow_lineage_mode: {
             type: 'string',
             title: 'Airflow Lineage Mode'
+        },
+        schemas: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Schemas'
         },
         failed: {
             type: 'boolean',

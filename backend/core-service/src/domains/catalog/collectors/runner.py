@@ -19,10 +19,18 @@ def run_daily_collection(
     lineage_provider: LineageProvider | None = None,
     lineage_adapters: list[LineageAdapter] | None = None,
     settings: DwhCollectorSettings | None = None,
+    schemas: tuple[str, ...] | None = None,
 ) -> dict:
-    """Idempotent daily collection sequence used by Airflow or local runs."""
+    """Idempotent daily collection sequence used by Airflow or local runs.
+
+    ``schemas`` limits PostgreSQL catalog reads to that allow-list. The list
+    is the full active catalog scope for the run: grow it across calls.
+    Omitting a previously collected schema soft-deletes it.
+    """
     settings = settings or DwhCollectorSettings()
-    metadata_provider = metadata_provider or DirectPostgresMetadataProvider(settings)
+    metadata_provider = metadata_provider or DirectPostgresMetadataProvider(
+        settings, schemas=schemas
+    )
     catalog_run = CatalogCollector(store, metadata_provider, settings).run()
     storage_run = StorageCollector(store, metadata_provider).run()
     adapters = lineage_adapters or load_lineage_adapters(

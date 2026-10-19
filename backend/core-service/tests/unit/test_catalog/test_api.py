@@ -81,6 +81,7 @@ class _FakeCollectionService:
             reset=self.seen.reset,
             airflow_lineage_mode=mode,
             failed=False,
+            schemas=list(self.seen.schemas) if self.seen.schemas else None,
             runs={
                 "catalog": CollectRunSummary(status="SUCCESS", message="ok", details={}),
             },
@@ -116,6 +117,23 @@ def test_collect_endpoint_accepts_query_and_body_flags():
     assert json_resp.json()["airflow_lineage_mode"] == "catalog"
     assert fake.seen.reset is False
     assert fake.seen.airflow_lineage_mode == "catalog"
+
+    scoped = client.post(
+        "/api/v1/collect",
+        params=[("schemas", "raw"), ("schemas", "core")],
+    )
+    assert scoped.status_code == 200
+    assert scoped.json()["schemas"] == ["raw", "core"]
+    assert fake.seen.schemas == ("raw", "core")
+
+    replaced = client.post(
+        "/api/v1/collect",
+        params=[("schemas", "raw")],
+        json={"schemas": ["raw", "core", "mart"]},
+    )
+    assert replaced.status_code == 200
+    assert replaced.json()["schemas"] == ["raw", "core", "mart"]
+    assert fake.seen.schemas == ("raw", "core", "mart")
 
 
 def test_collect_endpoint_returns_500_when_a_collector_failed():

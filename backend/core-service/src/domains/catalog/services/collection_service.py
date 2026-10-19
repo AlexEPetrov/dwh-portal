@@ -11,12 +11,34 @@ from settings.portal import DwhCollectorSettings, PortalSettings
 AirflowLineageMode = Literal["catalog", "code"]
 
 
+def normalize_schema_names(values: list[str] | None) -> tuple[str, ...] | None:
+    """Return the schema allow-list for one collect run.
+
+    ``None`` means every user schema. Names are trimmed, comma-separated
+    entries are split, and duplicates are dropped while preserving order.
+    An empty list is the same as omitting the filter.
+    """
+    if not values:
+        return None
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        for part in str(raw).split(","):
+            name = part.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            ordered.append(name)
+    return tuple(ordered) or None
+
+
 @dataclass(frozen=True)
 class CollectOptions:
     """Operator flags for a portal collect run."""
 
     reset: bool = False
     airflow_lineage_mode: AirflowLineageMode | None = None
+    schemas: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -34,11 +56,13 @@ class CollectResult:
     airflow_lineage_mode: str
     failed: bool
     runs: dict[str, CollectRunSummary]
+    schemas: list[str] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "reset": self.reset,
             "airflow_lineage_mode": self.airflow_lineage_mode,
+            "schemas": self.schemas,
             "failed": self.failed,
             "runs": {
                 name: {
@@ -62,6 +86,7 @@ class CollectionService:
         """Execute the daily collection sequence and return a completeness summary."""
         options = options or CollectOptions()
         reset = bool(options.reset or self._portal.reset_on_collect)
+        schemas = normalize_schema_names(list(options.schemas) if options.schemas else None)
         dwh_settings = DwhCollectorSettings()
         mode = options.airflow_lineage_mode or dwh_settings.airflow_lineage_mode
         if options.airflow_lineage_mode is not None:
@@ -70,7 +95,7 @@ class CollectionService:
             )
         if reset:
             self._store.purge()
-        raw = run_daily_collection(self._store, settings=dwh_settings)
+        raw = run_daily_collection(self._store, settings=dwh_settings, schemas=schemas)
         runs = {
             name: CollectRunSummary(
                 status=_status_value(run.status),
@@ -85,6 +110,7 @@ class CollectionService:
             airflow_lineage_mode=mode,
             failed=failed,
             runs=runs,
+            schemas=list(schemas) if schemas else None,
         )
 
 

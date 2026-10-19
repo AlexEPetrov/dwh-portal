@@ -7,7 +7,11 @@ from fastapi.responses import JSONResponse
 
 from api.portal.dto import CollectRequest, CollectResponse, CollectRunItem
 from domains.catalog.runtime import get_collection_service
-from domains.catalog.services.collection_service import CollectionService, CollectOptions
+from domains.catalog.services.collection_service import (
+    CollectionService,
+    CollectOptions,
+    normalize_schema_names,
+)
 
 collect_router = APIRouter()
 
@@ -25,6 +29,16 @@ def run_portal_collect(
         None,
         description="Airflow WRITES_TO matching: catalog (snapshot tables only) or code (DAG AST)",
     ),
+    schemas: Annotated[
+        list[str] | None,
+        Query(
+            description=(
+                "PostgreSQL schemas to collect. Omit to scan every user schema. "
+                "The list is the full active scope: grow it across runs. "
+                "A schema left out of a later run is soft-deleted."
+            )
+        ),
+    ] = None,
     payload: Annotated[CollectRequest | None, Body()] = None,
 ) -> CollectResponse | JSONResponse:
     """Trigger snapshot collection. Intended for Airflow DAGs, not UI page loads."""
@@ -32,10 +46,19 @@ def run_portal_collect(
         reset = payload.reset
         if payload.airflow_lineage_mode is not None:
             airflow_lineage_mode = payload.airflow_lineage_mode
-    result = service.run(CollectOptions(reset=reset, airflow_lineage_mode=airflow_lineage_mode))
+        if payload.schemas is not None:
+            schemas = payload.schemas
+    result = service.run(
+        CollectOptions(
+            reset=reset,
+            airflow_lineage_mode=airflow_lineage_mode,
+            schemas=normalize_schema_names(schemas),
+        )
+    )
     response = CollectResponse(
         reset=result.reset,
         airflow_lineage_mode=result.airflow_lineage_mode,
+        schemas=result.schemas,
         failed=result.failed,
         runs={
             name: CollectRunItem(status=item.status, message=item.message, details=item.details)

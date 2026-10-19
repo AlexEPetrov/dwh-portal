@@ -360,6 +360,7 @@ export const getCollectionStatus = (): CancelablePromise<GetCollectionStatusResp
  * @param data The data for the request.
  * @param data.reset Purge sol_dwh_portal snapshots before collecting
  * @param data.airflowLineageMode Airflow WRITES_TO matching: catalog (snapshot tables only) or code (DAG AST)
+ * @param data.schemas PostgreSQL schemas to collect. Omit to scan every user schema. The list is the full active scope: grow it across runs. A schema left out of a later run is soft-deleted.
  * @param data.requestBody
  * @returns CollectResponse Successful Response
  * @throws ApiError
@@ -369,7 +370,8 @@ export const runPortalCollect = (data: RunPortalCollectData = {}): CancelablePro
     url: '/api/v1/collect',
     query: {
         reset: data.reset,
-        airflow_lineage_mode: data.airflowLineageMode
+        airflow_lineage_mode: data.airflowLineageMode,
+        schemas: data.schemas
     },
     body: data.requestBody,
     mediaType: 'application/json',

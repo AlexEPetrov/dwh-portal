@@ -7,7 +7,13 @@ from domains.catalog.collectors.changes import ChangeCollector
 from domains.catalog.collectors.extraction_registry import ExtractionRegistryCollector
 from domains.catalog.collectors.runner import run_daily_collection
 from domains.catalog.identity import compute_structure_hash
-from domains.catalog.models import AssetColumn, AssetQuery, AssetType, CollectorStatus
+from domains.catalog.models import (
+    AssetColumn,
+    AssetQuery,
+    AssetStatus,
+    AssetType,
+    CollectorStatus,
+)
 from domains.catalog.providers.lineage import (
     ExtractionSourceRecord,
     LoaderMetadata,
@@ -73,6 +79,61 @@ def _catalog_objects():
         CatalogObject(asset_type=AssetType.SCHEMA, database="dwh", schema="raw", name="raw"),
         _table(),
     ]
+
+
+def _schema(name: str) -> CatalogObject:
+    return CatalogObject(asset_type=AssetType.SCHEMA, database="dwh", schema=name, name=name)
+
+
+def _named_table(schema: str, name: str) -> CatalogObject:
+    table = _table(name)
+    return CatalogObject(
+        asset_type=table.asset_type,
+        database="dwh",
+        schema=schema,
+        name=name,
+        description=table.description,
+        native_id=f"{schema}.{name}",
+        columns=table.columns,
+        table_bytes=table.table_bytes,
+        index_bytes=table.index_bytes,
+        total_bytes=table.total_bytes,
+        row_estimate=table.row_estimate,
+    )
+
+
+def test_catalog_scope_follows_the_full_schema_list(store, now):
+    database = CatalogObject(asset_type=AssetType.DATABASE, database="dwh", schema=None, name="dwh")
+    raw_only = [database, _schema("raw"), _named_table("raw", "ice_brent")]
+    raw_and_core = raw_only + [_schema("core"), _named_table("core", "prices")]
+    core_only = [database, _schema("core"), _named_table("core", "prices")]
+
+    CatalogCollector(store, FakeMetadataProvider(raw_only)).run(now)
+    CatalogCollector(store, FakeMetadataProvider(raw_and_core)).run(now + datetime.timedelta(hours=1))
+    active, _ = store.list_assets(AssetQuery(status=AssetStatus.ACTIVE, page_size=100))
+    active_tables = {item.name for item in active if item.asset_type == AssetType.TABLE}
+    assert active_tables == {"ice_brent", "prices"}
+
+    CatalogCollector(store, FakeMetadataProvider(core_only)).run(now + datetime.timedelta(hours=2))
+    active, _ = store.list_assets(AssetQuery(status=AssetStatus.ACTIVE, page_size=100))
+    active_tables = {item.name for item in active if item.asset_type == AssetType.TABLE}
+    deleted, _ = store.list_assets(AssetQuery(status=AssetStatus.DELETED, page_size=100))
+    deleted_tables = {item.name for item in deleted if item.asset_type == AssetType.TABLE}
+    assert active_tables == {"prices"}
+    assert "ice_brent" in deleted_tables
+
+
+def test_catalog_failure_does_not_soft_delete_existing_scope(store, now):
+    class RaisingProvider:
+        def list_assets(self):
+            raise ValueError("schemas not found: missing")
+
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    run = CatalogCollector(store, RaisingProvider()).run(now + datetime.timedelta(hours=1))
+    assert run.status == CollectorStatus.FAILED
+    assert "schemas not found: missing" in (run.message or "")
+    active, _ = store.list_assets(AssetQuery(status=AssetStatus.ACTIVE, page_size=100))
+    assert any(item.name == "ice_brent" for item in active)
 
 
 def test_catalog_collector_is_idempotent(store, now):
@@ -372,3 +433,26 @@ def test_collect_cli_passes_airflow_lineage_mode(store, monkeypatch):
     )
     assert collect_mod.main(["--airflow-lineage-mode", "code"]) == 0
     assert captured["settings"].airflow_lineage_mode == "code"
+
+
+def test_collect_cli_passes_growing_schema_list(store, monkeypatch):
+    from domains.catalog import collect as collect_mod
+
+    captured = {}
+
+    def fake_run(portal_store, **kwargs):
+        captured["schemas"] = kwargs.get("schemas")
+        return {}
+
+    monkeypatch.setattr(
+        collect_mod,
+        "get_portal_settings",
+        lambda: PortalSettings(store="memory", seed_demo=False),
+    )
+    monkeypatch.setattr(collect_mod, "create_portal_store", lambda settings: store)
+    monkeypatch.setattr(
+        "domains.catalog.services.collection_service.run_daily_collection",
+        fake_run,
+    )
+    assert collect_mod.main(["--schemas", "raw, core"]) == 0
+    assert captured["schemas"] == ("raw", "core")

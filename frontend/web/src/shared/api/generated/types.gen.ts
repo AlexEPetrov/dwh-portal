@@ -127,11 +127,13 @@ export type ChangeType = 'ADDED' | 'REMOVED' | 'RENAMED' | 'STRUCTURE_CHANGED' |
 export type CollectRequest = {
     reset?: boolean;
     airflow_lineage_mode?: 'catalog' | 'code' | null;
+    schemas?: Array<(string)> | null;
 };
 
 export type CollectResponse = {
     reset: boolean;
     airflow_lineage_mode: string;
+    schemas?: Array<(string)> | null;
     failed: boolean;
     runs: {
         [key: string]: CollectRunItem;
@@ -458,6 +460,10 @@ export type RunPortalCollectData = {
      * Purge sol_dwh_portal snapshots before collecting
      */
     reset?: boolean;
+    /**
+     * PostgreSQL schemas to collect. Omit to scan every user schema. The list is the full active scope: grow it across runs. A schema left out of a later run is soft-deleted.
+     */
+    schemas?: Array<(string)> | null;
 };
 
 export type RunPortalCollectResponse = CollectResponse;

@@ -16,9 +16,15 @@ RELATION_KIND = {
 class DirectPostgresMetadataProvider:
     """Read-only PostgreSQL catalog provider. Does not run COUNT(*)."""
 
-    def __init__(self, settings: DwhCollectorSettings | None = None, connection: Any | None = None):
+    def __init__(
+        self,
+        settings: DwhCollectorSettings | None = None,
+        connection: Any | None = None,
+        schemas: tuple[str, ...] | None = None,
+    ):
         self._settings = settings or DwhCollectorSettings()
         self._connection = connection
+        self._schemas = schemas
 
     def list_assets(self) -> list[CatalogObject]:
         connection = self._connection or self._connect()
@@ -88,7 +94,7 @@ class DirectPostgresMetadataProvider:
                 ORDER BY n.nspname
                 """
             )
-            schemas = cursor.fetchall()
+            schemas = self._select_schemas(cursor.fetchall())
             for oid, name, description in schemas:
                 objects.append(
                     CatalogObject(
@@ -101,7 +107,7 @@ class DirectPostgresMetadataProvider:
                     )
                 )
 
-            cursor.execute(
+            relation_sql, relation_params = self._with_schema_filter(
                 """
                 SELECT
                     c.oid,
@@ -118,11 +124,13 @@ class DirectPostgresMetadataProvider:
                 WHERE c.relkind IN ('r', 'v', 'm')
                   AND n.nspname NOT LIKE 'pg_%'
                   AND n.nspname <> 'information_schema'
-                ORDER BY n.nspname, c.relname
-                """
+                """,
+                "n.nspname",
+                "ORDER BY n.nspname, c.relname",
             )
+            self._execute(cursor, relation_sql, relation_params)
             relations = cursor.fetchall()
-            cursor.execute(
+            column_sql, column_params = self._with_schema_filter(
                 """
                 SELECT
                     c.oid,
@@ -139,9 +147,11 @@ class DirectPostgresMetadataProvider:
                   AND c.relkind IN ('r', 'v', 'm')
                   AND n.nspname NOT LIKE 'pg_%'
                   AND n.nspname <> 'information_schema'
-                ORDER BY c.oid, a.attnum
-                """
+                """,
+                "n.nspname",
+                "ORDER BY c.oid, a.attnum",
             )
+            self._execute(cursor, column_sql, column_params)
             columns_by_oid: dict[str, list[dict[str, Any]]] = {}
             for oid, attnum, attname, data_type, nullable, description in cursor.fetchall():
                 columns_by_oid.setdefault(str(oid), []).append(
@@ -178,7 +188,7 @@ class DirectPostgresMetadataProvider:
     def _read_relation_dependencies(self, connection) -> list[RelationDependency]:
         database = self._settings.psg_db or "dwh"
         with connection.cursor() as cursor:
-            cursor.execute(
+            dependency_sql, dependency_params = self._with_schema_filter(
                 """
                 SELECT DISTINCT
                     dependent_ns.nspname,
@@ -199,9 +209,11 @@ class DirectPostgresMetadataProvider:
                   AND source_ns.nspname NOT LIKE 'pg_%'
                   AND source_ns.nspname <> 'information_schema'
                   AND pg_depend.deptype = 'n'
-                ORDER BY 1, 2, 3, 4
-                """
+                """,
+                "dependent_ns.nspname",
+                "ORDER BY 1, 2, 3, 4",
             )
+            self._execute(cursor, dependency_sql, dependency_params)
             rows = cursor.fetchall()
         return [
             RelationDependency(
@@ -213,3 +225,35 @@ class DirectPostgresMetadataProvider:
             )
             for dependent_schema, dependent_name, source_schema, source_name in rows
         ]
+
+    def _select_schemas(self, rows: list[tuple]) -> list[tuple]:
+        """Keep requested schemas, or every user schema when the allow-list is unset.
+
+        A requested name that is not a user schema fails the read before
+        relation-size queries run, so a typo cannot soft-delete the previous scope.
+        """
+        if not self._schemas:
+            return rows
+        found = {row[1] for row in rows}
+        missing = [name for name in self._schemas if name not in found]
+        if missing:
+            raise ValueError(f"schemas not found: {', '.join(missing)}")
+        allowed = set(self._schemas)
+        return [row for row in rows if row[1] in allowed]
+
+    def _execute(self, cursor, sql: str, params: tuple[list[str],] | None) -> None:
+        if params is None:
+            cursor.execute(sql)
+            return
+        cursor.execute(sql, params)
+
+    def _with_schema_filter(
+        self, sql: str, column: str, order_by: str
+    ) -> tuple[str, tuple[list[str],] | None]:
+        if not self._schemas:
+            return f"{sql}\n{order_by}", None
+        # psycopg2 treats every % as a placeholder once parameters are bound.
+        # LIKE 'pg_%' must be sent as 'pg_%%' or execute() raises
+        # "tuple index out of range" before the query reaches PostgreSQL.
+        escaped = sql.replace("%", "%%")
+        return f"{escaped}\n  AND {column} = ANY(%s)\n{order_by}", (list(self._schemas),)

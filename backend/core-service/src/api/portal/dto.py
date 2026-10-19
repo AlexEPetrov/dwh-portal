@@ -244,6 +244,7 @@ class CollectionStatusResponse(BaseModel):
 class CollectRequest(BaseModel):
     reset: bool = False
     airflow_lineage_mode: Literal["catalog", "code"] | None = None
+    schemas: list[str] | None = None
 
 
 class CollectRunItem(BaseModel):
@@ -255,6 +256,7 @@ class CollectRunItem(BaseModel):
 class CollectResponse(BaseModel):
     reset: bool
     airflow_lineage_mode: str
+    schemas: list[str] | None = None
     failed: bool
     runs: dict[str, CollectRunItem]
 
