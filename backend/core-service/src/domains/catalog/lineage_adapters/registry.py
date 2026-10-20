@@ -15,6 +15,9 @@ BUILTIN_ADAPTERS = {
     "extraction_registry": (
         "domains.catalog.lineage_adapters.extraction_registry:ExtractionRegistryLineageAdapter"
     ),
+    "python_modules": (
+        "domains.catalog.lineage_adapters.python_modules:PythonModulesLineageAdapter"
+    ),
     "airflow_dags": "domains.catalog.lineage_adapters.airflow_dags:AirflowDagsLineageAdapter",
 }
 
@@ -22,10 +25,10 @@ BUILTIN_ADAPTERS = {
 def default_adapter_specs(settings: DwhCollectorSettings) -> list[str]:
     """Built-in adapters when APP_DWH_LINEAGE_ADAPTERS is unset.
 
-    ``airflow_dags`` is always included; without ``APP_DWH_AIRFLOW_DAGS_ROOT``
-    the adapter records a skipped run instead of being omitted from the pipeline.
+    ``python_modules`` and ``airflow_dags`` are always included; without their
+    respective roots the adapters record a skipped run instead of being omitted.
     """
-    return ["postgres_sql", "extraction_registry", "airflow_dags"]
+    return ["postgres_sql", "extraction_registry", "python_modules", "airflow_dags"]
 
 
 def parse_adapter_specs(settings: DwhCollectorSettings) -> list[str]:

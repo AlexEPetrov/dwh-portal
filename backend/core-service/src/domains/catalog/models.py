@@ -60,6 +60,7 @@ class MetadataStatus(StrEnum):
     MISSING = "MISSING"
     INVALID = "INVALID"
     FAILED = "FAILED"
+    DEFERRED = "DEFERRED"
 
 
 class LineageStatus(StrEnum):

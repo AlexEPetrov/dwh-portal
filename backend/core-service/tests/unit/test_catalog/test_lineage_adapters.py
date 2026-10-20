@@ -3,15 +3,18 @@ import warnings
 from domains.catalog.collectors.catalog import CatalogCollector
 from domains.catalog.collectors.runner import run_daily_collection
 from domains.catalog.identity import airflow_extraction_identity, airflow_process_identity
+from domains.catalog.collectors.extraction_registry import ExtractionRegistryCollector
 from domains.catalog.lineage_adapters.airflow_dags import (
     AirflowDagsLineageAdapter,
     parse_dag_meta,
 )
 from domains.catalog.lineage_adapters.airflow_syntax import parse_module
 from domains.catalog.lineage_adapters.postgres_sql import PostgresSqlLineageAdapter
-from domains.catalog.lineage_adapters.registry import load_lineage_adapters
+from domains.catalog.lineage_adapters.python_modules import PythonModulesLineageAdapter
+from domains.catalog.lineage_adapters.registry import default_adapter_specs, load_lineage_adapters
 from domains.catalog.models import AssetType, CollectorStatus, RelationshipType
 from domains.catalog.providers.extraction_registry import ExtractionRegistryMissing
+from domains.catalog.providers.lineage import ExtractionSourceRecord
 from domains.catalog.providers.metadata import CatalogObject, RelationDependency
 from domains.catalog.services.lineage_service import LineageService
 from settings.portal import DwhCollectorSettings
@@ -349,6 +352,139 @@ def test_airflow_adapter_skips_when_root_missing(store, now):
     ).collect(now)
     assert run.status == CollectorStatus.SUCCESS
     assert run.details.get("skipped") is True
+
+
+def test_default_adapters_include_python_modules():
+    assert default_adapter_specs(DwhCollectorSettings()) == [
+        "postgres_sql",
+        "extraction_registry",
+        "python_modules",
+        "airflow_dags",
+    ]
+
+
+def test_python_modules_skips_when_root_missing(store, now):
+    run = PythonModulesLineageAdapter(
+        store, DwhCollectorSettings(python_modules_root="")
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("skipped") is True
+    assert run.details.get("reason") == "MODULES_ROOT_MISSING"
+
+
+class _NoResolveRegistry:
+    def __init__(self, records):
+        self._records = records
+
+    def list_extraction_sources(self):
+        return self._records
+
+    def resolve_process_metadata(self, handler):
+        raise AssertionError("must not resolve Python metadata")
+
+
+def _python_source_record(module: str = "loaders.ice_brent"):
+    return ExtractionSourceRecord(
+        id="src-py-1",
+        name="Brent",
+        descr=None,
+        access_level=None,
+        is_active=True,
+        extract_source_type_id=1,
+        extract_options={},
+        storage_options={"path": "landing/ice/brent"},
+        load_options={"handlers": [{"handler_type": "Python", "module": module}]},
+        load_schedule_id=None,
+        data_source_id="ice",
+        data_source_name="ICE",
+        tags=None,
+        parent_id=None,
+        comment=None,
+    )
+
+
+def test_python_modules_attaches_writes_to_registry_process(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    package = tmp_path / "loaders"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "ice_brent.py").write_text(
+        '''
+def load_data(conn):
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
+''',
+        encoding="utf-8",
+    )
+    ExtractionRegistryCollector(store, _NoResolveRegistry([_python_source_record()])).run(now)
+    process = next(item for item in store.assets.values() if item.asset_type == AssetType.PROCESS)
+    assert process.attributes["metadata_status"] == "DEFERRED"
+    process_id = process.id
+
+    run = PythonModulesLineageAdapter(
+        store,
+        DwhCollectorSettings(
+            python_modules_root=str(tmp_path),
+            python_modules_lineage_mode="catalog",
+        ),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details["writes"] == 1
+    assert run.details["resolved"] == 1
+
+    process = store.get_asset(process_id)
+    assert process.attributes["metadata_status"] == "OK"
+    assert process.attributes["lineage_status"] == "RESOLVED"
+    table = store.find_by_qualified_name("dwh.raw.ice_brent")
+    writes = [
+        edge
+        for edge in store.list_relationships(asset_id=process.id)
+        if edge.relationship_type == RelationshipType.WRITES_TO
+    ]
+    assert len(writes) == 1
+    assert writes[0].to_asset_id == table.id
+    # Must enrich the registry PROCESS, not create an Airflow-style duplicate.
+    processes = [item for item in store.assets.values() if item.asset_type == AssetType.PROCESS]
+    assert len(processes) == 1
+
+
+def test_python_modules_does_not_use_airflow_dags_root(store, now, tmp_path):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    dags = tmp_path / "dags"
+    modules = tmp_path / "modules"
+    dags.mkdir()
+    modules.mkdir()
+    package = modules / "loaders"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "ice_brent.py").write_text(
+        '''
+def load_data(conn):
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
+''',
+        encoding="utf-8",
+    )
+    (dags / "ignored.py").write_text(
+        '''
+from airflow import DAG
+dag = DAG(dag_id="ignored")
+def load_data(conn):
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
+''',
+        encoding="utf-8",
+    )
+    ExtractionRegistryCollector(store, _NoResolveRegistry([_python_source_record()])).run(now)
+    # Only Airflow root set — python_modules must skip, not scan DAGs.
+    skipped = PythonModulesLineageAdapter(
+        store, DwhCollectorSettings(airflow_dags_root=str(dags), python_modules_root="")
+    ).collect(now)
+    assert skipped.details.get("skipped") is True
+    process = next(item for item in store.assets.values() if item.asset_type == AssetType.PROCESS)
+    assert process.attributes["metadata_status"] == "DEFERRED"
+
+    run = PythonModulesLineageAdapter(
+        store, DwhCollectorSettings(python_modules_root=str(modules))
+    ).collect(now)
+    assert run.details["writes"] == 1
 
 
 def test_airflow_catalog_mode_skips_table_absent_from_snapshot(store, now, tmp_path):

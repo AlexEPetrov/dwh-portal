@@ -134,8 +134,20 @@ class ExtractionRegistryCollector:
             process = self._upsert_process(record, handler, handler_key, now)
             if storage is not None:
                 self._rel(process.id, storage.id, RelationshipType.READS_FROM)
+            handler_type = str(handler.get("handler_type") or "")
+            if handler_type in {"Python", "PythonV0"}:
+                # Write targets come from python_modules AST — never import loaders here.
+                self._defer_python_process(process)
+                continue
             metadata = self._provider.resolve_process_metadata(handler)
             self._apply_metadata(process, metadata, now, details)
+
+    def _defer_python_process(self, process: Asset) -> None:
+        attributes = dict(process.attributes)
+        attributes["metadata_status"] = MetadataStatus.DEFERRED
+        attributes["lineage_status"] = LineageStatus.UNRESOLVED
+        process.attributes = attributes
+        self._store.upsert_asset(process)
 
     def _apply_metadata(
         self,

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from domains.catalog.providers.lineage import ExtractionSourceRecord, LoaderMetadata
-from domains.catalog.providers.python_metadata import resolve_python_metadata
 from domains.catalog.providers.rest_metadata import resolve_rest_metadata
 from settings.portal import DwhCollectorSettings
 
@@ -46,15 +45,21 @@ class ExtractionRegistryProvider:
         handler_type = str(handler.get("handler_type") or "")
         name = str(handler.get("name") or handler.get("module") or handler_type or "loader")
         if handler_type in {"Python", "PythonV0"}:
-            module_name = handler.get("module")
-            if not module_name:
-                return LoaderMetadata(
-                    schema_version="1.0",
-                    name=name,
-                    metadata_status="MISSING",
-                    diagnostic={"code": "MODULE_MISSING", "message": "Python handler has no module"},
-                )
-            return resolve_python_metadata(str(module_name), name)
+            # Defense in depth: registry collector must not import loaders.
+            # Write targets are resolved by the python_modules AST adapter.
+            return LoaderMetadata(
+                schema_version="1.0",
+                name=name,
+                metadata_status="DEFERRED",
+                diagnostic={
+                    "code": "PYTHON_METADATA_DEFERRED",
+                    "message": (
+                        "Python get_metadata()/import is disabled; "
+                        "use python_modules adapter with APP_DWH_PYTHON_MODULES_ROOT"
+                    ),
+                    "module": handler.get("module"),
+                },
+            )
         if handler_type == "RestApi":
             url_path = handler.get("url_path")
             if not url_path:

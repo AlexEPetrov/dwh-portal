@@ -43,3 +43,10 @@ class DwhCollectorSettings(BaseSettings):
     # catalog: WRITES_TO only tables already in the catalog snapshot.
     # code: materialize write targets from DAG AST even if absent from the snapshot.
     airflow_lineage_mode: Literal["catalog", "code"] = "catalog"
+    # Local Python loader / package sources for registry PROCESS AST lineage.
+    # Distinct from airflow_dags_root — never share the setting in code.
+    # Required for python_modules to produce WRITES_TO (otherwise the adapter skips).
+    python_modules_root: str | None = None
+    # catalog: WRITES_TO only tables already in the catalog snapshot.
+    # code: materialize write targets from module AST even if absent from the snapshot.
+    python_modules_lineage_mode: Literal["catalog", "code"] = "catalog"

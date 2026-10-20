@@ -39,6 +39,8 @@ services:
       APP_DWH_LINEAGE_ADAPTERS: $APP_DWH_LINEAGE_ADAPTERS
       APP_DWH_AIRFLOW_DAGS_ROOT: $APP_DWH_AIRFLOW_DAGS_ROOT
       APP_DWH_AIRFLOW_LINEAGE_MODE: $APP_DWH_AIRFLOW_LINEAGE_MODE
+      APP_DWH_PYTHON_MODULES_LINEAGE_MODE: $APP_DWH_PYTHON_MODULES_LINEAGE_MODE
+      APP_DWH_PYTHON_MODULES_ROOT: $APP_DWH_PYTHON_MODULES_ROOT
 
       # Auth
       APP_AUTH_SESSION_COOKIE_NAME: $APP_AUTH_SESSION_COOKIE_NAME
@@ -70,6 +72,7 @@ services:
       - ${APP_LOC_LOGS_PATH_HOST}:/app/logs
       - ${APP_LOC_REPOSITORY_PATH_HOST}:/app/local_storage
       - ${APP_DWH_AIRFLOW_DAGS_ROOT_HOST}:${APP_DWH_AIRFLOW_DAGS_ROOT}:ro
+      - ${APP_DWH_PYTHON_MODULES_ROOT_HOST}:${APP_DWH_PYTHON_MODULES_ROOT}:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -91,7 +94,7 @@ networks:
   dwh_portal:
     name: dwh_portal
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
-          gateway: 172.28.0.1
+#    ipam:
+#      config:
+#        - subnet: 172.28.0.0/16
+#          gateway: 172.28.0.1

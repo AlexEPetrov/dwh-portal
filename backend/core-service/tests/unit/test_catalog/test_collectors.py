@@ -146,7 +146,7 @@ def test_catalog_collector_is_idempotent(store, now):
     assert tables[0].first_seen_at == now
 
 
-def test_missing_python_metadata_is_localized(store, now):
+def test_python_handler_is_deferred_without_metadata_call(store, now):
     record = ExtractionSourceRecord(
         id="src-1",
         name="Brent",
@@ -164,22 +164,20 @@ def test_missing_python_metadata_is_localized(store, now):
         parent_id=None,
         comment=None,
     )
-    metadata = LoaderMetadata(
-        schema_version="1.0",
-        name="missing.loader",
-        metadata_status="MISSING",
-        diagnostic={"code": "METADATA_MISSING", "message": "get_metadata() is not implemented"},
-    )
-    ExtractionRegistryCollector(
-        store, FakeLineageProvider([record], {"missing.loader": metadata})
-    ).run(now)
+
+    class AssertNoResolve(FakeLineageProvider):
+        def resolve_process_metadata(self, handler):
+            raise AssertionError("Python handlers must not resolve get_metadata")
+
+    ExtractionRegistryCollector(store, AssertNoResolve([record], {})).run(now)
     processes = [item for item in store.assets.values() if item.asset_type == AssetType.PROCESS]
     assert len(processes) == 1
-    assert processes[0].attributes["metadata_status"] == "MISSING"
+    assert processes[0].attributes["metadata_status"] == "DEFERRED"
     assert processes[0].attributes["lineage_status"] == "UNRESOLVED"
+    assert processes[0].attributes["module"] == "missing.loader"
     storage = next(item for item in store.assets.values() if item.asset_type == AssetType.STORAGE_LOCATION)
     assert "password" not in storage.attributes
-    assert store.list_diagnostics(processes[0].id)
+    assert not store.list_diagnostics(processes[0].id)
 
 
 def test_unresolved_target_is_kept_and_does_not_fail_run(store, now):
@@ -192,7 +190,9 @@ def test_unresolved_target_is_kept_and_does_not_fail_run(store, now):
         extract_source_type_id=1,
         extract_options={},
         storage_options={"path": "landing/ice/brent"},
-        load_options={"handlers": [{"handler_type": "Python", "module": "ok.loader"}]},
+        load_options={
+            "handlers": [{"handler_type": "RestApi", "url_path": "https://loader.internal/ok"}]
+        },
         load_schedule_id=None,
         data_source_id="ice",
         data_source_name="ICE",
@@ -206,7 +206,7 @@ def test_unresolved_target_is_kept_and_does_not_fail_run(store, now):
         writes_to=[LoaderTarget(type="table", database="dwh", schema="raw", name="missing_table")],
     )
     run = ExtractionRegistryCollector(
-        store, FakeLineageProvider([record], {"ok.loader": metadata})
+        store, FakeLineageProvider([record], {"https://loader.internal/ok": metadata})
     ).run(now)
     assert run.status == CollectorStatus.PARTIAL
     unresolved = [item for item in store.assets.values() if item.attributes.get("unresolved")]
@@ -234,7 +234,15 @@ def test_writes_to_table_and_storage_view_is_derived_from(store, now):
         extract_source_type_id=1,
         extract_options={},
         storage_options={"path": "landing/ice/brent"},
-        load_options={"handlers": [{"handler_type": "Python", "name": "brent_py", "module": "ok.loader"}]},
+        load_options={
+            "handlers": [
+                {
+                    "handler_type": "RestApi",
+                    "name": "brent_rest",
+                    "url_path": "https://loader.internal/ok",
+                }
+            ]
+        },
         load_schedule_id=None,
         data_source_id="ice",
         data_source_name="ICE",
@@ -259,7 +267,7 @@ def test_writes_to_table_and_storage_view_is_derived_from(store, now):
         ],
     )
     run = ExtractionRegistryCollector(
-        store, FakeLineageProvider([record], {"ok.loader": metadata})
+        store, FakeLineageProvider([record], {"https://loader.internal/ok": metadata})
     ).run(now)
     assert run.status == CollectorStatus.SUCCESS
     from domains.catalog.models import RelationshipType
