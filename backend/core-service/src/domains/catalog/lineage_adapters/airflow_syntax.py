@@ -112,6 +112,21 @@ class TableRef:
     source_path: str | None = None
 
 
+@dataclass
+class LoaderTableSpec:
+    """Unresolved `_TABLE_NAME` / `_DB_SCHEMA` / `_TABLES_SCHEMA` declaration."""
+
+    class_name: str | None
+    bases: tuple[str, ...]
+    table_kind: str | None
+    table_value: str | None
+    schema_kind: str | None
+    schema_value: str | None
+    aliases: dict[str, str]
+    source_path: str
+    table_keys: tuple[tuple[str, str], ...] = ()
+
+
 @dataclass(frozen=True)
 class StoragePathRef:
     path: str
@@ -125,11 +140,16 @@ class ModuleFacts:
     is_dag: bool = False
     dag_meta: DagMeta = field(default_factory=DagMeta)
     constants: dict[str, str] = field(default_factory=dict)
+    class_constants: dict[str, dict[str, str]] = field(default_factory=dict)
+    class_bases: dict[str, tuple[str, ...]] = field(default_factory=dict)
     import_modules: list[str] = field(default_factory=list)
     import_from: list[tuple[str | None, int, list[str]]] = field(default_factory=list)
     classes: dict[str, TableRef] = field(default_factory=dict)
     adapters: dict[str, TableRef] = field(default_factory=dict)
     write_tables: list[TableRef] = field(default_factory=list)
+    sql_tables: list[TableRef] = field(default_factory=list)
+    call_tables: list[TableRef] = field(default_factory=list)
+    loader_specs: list[LoaderTableSpec] = field(default_factory=list)
     write_classes: set[str] = field(default_factory=set)
     write_adapters: set[str] = field(default_factory=set)
     storage_paths: list[str] = field(default_factory=list)
@@ -190,8 +210,10 @@ def parse_module(path: Path, text: str) -> ModuleFacts | None:
         return None
     facts = ModuleFacts(path=path, source=text)
     facts.constants = _assign_constants(tree)
+    _scan_class_scopes(tree, facts)
     _scan_imports(tree, facts)
     _scan_orm_classes(tree, facts)
+    _scan_loader_tables(tree, facts)
     _scan_adapter_assigns(tree, facts)
     _scan_writes(tree, facts)
     facts.is_dag = _is_dag_module(tree)
@@ -223,6 +245,8 @@ def rescan_writes(facts: ModuleFacts) -> None:
     except SyntaxError:
         return
     facts.write_tables.clear()
+    facts.sql_tables.clear()
+    facts.call_tables.clear()
     facts.write_classes.clear()
     facts.write_adapters.clear()
     facts.storage_paths.clear()
@@ -318,66 +342,9 @@ def dag_closure(
 def write_targets_for_closure(
     closure: list[Path], facts_by_path: dict[Path, ModuleFacts]
 ) -> list[TableRef]:
-    class_tables: dict[str, TableRef] = {}
-    adapter_tables: dict[str, TableRef] = {}
-    for path in closure:
-        facts = facts_by_path.get(path)
-        if facts is None:
-            continue
-        class_tables.update(facts.classes)
-        adapter_tables.update(facts.adapters)
-    for path in closure:
-        facts = facts_by_path.get(path)
-        if facts is None:
-            continue
-        for alias, (_module, orig) in facts.imported_names.items():
-            if orig in class_tables:
-                class_tables[alias] = class_tables[orig]
-            if orig in adapter_tables:
-                adapter_tables[alias] = adapter_tables[orig]
-    found: list[TableRef] = []
-    seen: set[tuple[str | None, str]] = set()
+    from domains.catalog.lineage_adapters.table_target_pipes import first_table_targets
 
-    def add(table: TableRef | None, source_path: str | None = None) -> None:
-        if table is None or not table.name:
-            return
-        key = (table.schema, table.name.lower())
-        if key in seen:
-            return
-        seen.add(key)
-        found.append(
-            TableRef(
-                schema=table.schema,
-                name=table.name,
-                source_path=source_path or table.source_path,
-            )
-        )
-
-    for path in closure:
-        facts = facts_by_path.get(path)
-        if facts is None:
-            continue
-        origin = str(facts.path)
-        for table in facts.write_tables:
-            add(table, table.source_path or origin)
-        for class_name in facts.write_classes:
-            table = class_tables.get(class_name)
-            add(table, origin if table is None or table.source_path is None else table.source_path)
-        for adapter_name in facts.write_adapters:
-            table = adapter_tables.get(adapter_name)
-            add(table, origin if table is None or table.source_path is None else table.source_path)
-    if found:
-        return found
-    if any(
-        facts_by_path[path].has_write
-        for path in closure
-        if path in facts_by_path
-    ):
-        for table in class_tables.values():
-            add(table)
-        for table in adapter_tables.values():
-            add(table)
-    return found
+    return first_table_targets(closure, facts_by_path)
 
 
 def storage_paths_for_closure(
@@ -413,14 +380,19 @@ def _const_str(node: ast.AST | None) -> str | None:
     return None
 
 
-def _joined_str(node: ast.JoinedStr, constants: dict[str, str]) -> str | None:
+def _joined_str(
+    node: ast.JoinedStr,
+    constants: dict[str, str],
+    facts: ModuleFacts | None = None,
+    enclosing: str | None = None,
+) -> str | None:
     parts: list[str] = []
     for value in node.values:
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             parts.append(value.value)
             continue
-        if isinstance(value, ast.FormattedValue) and isinstance(value.value, ast.Name):
-            resolved = constants.get(value.value.id)
+        if isinstance(value, ast.FormattedValue):
+            resolved = _resolve_expr(value.value, constants, facts, enclosing)
             if resolved is None:
                 return None
             parts.append(resolved)
@@ -429,27 +401,102 @@ def _joined_str(node: ast.JoinedStr, constants: dict[str, str]) -> str | None:
     return "".join(parts)
 
 
-def _assign_constants(tree: ast.AST) -> dict[str, str]:
-    constants: dict[str, str] = {}
-    for node in tree.body if isinstance(tree, ast.Module) else []:
-        if not isinstance(node, ast.Assign):
-            continue
-        value = node.value
+def _partial_sql_fstring(
+    node: ast.JoinedStr,
+    constants: dict[str, str],
+    facts: ModuleFacts | None = None,
+    enclosing: str | None = None,
+) -> str | None:
+    """Substitute known strings and blank the rest for SQL table matching.
+
+    A hole is known when it is a literal, a module constant, or a class
+    attribute (``cls.TABLE``, ``self.TABLE``, ``ClassName.TABLE``) bound to a
+    string. Other holes become ``?`` and cannot be read as an identifier.
+    """
+    parts: list[str] = []
+    substituted = False
+    for value in node.values:
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    constants[target.id] = value.value
+            parts.append(value.value)
             continue
-        if isinstance(value, ast.Tuple) and all(
-            isinstance(elt, ast.Constant) and isinstance(elt.value, str) for elt in value.elts
-        ):
-            names: list[str] = []
-            for target in node.targets:
-                if isinstance(target, ast.Tuple):
-                    names = [elt.id for elt in target.elts if isinstance(elt, ast.Name)]
-            for name, elt in zip(names, value.elts, strict=False):
-                constants[name] = str(elt.value)
+        if isinstance(value, ast.FormattedValue):
+            resolved = _resolve_expr(value.value, constants, facts, enclosing)
+            if resolved is None:
+                parts.append("?")
+                continue
+            parts.append(resolved)
+            substituted = True
+            continue
+        return None
+    if not substituted:
+        return None
+    return "".join(parts)
+
+
+def _assign_constants(tree: ast.AST) -> dict[str, str]:
+    body = tree.body if isinstance(tree, ast.Module) else []
+    return _constants_from_statements(body, {})
+
+
+def _constants_from_statements(
+    statements: list[ast.stmt], known: dict[str, str]
+) -> dict[str, str]:
+    constants: dict[str, str] = {}
+    for stmt in statements:
+        if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Tuple):
+            names, values = _tuple_assign(stmt)
+            resolved_values = [_bound_string(item, known) for item in values]
+            if not names or any(item is None for item in resolved_values):
+                continue
+            for name, resolved in zip(names, resolved_values, strict=False):
+                if resolved is not None:
+                    constants[name] = resolved
+            continue
+        if isinstance(stmt, ast.Assign):
+            resolved = _bound_string(stmt.value, known)
+            if resolved is None:
+                continue
+            for target in stmt.targets:
+                if isinstance(target, ast.Name):
+                    constants[target.id] = resolved
+            continue
+        target, value = _assign_target_value(stmt)
+        if target is None or value is None:
+            continue
+        resolved = _bound_string(value, known)
+        if resolved is not None:
+            constants[target] = resolved
     return constants
+
+
+def _tuple_assign(stmt: ast.stmt) -> tuple[list[str], list[ast.AST]]:
+    if not isinstance(stmt, ast.Assign) or not isinstance(stmt.value, ast.Tuple):
+        return [], []
+    names: list[str] = []
+    for target in stmt.targets:
+        if isinstance(target, ast.Tuple):
+            names = [elt.id for elt in target.elts if isinstance(elt, ast.Name)]
+    return names, list(stmt.value.elts)
+
+
+def _bound_string(node: ast.AST, known: dict[str, str]) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        return known.get(node.id)
+    return None
+
+
+def _scan_class_scopes(tree: ast.AST, facts: ModuleFacts) -> None:
+    body = tree.body if isinstance(tree, ast.Module) else []
+    for node in body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases = tuple(name for name in (_base_name(base) for base in node.bases) if name)
+        facts.class_bases[node.name] = bases
+        constants = _constants_from_statements(node.body, facts.constants)
+        if constants:
+            facts.class_constants[node.name] = constants
 
 
 def _scan_imports(tree: ast.AST, facts: ModuleFacts) -> None:
@@ -484,6 +531,122 @@ def _scan_orm_classes(tree: ast.AST, facts: ModuleFacts) -> None:
             facts.classes[node.name] = TableRef(
                 schema=schema, name=table_name, source_path=str(facts.path)
             )
+
+
+def _scan_loader_tables(tree: ast.AST, facts: ModuleFacts) -> None:
+    body = tree.body if isinstance(tree, ast.Module) else []
+    module_spec = _loader_spec_from_statements(None, (), body, str(facts.path))
+    if module_spec is not None:
+        facts.loader_specs.append(module_spec)
+    for node in body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases = tuple(_base_name(base) for base in node.bases)
+        bases = tuple(name for name in bases if name)
+        spec = _loader_spec_from_statements(node.name, bases, node.body, str(facts.path))
+        if spec is not None:
+            facts.loader_specs.append(spec)
+
+
+def _base_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _loader_spec_from_statements(
+    class_name: str | None,
+    bases: tuple[str, ...],
+    statements: list[ast.stmt],
+    source_path: str,
+) -> LoaderTableSpec | None:
+    aliases: dict[str, str] = {}
+    table_kind: str | None = None
+    table_value: str | None = None
+    schema_kind: str | None = None
+    schema_value: str | None = None
+    table_keys: list[tuple[str, str]] = []
+    saw = False
+    for stmt in statements:
+        target, value = _assign_target_value(stmt)
+        if target is None or value is None:
+            continue
+        if target == "_TABLES_SCHEMA" and isinstance(value, ast.Dict):
+            saw = True
+            table_keys = _dict_table_keys(value)
+            continue
+        if target not in {"_TABLE_NAME", "_DB_SCHEMA"} and isinstance(value, ast.Name):
+            aliases[target] = value.id
+            continue
+        kind, raw = _classify_loader_value(value)
+        if target == "_TABLE_NAME":
+            saw = True
+            table_kind, table_value = kind, raw
+        elif target == "_DB_SCHEMA":
+            saw = True
+            schema_kind, schema_value = kind, raw
+    if not saw:
+        return None
+    return LoaderTableSpec(
+        class_name=class_name,
+        bases=bases,
+        table_kind=table_kind,
+        table_value=table_value,
+        schema_kind=schema_kind,
+        schema_value=schema_value,
+        aliases=aliases,
+        source_path=source_path,
+        table_keys=tuple(table_keys),
+    )
+
+
+def _assign_target_value(stmt: ast.stmt) -> tuple[str | None, ast.AST | None]:
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+        return stmt.targets[0].id, stmt.value
+    if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value is not None:
+        return stmt.target.id, stmt.value
+    return None, None
+
+
+def _dict_table_keys(node: ast.Dict) -> list[tuple[str, str]]:
+    keys: list[tuple[str, str]] = []
+    for key in node.keys:
+        if key is None:
+            continue
+        kind, raw = _classify_loader_value(key)
+        if kind in {"str", "name"} and raw:
+            keys.append((kind, raw))
+    return keys
+
+
+def _classify_loader_value(value: ast.AST) -> tuple[str, str | None]:
+    if isinstance(value, ast.Constant):
+        if isinstance(value.value, str):
+            return "str", value.value
+        if value.value is None:
+            return "none", None
+        return "unknown", None
+    if isinstance(value, ast.Name):
+        return "name", value.id
+    if (
+        isinstance(value, ast.Attribute)
+        and value.attr == "__tablename__"
+        and isinstance(value.value, ast.Name)
+    ):
+        return "tablename", value.value.id
+    if isinstance(value, ast.Subscript) and isinstance(value.value, ast.Attribute):
+        owner = value.value
+        key = value.slice
+        if (
+            owner.attr == "__table_args__"
+            and isinstance(owner.value, ast.Name)
+            and isinstance(key, ast.Constant)
+            and key.value == "schema"
+        ):
+            return "table_args", owner.value.id
+    return "unknown", None
 
 
 def _schema_from_table_args(node: ast.AST, constants: dict[str, str]) -> str | None:
@@ -523,6 +686,7 @@ def _scan_adapter_assigns(tree: ast.AST, facts: ModuleFacts) -> None:
 def _scan_writes(tree: ast.AST, facts: ModuleFacts) -> None:
     constructors: set[str] = set()
     known = set(facts.classes) | set(facts.imported_names)
+    parents = _parent_map(tree)
     for node in _walk_code(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -531,7 +695,7 @@ def _scan_writes(tree: ast.AST, facts: ModuleFacts) -> None:
         owner = _attr_owner(node.func)
         if func_name in WRITE_FUNCS or attr_name in WRITE_ATTRS:
             facts.has_write = True
-            _tables_from_call(node, func_name, facts)
+            _tables_from_call(node, func_name, facts, _enclosing_class(node, parents))
         if attr_name == "insert" and owner in INSERT_OWNERS:
             facts.has_write = True
         if attr_name in {"merge", "add", "add_all"} and _is_session_owner(owner):
@@ -549,7 +713,7 @@ def _scan_writes(tree: ast.AST, facts: ModuleFacts) -> None:
                 facts.write_adapters.add(owner)
         if isinstance(node.func, ast.Name) and node.func.id in known:
             constructors.add(node.func.id)
-    _scan_sql_literals(tree, facts)
+    _scan_sql_literals(tree, facts, parents)
     if facts.has_write:
         facts.write_classes.update(constructors)
 
@@ -561,13 +725,22 @@ def _is_session_owner(name: str | None) -> bool:
     return lowered in SESSION_OWNERS or "session" in lowered
 
 
-def _scan_sql_literals(tree: ast.AST, facts: ModuleFacts) -> None:
+def _scan_sql_literals(
+    tree: ast.AST, facts: ModuleFacts, parents: dict[int, ast.AST] | None = None
+) -> None:
+    parent_of = parents if parents is not None else _parent_map(tree)
     for node in _walk_code(tree):
         text: str | None = None
+        enclosing = _enclosing_class(node, parent_of)
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             text = node.value
         elif isinstance(node, ast.JoinedStr):
-            text = _joined_str(node, facts.constants)
+            text = _joined_str(node, facts.constants, facts, enclosing)
+            if text is None:
+                partial = _partial_sql_fstring(node, facts.constants, facts, enclosing)
+                if partial:
+                    _sql_from_text(partial, facts)
+                continue
         if not text:
             continue
         _sql_from_text(text, facts)
@@ -575,28 +748,37 @@ def _scan_sql_literals(tree: ast.AST, facts: ModuleFacts) -> None:
             facts.storage_paths.append(text.strip())
 
 
-def _tables_from_call(node: ast.Call, func_name: str | None, facts: ModuleFacts) -> None:
+def _tables_from_call(
+    node: ast.Call,
+    func_name: str | None,
+    facts: ModuleFacts,
+    enclosing: str | None = None,
+) -> None:
     schema: str | None = None
     table: str | None = None
+
+    def resolve(value: ast.AST) -> str | None:
+        return _resolve_str(value, facts.constants, facts, enclosing)
+
     for keyword in node.keywords:
         role = SCHEMA_TABLE_KW.get(keyword.arg or "")
         if role == "schema":
-            schema = _resolve_str(keyword.value, facts.constants)
+            schema = resolve(keyword.value)
         elif role == "table":
-            table = _resolve_str(keyword.value, facts.constants)
+            table = resolve(keyword.value)
     positions = POSITIONAL_SCHEMA_TABLE.get(func_name or "")
     if positions:
         name_i, schema_i = positions[0], positions[1]
         if table is None and name_i is not None and name_i < len(node.args):
-            table = _resolve_str(node.args[name_i], facts.constants)
+            table = resolve(node.args[name_i])
         if schema is None and schema_i is not None and schema_i < len(node.args):
-            schema = _resolve_str(node.args[schema_i], facts.constants)
+            schema = resolve(node.args[schema_i])
         if func_name == "to_sql" and table is None and node.args:
-            table = _resolve_str(node.args[0], facts.constants)
+            table = resolve(node.args[0])
     if table:
-        facts.write_tables.append(
-            TableRef(schema=schema, name=table, source_path=str(facts.path))
-        )
+        ref = TableRef(schema=schema, name=table, source_path=str(facts.path))
+        facts.call_tables.append(ref)
+        facts.write_tables.append(ref)
 
 
 def _sql_from_text(text: str | None, facts: ModuleFacts) -> None:
@@ -606,9 +788,9 @@ def _sql_from_text(text: str | None, facts: ModuleFacts) -> None:
         facts.has_write = True
     for match in _SQL_INTO.finditer(text):
         facts.has_write = True
-        facts.write_tables.append(
-            TableRef(schema=match.group(1), name=match.group(2), source_path=str(facts.path))
-        )
+        ref = TableRef(schema=match.group(1), name=match.group(2), source_path=str(facts.path))
+        facts.sql_tables.append(ref)
+        facts.write_tables.append(ref)
 
 
 _HTTP_URL = re.compile(r"(?i)^https?://")
@@ -759,7 +941,12 @@ def _attr_owner(func: ast.AST) -> str | None:
     return None
 
 
-def _resolve_str(node: ast.AST | None, constants: dict[str, str]) -> str | None:
+def _resolve_str(
+    node: ast.AST | None,
+    constants: dict[str, str],
+    facts: ModuleFacts | None = None,
+    enclosing: str | None = None,
+) -> str | None:
     if node is None:
         return None
     direct = _const_str(node)
@@ -767,8 +954,68 @@ def _resolve_str(node: ast.AST | None, constants: dict[str, str]) -> str | None:
         return direct
     if isinstance(node, ast.Name):
         return constants.get(node.id)
+    if isinstance(node, ast.Attribute):
+        return _resolve_class_attr(node, facts, enclosing)
     if isinstance(node, ast.JoinedStr):
-        return _joined_str(node, constants)
+        return _joined_str(node, constants, facts, enclosing)
+    return None
+
+
+def _resolve_expr(
+    node: ast.AST,
+    constants: dict[str, str],
+    facts: ModuleFacts | None,
+    enclosing: str | None,
+) -> str | None:
+    return _resolve_str(node, constants, facts, enclosing)
+
+
+def _resolve_class_attr(
+    node: ast.Attribute, facts: ModuleFacts | None, enclosing: str | None
+) -> str | None:
+    if facts is None or not isinstance(node.value, ast.Name):
+        return None
+    owner = node.value.id
+    if owner in {"cls", "self"}:
+        class_name = enclosing
+    elif owner in facts.class_constants or owner in facts.class_bases:
+        class_name = owner
+    else:
+        return None
+    if class_name is None:
+        return None
+    return _lookup_class_attr(facts, class_name, node.attr)
+
+
+def _lookup_class_attr(facts: ModuleFacts, class_name: str, attr: str) -> str | None:
+    seen: set[str] = set()
+    queue = [class_name]
+    while queue:
+        current = queue.pop(0)
+        if not current or current in seen:
+            continue
+        seen.add(current)
+        value = facts.class_constants.get(current, {}).get(attr)
+        if value is not None:
+            return value
+        queue.extend(facts.class_bases.get(current, ()))
+    return None
+
+
+def _parent_map(tree: ast.AST) -> dict[int, ast.AST]:
+    parents: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[id(child)] = node
+    return parents
+
+
+def _enclosing_class(node: ast.AST, parents: dict[int, ast.AST]) -> str | None:
+    current = parents.get(id(node))
+    while current is not None:
+        if isinstance(current, ast.ClassDef):
+            return current.name
+        current = parents.get(id(current))
     return None
 
 

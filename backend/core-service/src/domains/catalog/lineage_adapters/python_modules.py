@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,8 @@ from domains.catalog.models import (
 from domains.catalog.repositories.ports import PortalStore
 from settings.portal import DwhCollectorSettings
 
+logger = logging.getLogger(__name__)
+
 PROVIDER = "python_modules"
 REGISTRY_PROVIDER = "extraction_registry"
 WRITE_TYPES = {AssetType.TABLE, AssetType.MATERIALIZED_VIEW}
@@ -64,6 +67,7 @@ class PythonModulesLineageAdapter:
         started = now or datetime.datetime.now(datetime.timezone.utc)
         root_raw = (self._settings.python_modules_root or "").strip()
         if not root_raw:
+            logger.info("python_modules: корень модулей не задан, поиск не выполняется")
             return skipped_run(
                 self._store,
                 name=self.name,
@@ -73,6 +77,7 @@ class PythonModulesLineageAdapter:
             )
         root = Path(root_raw)
         if not root.is_dir():
+            logger.info("python_modules: папка не найдена: %s", root)
             return skipped_run(
                 self._store,
                 name=self.name,
@@ -94,6 +99,12 @@ class PythonModulesLineageAdapter:
             catalog_tables = self._catalog_write_targets()
             processes = self._registry_python_processes()
             details["processes"] = len(processes)
+            logger.info(
+                "python_modules: ищем модули в %s, процессов %s, mode=%s",
+                root,
+                len(processes),
+                mode,
+            )
             facts_cache: dict[Path, Any] = {}
             for process in processes:
                 self._ingest_process(
@@ -163,6 +174,7 @@ class PythonModulesLineageAdapter:
         module_name = str(process.attributes.get("module") or "").strip()
         entry = resolve_local_module(module_name, root / "_portal_entry_.py", root)
         if entry is None:
+            _log_module_lookup(module_name, root, None, [], [])
             details["diagnostics"] += 1
             self._diagnostic(
                 process.id,
@@ -184,6 +196,7 @@ class PythonModulesLineageAdapter:
         matched = self._match_tables(refs, catalog_tables, now, mode, root)
         path_refs = storage_paths_for_closure(closure_paths, facts_cache) if mode == "code" else []
 
+        _log_module_lookup(module_name, root, entry, refs, matched)
         if not matched and not path_refs:
             details["diagnostics"] += 1
             self._diagnostic(
@@ -411,6 +424,56 @@ class PythonModulesLineageAdapter:
                 details=payload,
             )
         )
+
+
+def _module_candidate(module_name: str, root: Path) -> Path:
+    parts = [part for part in module_name.split(".") if part]
+    if not parts:
+        return root
+    return root.joinpath(*parts).with_suffix(".py")
+
+
+def _ref_label(ref: TableRef) -> str:
+    if ref.schema:
+        return f"{ref.schema}.{ref.name}"
+    return ref.name
+
+
+def _asset_label(asset: Asset) -> str:
+    schema = str(asset.attributes.get("schema") or "")
+    if schema:
+        return f"{schema}.{asset.name}"
+    return asset.name
+
+
+def _log_module_lookup(
+    module_name: str,
+    root: Path,
+    entry: Path | None,
+    refs: list[TableRef],
+    matched: list[Asset],
+) -> None:
+    candidate = _module_candidate(module_name, root)
+    if entry is None:
+        logger.info(
+            "python_modules: модуль %s ищем в %s — не найден",
+            module_name,
+            candidate,
+        )
+        return
+    targets = ", ".join(_ref_label(ref) for ref in refs) or "нет"
+    catalog = [
+        _asset_label(item) for item in matched if not item.attributes.get("unresolved")
+    ]
+    catalog_text = ", ".join(catalog) or "нет"
+    logger.info(
+        "python_modules: модуль %s ищем в %s — найден %s, schema/table: %s, в каталоге: %s",
+        module_name,
+        candidate,
+        entry,
+        targets,
+        catalog_text,
+    )
 
 
 def _lineage_mode(settings: DwhCollectorSettings) -> str:

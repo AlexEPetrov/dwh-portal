@@ -67,7 +67,9 @@
                 "APP_API_HOST": "localhost",
                 "APP_DWH_LINEAGE_ADAPTERS": "postgres_sql,extraction_registry,python_modules,airflow_dags",
                 "APP_DWH_AIRFLOW_DAGS_ROOT": "/app2/dags_code",
-                "APP_DWH_AIRFLOW_LINEAGE_MODE": "catalog"
+                "APP_DWH_AIRFLOW_LINEAGE_MODE": "catalog",
+                "APP_DWH_PYTHON_MODULES_ROOT": "/app2/dags_code",
+                "APP_DWH_PYTHON_MODULES_LINEAGE_MODE": "catalog"
             }
         },
         {
@@ -133,7 +135,9 @@
                 "APP_API_HOST": "localhost",
                 "APP_DWH_LINEAGE_ADAPTERS": "postgres_sql,extraction_registry,python_modules,airflow_dags",
                 "APP_DWH_AIRFLOW_DAGS_ROOT": "/app2/dags_code",
-                "APP_DWH_AIRFLOW_LINEAGE_MODE": "catalog"
+                "APP_DWH_AIRFLOW_LINEAGE_MODE": "catalog",
+                "APP_DWH_PYTHON_MODULES_ROOT": "/app2/dags_code",
+                "APP_DWH_PYTHON_MODULES_LINEAGE_MODE": "catalog"
             }
         },
         {

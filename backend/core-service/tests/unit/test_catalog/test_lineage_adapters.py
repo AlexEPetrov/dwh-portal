@@ -1,3 +1,4 @@
+import logging
 import warnings
 
 from domains.catalog.collectors.catalog import CatalogCollector
@@ -8,7 +9,7 @@ from domains.catalog.lineage_adapters.airflow_dags import (
     AirflowDagsLineageAdapter,
     parse_dag_meta,
 )
-from domains.catalog.lineage_adapters.airflow_syntax import parse_module
+from domains.catalog.lineage_adapters.airflow_syntax import parse_module, write_targets_for_closure
 from domains.catalog.lineage_adapters.postgres_sql import PostgresSqlLineageAdapter
 from domains.catalog.lineage_adapters.python_modules import PythonModulesLineageAdapter
 from domains.catalog.lineage_adapters.registry import default_adapter_specs, load_lineage_adapters
@@ -383,9 +384,9 @@ class _NoResolveRegistry:
         raise AssertionError("must not resolve Python metadata")
 
 
-def _python_source_record(module: str = "loaders.ice_brent"):
+def _python_source_record(module: str = "loaders.ice_brent", source_id: str = "src-py-1"):
     return ExtractionSourceRecord(
-        id="src-py-1",
+        id=source_id,
         name="Brent",
         descr=None,
         access_level=None,
@@ -401,6 +402,40 @@ def _python_source_record(module: str = "loaders.ice_brent"):
         parent_id=None,
         comment=None,
     )
+
+
+def test_python_modules_logs_module_lookup(store, now, tmp_path, caplog):
+    CatalogCollector(store, FakeMetadataProvider(_catalog_objects())).run(now)
+    package = tmp_path / "loaders"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "ice_brent.py").write_text(
+        '''
+def load_data(conn):
+    year_dates.to_sql(schema="raw", name="ice_brent", con=conn, if_exists="append")
+''',
+        encoding="utf-8",
+    )
+    ExtractionRegistryCollector(
+        store,
+        _NoResolveRegistry(
+            [
+                _python_source_record(),
+                _python_source_record("loaders.missing_one", "src-py-2"),
+            ]
+        ),
+    ).run(now)
+    with caplog.at_level(logging.INFO):
+        PythonModulesLineageAdapter(
+            store, DwhCollectorSettings(python_modules_root=str(tmp_path))
+        ).collect(now)
+    text = caplog.text
+    assert f"ищем модули в {tmp_path}" in text
+    assert "модуль loaders.ice_brent" in text
+    assert "schema/table: raw.ice_brent" in text
+    assert "в каталоге: raw.ice_brent" in text
+    assert "модуль loaders.missing_one" in text
+    assert f"ищем в {tmp_path / 'loaders' / 'missing_one.py'} — не найден" in text
 
 
 def test_python_modules_attaches_writes_to_registry_process(store, now, tmp_path):
@@ -543,6 +578,216 @@ def load_data():
     assert table.attributes["target_ref"]["name"] == "gassco_flows"
     assert process.attributes.get("source_files") == ["load_gassco.py"]
     assert table.attributes.get("source_files") == ["load_gassco.py"]
+
+
+def test_airflow_code_mode_reads_insert_fstring_with_unresolved_columns(store, now, tmp_path):
+    (tmp_path / "load_rgmc.py").write_text(
+        '''
+from airflow import DAG
+
+SCHEMA, TABLE = "src_rgmc", "an_p_15"
+TABLE_FIELDS = ["latitude", "longitude"]
+
+dag = DAG(dag_id="load_rgmc", description="RGMC")
+
+def load_file():
+    fields = ", ".join(TABLE_FIELDS)
+    fields_subst = ", ".join([f":{field}" for field in TABLE_FIELDS])
+    sql = text(f"INSERT INTO {SCHEMA}.{TABLE} ({fields}) VALUES ({fields_subst})")
+    return sql
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("writes", 0) == 1
+    process = store.find_by_identity("airflow_dags", airflow_process_identity("load_rgmc")[1])
+    assert process is not None
+    writes = store.list_relationships(asset_id=process.id, types={RelationshipType.WRITES_TO})
+    table = store.get_asset(writes[0].to_asset_id)
+    assert table is not None
+    assert table.attributes["target_ref"]["schema"] == "src_rgmc"
+    assert table.attributes["target_ref"]["name"] == "an_p_15"
+
+
+def _targets(path, source: str):
+    facts = parse_module(path, source)
+    assert facts is not None
+    return write_targets_for_closure([path], {path: facts})
+
+
+def test_loader_attribute_pipe_reads_string_table_on_subclass(tmp_path):
+    path = tmp_path / "epias.py"
+    source = '''
+class EpiasBaseLoader:
+    _TABLE_NAME = None
+    _DB_SCHEMA = None
+
+    @classmethod
+    def load_file(cls, df):
+        cls.save_to_db(df, table_name=cls._TABLE_NAME, schema=cls._DB_SCHEMA)
+
+    @classmethod
+    def save_to_db(cls, df, table_name=None, schema=None):
+        df.to_sql(table_name, con=get_engine(), schema=schema, if_exists="append", index=False)
+
+class EpiasGdrpLoader(EpiasBaseLoader):
+    _DB_SCHEMA = "src_epias"
+    _TABLE_NAME = "gas_daily_reference_prices"
+
+class EpiasTdaaLoader(EpiasBaseLoader):
+    _DB_SCHEMA = "src_epias"
+    _TABLE_NAME = "gas_transmission_daily_actualization_amount"
+'''
+    refs = _targets(path, source)
+    assert [(item.schema, item.name) for item in refs] == [
+        ("src_epias", "gas_daily_reference_prices"),
+        ("src_epias", "gas_transmission_daily_actualization_amount"),
+    ]
+
+
+def test_loader_attribute_pipe_inherits_schema_and_follows_orm_name(tmp_path):
+    path = tmp_path / "loader.py"
+    source = '''
+INBOX_SCHEMA = "src_inbox"
+
+class InboxModel:
+    __tablename__ = "bids"
+    __table_args__ = {"schema": "src_orm"}
+
+class BaseLoader:
+    _DB_SCHEMA = INBOX_SCHEMA
+
+    def save(self, df, table_name=None, schema=None):
+        df.to_sql(table_name, schema=schema)
+
+class ConstLoader(BaseLoader):
+    _TABLE_NAME = "acts"
+
+class OrmLoader(BaseLoader):
+    _MODEL = InboxModel
+    _TABLE_NAME = _MODEL.__tablename__
+    _DB_SCHEMA = InboxModel.__table_args__["schema"]
+'''
+    refs = _targets(path, source)
+    assert [(item.schema, item.name) for item in refs] == [
+        ("src_inbox", "acts"),
+        ("src_orm", "bids"),
+    ]
+
+
+def test_class_attribute_in_write_slot_resolves_to_table(tmp_path):
+    path = tmp_path / "mrg.py"
+    source = '''
+class OtherLoader:
+    SCHEMA, TABLE = "src_other", "other_table"
+
+    def load(self, df):
+        df.to_sql(name=self.TABLE, schema=self.SCHEMA, if_exists="append", index=False)
+
+class MrgDemandsForecastLoader:
+    SCHEMA, TABLE = "src_d314", "mrg_demands_forecast"
+    CHUNK_SIZE = 1000
+
+    def load(self, df):
+        df.to_sql(
+            name=cls.TABLE, con=get_engine(), schema=cls.SCHEMA,
+            if_exists="append", index=False, method="multi", chunksize=cls.CHUNK_SIZE,
+        )
+'''
+    refs = _targets(path, source)
+    assert [(item.schema, item.name) for item in refs] == [
+        ("src_other", "other_table"),
+        ("src_d314", "mrg_demands_forecast"),
+    ]
+
+
+def test_sql_fstring_resolves_class_attributes(tmp_path):
+    path = tmp_path / "mrg.py"
+    source = '''
+class MrgDemandsForecastLoader:
+    SCHEMA, TABLE = "src_d314", "mrg_demands_forecast"
+
+    def load(self, fields, values):
+        sql = f"INSERT INTO {cls.SCHEMA}.{cls.TABLE} ({fields}) VALUES ({values})"
+        conn.execute(text(sql))
+'''
+    refs = _targets(path, source)
+    assert [(item.schema, item.name) for item in refs] == [
+        ("src_d314", "mrg_demands_forecast"),
+    ]
+
+
+def test_tables_schema_pipe_reads_dict_keys(tmp_path):
+    path = tmp_path / "export_scenarios.py"
+    source = '''
+EXPORT_SCENARIOS_SCHEMA = "sol_export_scnr"
+EXPORT_SCENARIOS_INFO = "export_scenarios_info"
+EXPORT_SCENARIOS_INFO_UNQ = "sol_export_scnr_export_scenarios_info_unq"
+EXPORT_SCENARIOS = "export_scenarios"
+EXPORT_SCENARIOS_UNQ = "sol_export_scnr_export_scenarios_unq"
+
+class ExportScenariosLoader(BaseExcelTemplateFileModel):
+    _DB_SCHEMA = EXPORT_SCENARIOS_SCHEMA
+    _TABLES_SCHEMA = {
+        EXPORT_SCENARIOS_INFO: {"data": None, "unique_key": EXPORT_SCENARIOS_INFO_UNQ},
+        EXPORT_SCENARIOS: {"data": None, "unique_key": EXPORT_SCENARIOS_UNQ},
+    }
+
+    @classmethod
+    def save_db_schema(cls, schema):
+        for table_name, table in schema.items():
+            sql = f"""INSERT INTO {cls._DB_SCHEMA}.{table_name} ({fields})
+                      VALUES ({values}) ON CONFLICT ON CONSTRAINT {unique_constraint}
+                      DO UPDATE SET ({fields}) = ({update_fields})"""
+            conn.execute(text(sql), row)
+'''
+    refs = _targets(path, source)
+    assert [(item.schema, item.name) for item in refs] == [
+        ("sol_export_scnr", "export_scenarios_info"),
+        ("sol_export_scnr", "export_scenarios"),
+    ]
+
+
+def test_sql_pipe_wins_over_loader_attributes(tmp_path):
+    path = tmp_path / "loader.py"
+    source = '''
+SCHEMA, TABLE = "src_rgmc", "an_p_15"
+
+class Loader:
+    _DB_SCHEMA = "src_other"
+    _TABLE_NAME = "other"
+
+    def load(self):
+        sql = f"INSERT INTO {SCHEMA}.{TABLE} ({fields}) VALUES ({vals})"
+'''
+    refs = _targets(path, source)
+    assert [(item.schema, item.name) for item in refs] == [("src_rgmc", "an_p_15")]
+
+
+def test_airflow_code_mode_skips_insert_fstring_without_constant_table(store, now, tmp_path):
+    (tmp_path / "load_rgmc.py").write_text(
+        '''
+from airflow import DAG
+
+dag = DAG(dag_id="load_rgmc", description="RGMC")
+
+def load_file(schema, table, fields):
+    sql = text(f"INSERT INTO {schema}.{table} ({fields}) VALUES (:x)")
+    return sql
+''',
+        encoding="utf-8",
+    )
+    run = AirflowDagsLineageAdapter(
+        store,
+        DwhCollectorSettings(airflow_dags_root=str(tmp_path), airflow_lineage_mode="code"),
+    ).collect(now)
+    assert run.status == CollectorStatus.SUCCESS
+    assert run.details.get("writes", 0) == 0
+    assert store.find_by_identity("airflow_dags", airflow_process_identity("load_rgmc")[1]) is None
 
 
 def test_airflow_code_mode_storage_records_imported_source_file(store, now, tmp_path):
