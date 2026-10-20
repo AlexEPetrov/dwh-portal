@@ -6,15 +6,21 @@ import { TYPE_ACCENT, TYPE_COLOR, TYPE_WASH } from './lineageFlow';
 type Props = {
   assetType: string;
   title: string;
+  /** Where the object was parsed from: Airflow DAG path or registry module. */
+  hint?: string | null;
   unresolved?: boolean;
   /** PROCESS as transition actor — same dashed treatment in list and graph. */
   actor?: boolean;
-  /** Currently focused lineage root. */
+  /** Lineage root from the page route. Shows the «текущий» badge. */
   selected?: boolean;
+  /** Clicked asset whose dependencies are shown beside it. */
+  focused?: boolean;
   interactive?: boolean;
-  /** Open object card (body click / export icon). */
+  /** Open object card (export icon). */
   onOpenObject?: MouseEventHandler<HTMLElement>;
-  /** Stay on Lineage and select this asset as the graph root. */
+  /** Click on the chip body: focus this asset in place. */
+  onActivate?: MouseEventHandler<HTMLElement>;
+  /** Same as body click; kept for the aim icon. */
   onSelectInLineage?: MouseEventHandler<HTMLElement>;
   className?: string;
   style?: CSSProperties;
@@ -24,11 +30,14 @@ type Props = {
 const LineageAssetChip = ({
   assetType,
   title,
+  hint = null,
   unresolved = false,
   actor = false,
   selected = false,
+  focused = false,
   interactive = false,
   onOpenObject,
+  onActivate,
   onSelectInLineage,
   className = '',
   style,
@@ -43,6 +52,7 @@ const LineageAssetChip = ({
     unresolved ? 'is-unresolved' : '',
     interactive ? 'is-interactive' : '',
     selected ? 'is-selected' : '',
+    focused ? 'is-focused' : '',
     className,
   ]
     .filter(Boolean)
@@ -52,20 +62,28 @@ const LineageAssetChip = ({
     event.stopPropagation();
   };
 
+  const onBody = onActivate ?? onSelectInLineage ?? onOpenObject;
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive || !onOpenObject) {
+    if (!interactive || !onBody) {
       return;
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      onOpenObject(event as unknown as Parameters<MouseEventHandler<HTMLElement>>[0]);
+      onBody(event as unknown as Parameters<MouseEventHandler<HTMLElement>>[0]);
     }
   };
 
   return (
     <div
       className={classes}
-      onClick={interactive ? onOpenObject : undefined}
+      onClick={
+        interactive && onBody
+          ? (event) => {
+              onBody(event);
+            }
+          : undefined
+      }
       style={
         {
           '--lineage-accent': accent,
@@ -79,11 +97,11 @@ const LineageAssetChip = ({
     >
       <div className="lineage-asset-chip__actions">
         {onSelectInLineage && !unresolved ? (
-          <Tooltip title="Выбрать в Lineage">
+          <Tooltip title="Показать зависимости рядом">
             <button
               type="button"
               className="lineage-asset-chip__action"
-              aria-label="Выбрать в Lineage"
+              aria-label="Показать зависимости рядом"
               onClick={(event) => {
                 stop(event);
                 onSelectInLineage(event);
@@ -109,22 +127,35 @@ const LineageAssetChip = ({
           </Tooltip>
         ) : null}
       </div>
-      {selected ? <span className="lineage-asset-chip__current">текущий</span> : null}
-      <Tag
-        className="lineage-asset-chip__tag"
-        color={unresolved ? 'red' : TYPE_COLOR[assetType]}
+      <Tooltip
+        title={hint ? `${title} — ${hint}` : title}
+        placement="topLeft"
+        mouseEnterDelay={0.2}
       >
-        {actor ? 'PROCESS · actor' : assetType}
-      </Tag>
-      <Typography.Text className="lineage-asset-chip__title" ellipsis>
-        {title}
-      </Typography.Text>
-      {unresolved ? (
-        <Typography.Text type="danger" style={{ fontSize: 12 }}>
-          unresolved
-        </Typography.Text>
-      ) : null}
-      {children}
+        <div className="lineage-asset-chip__main">
+          {selected ? <span className="lineage-asset-chip__current">текущий</span> : null}
+          <Tag
+            className="lineage-asset-chip__tag"
+            color={unresolved ? 'red' : TYPE_COLOR[assetType]}
+          >
+            {actor ? 'PROCESS · actor' : assetType}
+          </Tag>
+          <Typography.Text className="lineage-asset-chip__title" ellipsis>
+            {title}
+          </Typography.Text>
+          {hint ? (
+            <Typography.Text type="secondary" className="lineage-asset-chip__hint" ellipsis>
+              {hint}
+            </Typography.Text>
+          ) : null}
+          {unresolved ? (
+            <Typography.Text type="danger" style={{ fontSize: 12 }}>
+              unresolved
+            </Typography.Text>
+          ) : null}
+          {children}
+        </div>
+      </Tooltip>
     </div>
   );
 };

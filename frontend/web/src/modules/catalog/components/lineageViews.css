@@ -71,7 +71,8 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.lineage-asset-chip.is-selected {
+.lineage-asset-chip.is-selected,
+.lineage-asset-chip.is-focused {
   border-width: 2px;
   border-color: #1677ff;
   background: linear-gradient(180deg, #e6f4ff 0%, #f0f7ff 100%);
@@ -80,11 +81,13 @@
     0 4px 12px rgba(22, 119, 255, 0.18);
 }
 
-.lineage-asset-chip.is-selected.is-process {
+.lineage-asset-chip.is-selected.is-process,
+.lineage-asset-chip.is-focused.is-process {
   border-style: solid;
 }
 
-.lineage-asset-chip.is-selected .lineage-asset-chip__title {
+.lineage-asset-chip.is-selected .lineage-asset-chip__title,
+.lineage-asset-chip.is-focused .lineage-asset-chip__title {
   color: #0958d9;
 }
 
@@ -115,7 +118,8 @@
 }
 
 .lineage-asset-chip:hover .lineage-asset-chip__actions,
-.lineage-asset-chip.is-selected .lineage-asset-chip__actions {
+.lineage-asset-chip.is-selected .lineage-asset-chip__actions,
+.lineage-asset-chip.is-focused .lineage-asset-chip__actions {
   opacity: 1;
 }
 
@@ -140,11 +144,26 @@
   border-color: #1677ff;
 }
 
+.lineage-asset-chip__main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
 .lineage-asset-chip__title {
   display: block;
   max-width: 230px;
   padding-right: 44px;
   font-weight: 600;
+  line-height: 1.3;
+}
+
+.lineage-asset-chip__hint {
+  display: block;
+  max-width: 230px;
+  padding-right: 44px;
+  font-size: 11px;
   line-height: 1.3;
 }
 
@@ -168,6 +187,20 @@
   box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.25), 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
+.lineage-list-scroll.is-fill {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  height: 100%;
+}
+
+.lineage-list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
 .lineage-list-hop {
   display: flex;
   flex-wrap: nowrap;
@@ -176,4 +209,18 @@
   overflow-x: auto;
   padding-bottom: 4px;
   width: 100%;
+}
+
+.lineage-list-hop.is-dimmed {
+  opacity: 0.38;
+}
+
+.lineage-list-focus {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.06);
+  outline: 1px solid rgba(22, 119, 255, 0.28);
 }

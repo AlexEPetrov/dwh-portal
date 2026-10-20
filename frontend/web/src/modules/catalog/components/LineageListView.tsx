@@ -1,16 +1,26 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
-import { Empty, Space, Tag, Typography } from 'antd';
-import { useMemo } from 'react';
+import { Empty, Space, Tag, Tooltip, Typography } from 'antd';
+import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LineageAssetChip from './LineageAssetChip';
-import { STAGE_ORDER, TYPE_COLOR, buildFlowRows, flowLabelFor } from './lineageFlow';
+import {
+  STAGE_ORDER,
+  TYPE_COLOR,
+  buildFlowRows,
+  flowLabelFor,
+  focusFlowRows,
+  originCaption,
+  type FlowRow,
+} from './lineageFlow';
 import './lineageViews.css';
 
 type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
   selectedAssetId?: string;
-  onSelectInLineage?: (assetId: string) => void;
+  focusId?: string | null;
+  focusAnchorKey?: string | null;
+  onFocusNode?: (assetId: string, anchorKey?: string) => void;
   rootsOverview?: boolean;
 };
 
@@ -18,50 +28,207 @@ const NodeCard = ({
   node,
   actor = false,
   selected = false,
-  onSelectInLineage,
+  focused = false,
+  onFocusNode,
 }: {
   node: LineageNode;
   actor?: boolean;
   selected?: boolean;
-  onSelectInLineage?: (assetId: string) => void;
+  focused?: boolean;
+  onFocusNode?: (assetId: string) => void;
 }) => {
   const navigate = useNavigate();
   const interactive = !node.unresolved;
+  const activate = interactive && onFocusNode ? () => onFocusNode(node.id) : undefined;
   return (
     <LineageAssetChip
       assetType={node.asset_type}
       title={node.display_name}
+      hint={originCaption(node.qualified_name)}
       unresolved={node.unresolved}
       actor={actor}
       selected={selected}
+      focused={focused}
       interactive={interactive}
       onOpenObject={interactive ? () => navigate(`/objects/${node.id}`) : undefined}
-      onSelectInLineage={
-        interactive && onSelectInLineage ? () => onSelectInLineage(node.id) : undefined
-      }
+      onActivate={activate}
+      onSelectInLineage={activate}
     />
   );
 };
 
-const Arrow = ({ label }: { label: string }) => (
-  <Typography.Text type="secondary" style={{ whiteSpace: 'nowrap', flex: '0 0 auto' }}>
-    — {label} →
-  </Typography.Text>
+const Hop = ({
+  row,
+  dimmed,
+  anchor = false,
+  selectedAssetId,
+  focusId,
+  onFocusNode,
+}: {
+  row: FlowRow;
+  dimmed: boolean;
+  anchor?: boolean;
+  selectedAssetId?: string;
+  focusId?: string | null;
+  onFocusNode?: (assetId: string, anchorKey?: string) => void;
+}) => (
+  <div
+    className={dimmed ? 'lineage-list-hop is-dimmed' : 'lineage-list-hop'}
+    data-lineage-anchor={anchor ? 'true' : undefined}
+  >
+    <NodeCard
+      node={row.left}
+      selected={row.left.id === selectedAssetId}
+      focused={row.left.id === focusId}
+      onFocusNode={onFocusNode ? (assetId) => onFocusNode(assetId, row.key) : undefined}
+    />
+    {row.actor ? (
+      <>
+        <Arrow label={row.inLabel ?? flowLabelFor('READS_FROM')} />
+        <NodeCard
+          node={row.actor}
+          actor
+          selected={row.actor.id === selectedAssetId}
+          focused={row.actor.id === focusId}
+          onFocusNode={onFocusNode ? (assetId) => onFocusNode(assetId, row.key) : undefined}
+        />
+        <Arrow label={row.flowLabel} />
+      </>
+    ) : (
+      <Arrow label={row.flowLabel} />
+    )}
+    <NodeCard
+      node={row.right}
+      selected={row.right.id === selectedAssetId}
+      focused={row.right.id === focusId}
+      onFocusNode={onFocusNode ? (assetId) => onFocusNode(assetId, row.key) : undefined}
+    />
+  </div>
 );
+
+const ListRows = ({
+  rows,
+  clusterRef,
+  anchorKey,
+  dependencyKeys,
+  selectedAssetId,
+  focusId,
+  onFocusNode,
+}: {
+  rows: FlowRow[];
+  clusterRef: { current: HTMLDivElement | null };
+  anchorKey: string | null;
+  dependencyKeys: Set<string>;
+  selectedAssetId?: string;
+  focusId?: string | null;
+  onFocusNode?: (assetId: string, anchorKey?: string) => void;
+}) => {
+  const anchorIndex = anchorKey ? rows.findIndex((row) => row.key === anchorKey) : -1;
+  let clusterStart = anchorIndex;
+  let clusterEnd = anchorIndex;
+  if (anchorIndex >= 0) {
+    while (clusterStart > 0 && dependencyKeys.has(rows[clusterStart - 1].key)) {
+      clusterStart -= 1;
+    }
+    while (clusterEnd + 1 < rows.length && dependencyKeys.has(rows[clusterEnd + 1].key)) {
+      clusterEnd += 1;
+    }
+  }
+  const hopProps = { selectedAssetId, focusId, onFocusNode };
+  const renderHop = (row: FlowRow, dimmed: boolean) => (
+    <Hop
+      key={row.key}
+      row={row}
+      dimmed={dimmed}
+      anchor={row.key === anchorKey}
+      {...hopProps}
+    />
+  );
+
+  if (anchorIndex < 0) {
+    return <div className="lineage-list-rows">{rows.map((row) => renderHop(row, false))}</div>;
+  }
+
+  const before = rows.slice(0, clusterStart);
+  const cluster = rows.slice(clusterStart, clusterEnd + 1);
+  const after = rows.slice(clusterEnd + 1);
+  return (
+    <div className="lineage-list-rows">
+      {before.map((row) => renderHop(row, !dependencyKeys.has(row.key)))}
+      <div className="lineage-list-focus" ref={clusterRef}>
+        {cluster.map((row) => renderHop(row, false))}
+      </div>
+      {after.map((row) => renderHop(row, !dependencyKeys.has(row.key)))}
+    </div>
+  );
+};
+
+const Arrow = ({ label }: { label: string }) => (
+  <Tooltip title={label}>
+    <Typography.Text
+      type="secondary"
+      ellipsis
+      style={{ maxWidth: 280, flex: '0 1 auto', whiteSpace: 'nowrap' }}
+    >
+      — {label} →
+    </Typography.Text>
+  </Tooltip>
+);
+
+const revealCluster = (cluster: HTMLElement) => {
+  const anchor = cluster.querySelector<HTMLElement>('[data-lineage-anchor="true"]') ?? cluster;
+  const scroller = cluster.closest('.lineage-list-scroll');
+  if (!(scroller instanceof HTMLElement)) {
+    anchor.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+  const view = scroller.getBoundingClientRect();
+  const box = cluster.getBoundingClientRect();
+  const anchorBox = anchor.getBoundingClientRect();
+  let delta = 0;
+  const overflowTop = view.top + 8 - box.top;
+  if (overflowTop > 1) {
+    const roomBelowAnchor = anchorBox.bottom - (view.top + 32);
+    delta -= Math.min(overflowTop, Math.max(0, roomBelowAnchor));
+  }
+  const overflowBottom = box.bottom - (view.bottom - 8);
+  if (overflowBottom > 1) {
+    const roomAboveAnchor = anchorBox.top - (view.top + 8) - delta;
+    delta += Math.min(overflowBottom, Math.max(0, roomAboveAnchor));
+  }
+  if (Math.abs(delta) > 1) {
+    scroller.scrollBy({ top: delta, behavior: 'smooth' });
+  }
+};
 
 const LineageListView = ({
   nodes,
   edges,
   selectedAssetId,
-  onSelectInLineage,
+  focusId = null,
+  focusAnchorKey = null,
+  onFocusNode,
   rootsOverview = false,
 }: Props) => {
+  const clusterRef = useRef<HTMLDivElement>(null);
   const stages = useMemo(() => {
     const present = new Set(nodes.map((node) => node.asset_type));
     return STAGE_ORDER.filter((type) => present.has(type));
   }, [nodes]);
 
-  const rows = useMemo(() => buildFlowRows(nodes, edges), [nodes, edges]);
+  const baseRows = useMemo(() => buildFlowRows(nodes, edges), [nodes, edges]);
+  const focused = useMemo(
+    () => focusFlowRows(baseRows, focusId, focusAnchorKey),
+    [baseRows, focusId, focusAnchorKey]
+  );
+  const rows = focused.rows;
+
+  useEffect(() => {
+    if (!focusId || !clusterRef.current) {
+      return;
+    }
+    revealCluster(clusterRef.current);
+  }, [focusId, focused.anchorKey, rows]);
 
   if (!nodes.length) {
     return (
@@ -77,7 +244,7 @@ const LineageListView = ({
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           Корневые объекты: DATA_SOURCE и EXTRACTION_SOURCE без родительского источника. Нажмите
-          прицел, чтобы открыть цепочку.
+          объект, чтобы открыть цепочку. Стрелка — карточка объекта.
         </Typography.Paragraph>
         {stages.map((type) => (
           <Space key={type} direction="vertical" size={8} style={{ width: '100%' }}>
@@ -90,7 +257,8 @@ const LineageListView = ({
                     key={node.id}
                     node={node}
                     selected={node.id === selectedAssetId}
-                    onSelectInLineage={onSelectInLineage}
+                    focused={node.id === focusId}
+                    onFocusNode={onFocusNode}
                   />
                 ))}
             </Space>
@@ -117,37 +285,19 @@ const LineageListView = ({
         ))}
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        Иконка прицела на чипе — выбрать объект в Lineage (остаётесь здесь). Стрелка наружу — карточка
-        объекта. VIEW может порождаться несколькими TABLE.
+        Клик по объекту показывает его зависимости рядом и не сдвигает сам объект. Наведение
+        показывает полное имя. Стрелка наружу — карточка объекта. Повторный клик возвращает общий
+        список. VIEW может порождаться несколькими TABLE.
       </Typography.Paragraph>
-      {rows.map((row) => (
-        <div key={row.key} className="lineage-list-hop">
-          <NodeCard
-            node={row.left}
-            selected={row.left.id === selectedAssetId}
-            onSelectInLineage={onSelectInLineage}
-          />
-          {row.actor ? (
-            <>
-              <Arrow label={row.inLabel ?? flowLabelFor('READS_FROM')} />
-              <NodeCard
-                node={row.actor}
-                actor
-                selected={row.actor.id === selectedAssetId}
-                onSelectInLineage={onSelectInLineage}
-              />
-              <Arrow label={row.flowLabel} />
-            </>
-          ) : (
-            <Arrow label={row.flowLabel} />
-          )}
-          <NodeCard
-            node={row.right}
-            selected={row.right.id === selectedAssetId}
-            onSelectInLineage={onSelectInLineage}
-          />
-        </div>
-      ))}
+      <ListRows
+        rows={rows}
+        clusterRef={clusterRef}
+        anchorKey={focused.anchorKey}
+        dependencyKeys={focused.dependencyKeys}
+        selectedAssetId={selectedAssetId}
+        focusId={focusId}
+        onFocusNode={onFocusNode}
+      />
     </Space>
   );
 };

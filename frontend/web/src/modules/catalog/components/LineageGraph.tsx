@@ -73,13 +73,35 @@ const LineageGraph = ({
     );
   };
 
-  const onSelectInLineage = useCallback(
-    (assetId: string) => {
-      const view = activeKey;
-      navigate(`/lineage/${assetId}?view=${view}`);
+  const [focus, setFocus] = useState<{ id: string; anchorKey?: string } | null>(null);
+
+  useEffect(() => {
+    setFocus(null);
+  }, [nodes, edges]);
+
+  const onFocusNode = useCallback(
+    (assetId: string, anchorKey?: string) => {
+      if (rootsOverview) {
+        navigate(`/lineage/${assetId}?view=${activeKey}`);
+        return;
+      }
+      setFocus((current) => {
+        const sameNode = current?.id === assetId;
+        if (sameNode && (anchorKey === undefined || current.anchorKey === anchorKey)) {
+          return null;
+        }
+        return {
+          id: assetId,
+          anchorKey: anchorKey ?? (sameNode ? current?.anchorKey : undefined),
+        };
+      });
     },
-    [activeKey, navigate]
+    [activeKey, navigate, rootsOverview]
   );
+
+  const onClearFocus = useCallback(() => {
+    setFocus(null);
+  }, []);
 
   return (
     <Tabs
@@ -102,12 +124,16 @@ const LineageGraph = ({
           key: 'list',
           label: 'Список',
           children: (
-            <div style={fillHeight ? { flex: 1, minHeight: 0, overflow: 'auto' } : undefined}>
+            <div
+              className={fillHeight ? 'lineage-list-scroll is-fill' : 'lineage-list-scroll'}
+            >
               <LineageListView
                 nodes={nodes}
                 edges={edges}
                 selectedAssetId={selectedAssetId}
-                onSelectInLineage={onSelectInLineage}
+                focusId={focus?.id ?? null}
+                focusAnchorKey={focus?.anchorKey}
+                onFocusNode={onFocusNode}
                 rootsOverview={rootsOverview}
               />
             </div>
@@ -128,7 +154,9 @@ const LineageGraph = ({
                 nodes={nodes}
                 edges={edges}
                 selectedAssetId={selectedAssetId}
-                onSelectInLineage={onSelectInLineage}
+                focusId={focus?.id ?? null}
+                onFocusNode={onFocusNode}
+                onClearFocus={onClearFocus}
                 rootsOverview={rootsOverview}
               />
             </div>

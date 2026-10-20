@@ -68,10 +68,35 @@ export const flowEndpoints = (
   return { left: from, right: to };
 };
 
+/** Where an asset was parsed from, using the qualified name already on the lineage node. */
+export const originCaption = (qualifiedName?: string): string | null => {
+  if (!qualifiedName) {
+    return null;
+  }
+  if (qualifiedName.startsWith('process:airflow:')) {
+    const path = qualifiedName.slice('process:airflow:'.length);
+    return path ? `Airflow DAG · ${path}` : 'Airflow DAG';
+  }
+  if (qualifiedName.startsWith('extraction:airflow:')) {
+    const id = qualifiedName.slice('extraction:airflow:'.length);
+    return id ? `Airflow DAG · ${id}` : 'Airflow DAG';
+  }
+  if (qualifiedName.startsWith('process:')) {
+    const handler = qualifiedName.split(':').pop();
+    return handler ? `модуль реестра · ${handler}` : 'модуль реестра';
+  }
+  if (qualifiedName.startsWith('extraction:')) {
+    return 'реестр извлечения';
+  }
+  return null;
+};
+
 export const flowLabelFor = (
   relationshipType: string,
   leftType?: string,
-  rightType?: string
+  rightType?: string,
+  leftQualifiedName?: string,
+  rightQualifiedName?: string
 ): string => {
   if (
     relationshipType === 'EXTRACTS_TO' &&
@@ -79,6 +104,13 @@ export const flowLabelFor = (
     rightType === 'EXTRACTION_SOURCE'
   ) {
     return 'предоставляет';
+  }
+  if (
+    relationshipType === 'EXTRACTS_TO' &&
+    leftType === 'EXTRACTION_SOURCE' &&
+    rightType === 'PROCESS'
+  ) {
+    return originCaption(rightQualifiedName) ?? originCaption(leftQualifiedName) ?? 'процесс';
   }
   switch (relationshipType) {
     case 'DERIVED_FROM':
@@ -134,15 +166,33 @@ export const buildFlowRows = (nodes: LineageNode[], edges: LineageEdge[]): FlowR
             left,
             actor: process,
             right: target,
-            inLabel: flowLabelFor('READS_FROM', left.asset_type, process.asset_type),
-            flowLabel: flowLabelFor('WRITES_TO', process.asset_type, target.asset_type),
+            inLabel: flowLabelFor(
+              'READS_FROM',
+              left.asset_type,
+              process.asset_type,
+              left.qualified_name,
+              process.qualified_name
+            ),
+            flowLabel: flowLabelFor(
+              'WRITES_TO',
+              process.asset_type,
+              target.asset_type,
+              process.qualified_name,
+              target.qualified_name
+            ),
           });
         } else {
           rows.push({
             key: `${process.id}::${target.id}:${write.id}`,
             left: process,
             right: target,
-            flowLabel: flowLabelFor('WRITES_TO', process.asset_type, target.asset_type),
+            flowLabel: flowLabelFor(
+              'WRITES_TO',
+              process.asset_type,
+              target.asset_type,
+              process.qualified_name,
+              target.qualified_name
+            ),
           });
         }
       }
@@ -182,7 +232,13 @@ export const buildFlowRows = (nodes: LineageNode[], edges: LineageEdge[]): FlowR
       key: edge.id,
       left: ends.left,
       right: ends.right,
-      flowLabel: flowLabelFor(edge.relationship_type, ends.left.asset_type, ends.right.asset_type),
+      flowLabel: flowLabelFor(
+        edge.relationship_type,
+        ends.left.asset_type,
+        ends.right.asset_type,
+        ends.left.qualified_name,
+        ends.right.qualified_name
+      ),
     });
   }
 
@@ -222,9 +278,277 @@ export const buildFlowEdges = (
       id: edge.id,
       source: ends.left.id,
       target: ends.right.id,
-      label: flowLabelFor(edge.relationship_type, ends.left.asset_type, ends.right.asset_type),
+      label: flowLabelFor(
+        edge.relationship_type,
+        ends.left.asset_type,
+        ends.right.asset_type,
+        ends.left.qualified_name,
+        ends.right.qualified_name
+      ),
       relationshipType: edge.relationship_type,
     });
   }
   return result;
+};
+
+export const LINEAGE_NODE_WIDTH = 250;
+export const LINEAGE_NODE_HEIGHT = 96;
+
+const COLUMN_GAP = 88;
+const ROW_GAP = 32;
+
+export type LineagePoint = { x: number; y: number };
+
+export type FlowLink = { from: string; to: string };
+
+const pushLink = (map: Map<string, string[]>, key: string, value: string) => {
+  const list = map.get(key);
+  if (list) {
+    list.push(value);
+    return;
+  }
+  map.set(key, [value]);
+};
+
+/**
+ * Upstream and downstream closure of one asset.
+ * Walks only away from the asset, so sibling branches through a shared parent stay out.
+ */
+export const dependencyIds = (focusId: string, links: FlowLink[]): Set<string> => {
+  const downstream = new Map<string, string[]>();
+  const upstream = new Map<string, string[]>();
+  for (const link of links) {
+    pushLink(downstream, link.from, link.to);
+    pushLink(upstream, link.to, link.from);
+  }
+  const result = new Set<string>([focusId]);
+  const walk = (next: Map<string, string[]>) => {
+    const stack = [focusId];
+    const seen = new Set<string>([focusId]);
+    while (stack.length) {
+      const id = stack.pop();
+      if (!id) {
+        continue;
+      }
+      for (const neighbour of next.get(id) ?? []) {
+        if (seen.has(neighbour)) {
+          continue;
+        }
+        seen.add(neighbour);
+        result.add(neighbour);
+        stack.push(neighbour);
+      }
+    }
+  };
+  walk(downstream);
+  walk(upstream);
+  return result;
+};
+
+export const linksFromRows = (rows: FlowRow[]): FlowLink[] => {
+  const links: FlowLink[] = [];
+  for (const row of rows) {
+    if (row.actor) {
+      links.push({ from: row.left.id, to: row.actor.id });
+      links.push({ from: row.actor.id, to: row.right.id });
+    } else {
+      links.push({ from: row.left.id, to: row.right.id });
+    }
+  }
+  return links;
+};
+
+const rowParticipantIds = (row: FlowRow): string[] => {
+  const ids = [row.left.id, row.right.id];
+  if (row.actor) {
+    ids.push(row.actor.id);
+  }
+  return ids;
+};
+
+export const rowInClosure = (row: FlowRow, closure: Set<string>): boolean =>
+  rowParticipantIds(row).every((id) => closure.has(id));
+
+/**
+ * Keep the clicked row at the same index.
+ * Upstream dependency rows sit immediately above it, downstream rows immediately below.
+ */
+export const focusFlowRows = (
+  rows: FlowRow[],
+  focusId: string | null,
+  anchorKey?: string | null
+): { rows: FlowRow[]; anchorKey: string | null; dependencyKeys: Set<string> } => {
+  if (!focusId) {
+    return { rows, anchorKey: null, dependencyKeys: new Set() };
+  }
+  const closure = dependencyIds(focusId, linksFromRows(rows));
+  const dependencyKeys = new Set(rows.filter((row) => rowInClosure(row, closure)).map((row) => row.key));
+  let anchorIndex = anchorKey ? rows.findIndex((row) => row.key === anchorKey) : -1;
+  if (anchorIndex < 0) {
+    anchorIndex = rows.findIndex((row) => dependencyKeys.has(row.key));
+  }
+  if (anchorIndex < 0) {
+    return { rows, anchorKey: null, dependencyKeys };
+  }
+  const anchor = rows[anchorIndex];
+  const upstream: FlowRow[] = [];
+  const downstream: FlowRow[] = [];
+  const next: FlowRow[] = [];
+  rows.forEach((row, index) => {
+    if (index === anchorIndex) {
+      next.push(row);
+      return;
+    }
+    if (dependencyKeys.has(row.key) && index < anchorIndex) {
+      upstream.push(row);
+      return;
+    }
+    if (dependencyKeys.has(row.key) && index > anchorIndex) {
+      downstream.push(row);
+      return;
+    }
+    next.push(row);
+  });
+  const insertAt = next.findIndex((row) => row.key === anchor.key);
+  next.splice(insertAt, 0, ...upstream);
+  const anchorAt = insertAt + upstream.length;
+  next.splice(anchorAt + 1, 0, ...downstream);
+  return { rows: next, anchorKey: anchor.key, dependencyKeys };
+};
+
+const stageColumn = (assetType: string): number => {
+  const index = STAGE_ORDER.indexOf(assetType);
+  return index < 0 ? STAGE_ORDER.length : index;
+};
+
+const baseColumnPositions = (
+  nodes: Array<{ id: string; asset_type: string; display_name: string }>
+): Map<string, LineagePoint> => {
+  const columns = new Map<number, Array<{ id: string; asset_type: string; display_name: string }>>();
+  for (const node of nodes) {
+    const column = stageColumn(node.asset_type);
+    const list = columns.get(column);
+    if (list) {
+      list.push(node);
+    } else {
+      columns.set(column, [node]);
+    }
+  }
+  const positions = new Map<string, LineagePoint>();
+  const columnsInOrder = [...columns.keys()].sort((a, b) => a - b);
+  columnsInOrder.forEach((column, visualIndex) => {
+    const list = columns.get(column) ?? [];
+    list.sort(
+      (a, b) => a.display_name.localeCompare(b.display_name) || a.id.localeCompare(b.id)
+    );
+    list.forEach((node, row) => {
+      positions.set(node.id, {
+        x: visualIndex * (LINEAGE_NODE_WIDTH + COLUMN_GAP),
+        y: row * (LINEAGE_NODE_HEIGHT + ROW_GAP),
+      });
+    });
+  });
+  return positions;
+};
+
+/**
+ * Stable columns by asset type and name. The focused asset keeps its coordinates;
+ * its own upstream and downstream nodes pack beside it. Other nodes in those
+ * columns shift only enough to avoid covering that pack.
+ */
+export const layoutLineageMap = (
+  nodes: Array<{ id: string; asset_type: string; display_name: string }>,
+  links: FlowLink[],
+  focusId: string | null
+): { positions: Map<string, LineagePoint>; neighborhood: Set<string> } => {
+  const base = baseColumnPositions(nodes);
+  if (!focusId || !base.has(focusId)) {
+    return { positions: base, neighborhood: new Set() };
+  }
+  const neighborhood = dependencyIds(focusId, links);
+  const anchor = base.get(focusId);
+  if (!anchor) {
+    return { positions: base, neighborhood };
+  }
+  const byColumn = new Map<number, string[]>();
+  for (const node of nodes) {
+    const point = base.get(node.id);
+    if (!point) {
+      continue;
+    }
+    const list = byColumn.get(point.x);
+    if (list) {
+      list.push(node.id);
+    } else {
+      byColumn.set(point.x, [node.id]);
+    }
+  }
+  const positions = new Map(base);
+  for (const [x, ids] of byColumn) {
+    const inFocus = ids.filter((id) => neighborhood.has(id));
+    if (!inFocus.length) {
+      continue;
+    }
+    inFocus.sort((a, b) => {
+      if (a === focusId) {
+        return -1;
+      }
+      if (b === focusId) {
+        return 1;
+      }
+      return (base.get(a)?.y ?? 0) - (base.get(b)?.y ?? 0);
+    });
+    let cursor = anchor.y;
+    let stackTop = anchor.y;
+    let lastBottom = anchor.y;
+    for (const id of inFocus) {
+      if (id === focusId) {
+        positions.set(id, { x, y: anchor.y });
+        cursor = anchor.y + LINEAGE_NODE_HEIGHT + ROW_GAP;
+        stackTop = anchor.y;
+        lastBottom = anchor.y + LINEAGE_NODE_HEIGHT;
+        continue;
+      }
+      positions.set(id, { x, y: cursor });
+      stackTop = Math.min(stackTop, cursor);
+      lastBottom = cursor + LINEAGE_NODE_HEIGHT;
+      cursor += LINEAGE_NODE_HEIGHT + ROW_GAP;
+    }
+    const outFocus = ids
+      .filter((id) => !neighborhood.has(id))
+      .sort((a, b) => (base.get(a)?.y ?? 0) - (base.get(b)?.y ?? 0));
+    const occupied: number[] = [];
+    const displaced: string[] = [];
+    for (const id of outFocus) {
+      const baseY = base.get(id)?.y ?? 0;
+      const overlapsStack = baseY < lastBottom && baseY + LINEAGE_NODE_HEIGHT > stackTop;
+      if (!overlapsStack) {
+        positions.set(id, { x, y: baseY });
+        occupied.push(baseY);
+        continue;
+      }
+      displaced.push(id);
+    }
+    let below = lastBottom + ROW_GAP;
+    for (const id of displaced) {
+      const hitsKept = (y: number) =>
+        occupied.some(
+          (keptY) => y < keptY + LINEAGE_NODE_HEIGHT + ROW_GAP && y + LINEAGE_NODE_HEIGHT + ROW_GAP > keptY
+        );
+      while (hitsKept(below)) {
+        const blocker = occupied
+          .filter(
+            (keptY) =>
+              below < keptY + LINEAGE_NODE_HEIGHT + ROW_GAP &&
+              below + LINEAGE_NODE_HEIGHT + ROW_GAP > keptY
+          )
+          .sort((a, b) => a - b)[0];
+        below = blocker + LINEAGE_NODE_HEIGHT + ROW_GAP;
+      }
+      positions.set(id, { x, y: below });
+      occupied.push(below);
+      below += LINEAGE_NODE_HEIGHT + ROW_GAP;
+    }
+  }
+  return { positions, neighborhood };
 };
