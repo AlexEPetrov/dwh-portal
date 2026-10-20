@@ -31,6 +31,7 @@ import json
 import sys
 from typing import Literal
 
+from domains.catalog.db_targets import format_database_targets
 from domains.catalog.runtime import create_portal_store, get_portal_settings
 from domains.catalog.services.collection_service import (
     CollectionService,
@@ -70,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     mode: Literal["catalog", "code"] | None = args.airflow_lineage_mode
     schemas = normalize_schema_names([args.schemas] if args.schemas else None)
     reset = args.reset or settings.reset_on_collect
+    print(format_database_targets(), file=sys.stderr)
     print(
         f"portal store={settings.store} seed_demo={settings.seed_demo and settings.store == 'memory'} "
         f"reset={reset} airflow_lineage_mode={mode or 'env'} "

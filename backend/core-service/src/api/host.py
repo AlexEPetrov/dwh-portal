@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, status
@@ -14,6 +15,8 @@ from api.management import management_router
 from api.portal import portal_router
 from api.requests.status import requests_router
 from api.system import system_router
+from domains.catalog.db_targets import log_database_targets
+from infrastructure.db.migration_check import ensure_portal_migrations_current
 from shared.nullables import require
 
 tags_metadata = [
@@ -23,7 +26,15 @@ tags_metadata = [
     },
 ]
 
-app: FastAPI = FastAPI(openapi_tags=tags_metadata)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    log_database_targets()
+    ensure_portal_migrations_current()
+    yield
+
+
+app: FastAPI = FastAPI(openapi_tags=tags_metadata, lifespan=lifespan)
 
 
 app.mount("/static", StaticFiles(directory="src/api/static"), name="static")

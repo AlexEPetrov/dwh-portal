@@ -6,6 +6,7 @@ from typing import Any, Literal
 from domains.catalog.collectors.runner import run_daily_collection
 from domains.catalog.models import CollectorStatus
 from domains.catalog.repositories.ports import PortalStore
+from domains.catalog.db_targets import log_database_targets
 from settings.portal import DwhCollectorSettings, PortalSettings
 
 AirflowLineageMode = Literal["catalog", "code"]
@@ -93,6 +94,7 @@ class CollectionService:
             dwh_settings = dwh_settings.model_copy(
                 update={"airflow_lineage_mode": options.airflow_lineage_mode}
             )
+        log_database_targets(dwh_settings=dwh_settings)
         if reset:
             self._store.purge()
         raw = run_daily_collection(self._store, settings=dwh_settings, schemas=schemas)

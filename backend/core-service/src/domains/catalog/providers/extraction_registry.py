@@ -95,7 +95,11 @@ class ExtractionRegistryProvider:
         ds_columns = self._table_columns(connection, "sys", "data_source_items")
         if ds_columns:
             ds_join = "LEFT JOIN sys.data_source_items d ON d.id = s.data_source_id"
-            ds_name_expr = "COALESCE(d.name_eng, d.name_rus, d.slug)"
+            # Live DWH may expose bilingual names (name_eng/name_rus) or a
+            # single name column; take the first present in priority order.
+            ds_name_expr = self._coalesce_existing(
+                ds_columns, "name", "slug", table_alias="d"
+            )
         else:
             ds_join = ""
             ds_name_expr = "NULL"
@@ -165,3 +169,14 @@ class ExtractionRegistryProvider:
             if name in columns:
                 return f"{table_alias}.{name}"
         return "NULL"
+
+    @staticmethod
+    def _coalesce_existing(
+        columns: set[str], *names: str, table_alias: str = "s"
+    ) -> str:
+        parts = [f"{table_alias}.{name}" for name in names if name in columns]
+        if not parts:
+            return "NULL"
+        if len(parts) == 1:
+            return parts[0]
+        return f"COALESCE({', '.join(parts)})"
