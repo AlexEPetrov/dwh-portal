@@ -12,13 +12,17 @@ import { useEffect, useRef, useState } from 'react';
 import { STAGE_ORDER, TYPE_ACCENT, buildFlowEdges } from './lineageFlow';
 import './lineageUniverse.css';
 
+export type UniverseOrigin = { x: number; y: number; z: number };
+
 type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
   selectedAssetId?: string;
   /** Roots catalogue: open a source chain. Asset chain: open object card. */
   mode: 'roots' | 'chain';
-  onSelect?: (assetId: string) => void;
+  /** World point of the clicked ring node — animates chain unfold from here. */
+  enterOrigin?: UniverseOrigin | null;
+  onSelect?: (assetId: string, origin?: UniverseOrigin) => void;
 };
 
 type DragTool = 'orbit' | 'pan';
@@ -38,6 +42,15 @@ type Body = {
   unresolved?: boolean;
   hubId: string | null;
   shell: number;
+  /** VIEW/TABLE fed by 2+ DATA_SOURCE hubs. */
+  bridgeHubIds?: string[];
+  /** Roots ring: base polar angle / radius for slow spin. */
+  ringAngle?: number;
+  ringRadius?: number;
+  /** Chain enter morph start pose. */
+  fromX?: number;
+  fromY?: number;
+  fromZ?: number;
   x: number;
   y: number;
   z: number;
@@ -49,6 +62,15 @@ type Body = {
   homeY: number;
   homeZ: number;
 };
+
+/** ~1 full turn in ~8–9 minutes at 60fps — perceptible but calm. */
+const ROOTS_SPIN = 0.00012;
+const EXIT_MS = 720;
+const ENTER_MS = 1100;
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const easeOutCubic = (t: number) => 1 - (1 - clamp01(t)) ** 3;
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 type Link = {
   id: string;
@@ -63,7 +85,7 @@ type ScreenHit = { id: string; x: number; y: number; r: number; z: number };
 const FOCAL = 820;
 const DRAG = 0.88;
 const HOME_PULL = 0.055;
-const CHARGE = 1400;
+const CHARGE = 1100;
 
 /** World X columns: DATA_SOURCE → … → TABLE → VIEW → MAT_VIEW (left → right). */
 const FLOW_STAGE_X = [-720, -480, -240, 0, 280, 540, 800] as const;
@@ -78,9 +100,15 @@ const FLOW_STAGE_LABELS = [
 ] as const;
 const NODE_GAP_Z = 78;
 const LANE_PAD_Z = 120;
-const VIEW_LEFT_PAD = 88;
-const VIEW_RIGHT_PAD = 56;
+/** Screen chrome + long labels so chain nodes stay inside the canvas. */
+const CHAIN_PAD_L = 150;
+const CHAIN_PAD_R = 190;
+const CHAIN_PAD_T = 96;
+const CHAIN_PAD_B = 128;
 const LAST_STAGE = FLOW_STAGE_X.length - 1;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
 
 const shellForType = (type: string): number => {
   if (type === 'DATA_SOURCE') return 0;
@@ -106,9 +134,20 @@ const nearestHub = (
   hubs: Set<string>,
   adj: Map<string, string[]>
 ): string | null => {
+  const all = collectHubs(startId, hubs, adj);
+  return all[0] ?? null;
+};
+
+/** All DATA_SOURCE hubs reachable from a node (for multi-source bridges). */
+const collectHubs = (
+  startId: string,
+  hubs: Set<string>,
+  adj: Map<string, string[]>
+): string[] => {
   if (hubs.has(startId)) {
-    return startId;
+    return [startId];
   }
+  const found: string[] = [];
   const queue = [startId];
   const seen = new Set([startId]);
   while (queue.length) {
@@ -120,17 +159,25 @@ const nearestHub = (
       if (seen.has(next)) {
         continue;
       }
-      if (hubs.has(next)) {
-        return next;
-      }
       seen.add(next);
+      if (hubs.has(next)) {
+        found.push(next);
+        continue;
+      }
       queue.push(next);
     }
   }
-  return null;
+  return found.sort();
 };
 
-const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }: Props) => {
+const LineageUniverseScene = ({
+  nodes,
+  edges,
+  selectedAssetId,
+  mode,
+  enterOrigin = null,
+  onSelect,
+}: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const toolRef = useRef<DragTool>('pan');
@@ -191,6 +238,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
           return left.localeCompare(right) || a.localeCompare(b);
         });
 
+    const bridgeOf = new Map<string, string[]>();
     const members = new Map<string, string[]>();
     for (const hub of hubList) {
       members.set(hub, []);
@@ -200,7 +248,12 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       if (hubIds.has(node.id)) {
         continue;
       }
-      const hub = nearestHub(node.id, hubIds, adj);
+      const reached = collectHubs(node.id, hubIds, adj);
+      if (reached.length >= 2 && shellForType(node.asset_type) >= 4) {
+        bridgeOf.set(node.id, reached);
+        continue;
+      }
+      const hub = reached[0] ?? nearestHub(node.id, hubIds, adj);
       if (hub) {
         members.get(hub)?.push(node.id);
       } else {
@@ -208,33 +261,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       }
     }
 
-    // Per-hub lanes stacked on Z; within a lane stages advance on X (left → right).
     const hubLane = new Map<string, { z: number; half: number }>();
-    const laneHeights = hubList.map((hub) => {
-      const group = members.get(hub) ?? [];
-      const counts = new Map<number, number>();
-      for (const id of group) {
-        const node = byId.get(id);
-        if (!node) {
-          continue;
-        }
-        const shell = shellForType(node.asset_type);
-        counts.set(shell, (counts.get(shell) ?? 0) + 1);
-      }
-      const maxStack = Math.max(1, ...counts.values(), 1);
-      return Math.max(NODE_GAP_Z + LANE_PAD_Z, (maxStack - 1) * NODE_GAP_Z + LANE_PAD_Z);
-    });
-    let zCursor = 0;
-    hubList.forEach((id, index) => {
-      const height = laneHeights[index] ?? LANE_PAD_Z;
-      hubLane.set(id, { z: zCursor + height / 2, half: height / 2 });
-      zCursor += height;
-    });
-    const zMid = zCursor / 2;
-    for (const lane of hubLane.values()) {
-      lane.z -= zMid;
-    }
-
     const bodies: Body[] = [];
     const placeAt = (
       node: LineageNode,
@@ -242,7 +269,9 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       hubId: string | null,
       x: number,
       y: number,
-      z: number
+      z: number,
+      bridgeHubIds?: string[],
+      ring?: { angle: number; radius: number }
     ) => {
       const size =
         shell === 0
@@ -258,10 +287,17 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         id: node.id,
         label: node.display_name,
         type: node.asset_type,
-        color: node.unresolved ? '#ff4d4f' : TYPE_ACCENT[node.asset_type] || '#8c8c8c',
+        color: node.unresolved
+          ? '#ff4d4f'
+          : bridgeHubIds?.length
+            ? '#fbbf24'
+            : TYPE_ACCENT[node.asset_type] || '#8c8c8c',
         unresolved: node.unresolved,
         hubId,
         shell,
+        bridgeHubIds,
+        ringAngle: ring?.angle,
+        ringRadius: ring?.radius,
         x,
         y,
         z,
@@ -271,126 +307,172 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         vx: 0,
         vy: 0,
         vz: 0,
-        r: node.id === selectedAssetId ? size + 4 : size,
+        r: node.id === selectedAssetId ? size + 4 : size + (bridgeHubIds?.length ? 3 : 0),
       });
     };
 
-    hubList.forEach((id) => {
-      const node = byId.get(id);
-      const lane = hubLane.get(id);
-      if (!node || !lane) {
-        return;
-      }
-      placeAt(node, 0, id, FLOW_STAGE_X[0], 0, lane.z);
-    });
-
-    for (const hub of hubList) {
-      const lane = hubLane.get(hub);
-      if (!lane) {
-        continue;
-      }
-      const group = (members.get(hub) ?? [])
-        .map((id) => byId.get(id))
-        .filter((node): node is LineageNode => Boolean(node))
-        .sort((a, b) => {
-          const shellDiff = shellForType(a.asset_type) - shellForType(b.asset_type);
-          if (shellDiff !== 0) {
-            return shellDiff;
+    if (mode === 'roots') {
+      // Sparse catalogue ring: one object per sector, chord spacing stays readable.
+      const ringNodes = [
+        ...hubList.map((id) => byId.get(id)).filter((node): node is LineageNode => Boolean(node)),
+        ...orphanIds
+          .map((id) => byId.get(id))
+          .filter((node): node is LineageNode => Boolean(node)),
+      ];
+      const count = Math.max(1, ringNodes.length);
+      const minChord = 240;
+      const ringR = Math.max(420, (minChord * count) / (2 * Math.PI));
+      ringNodes.forEach((node, index) => {
+        const angle = (index / count) * Math.PI * 2 - Math.PI / 2;
+        const isHub = hubIds.has(node.id);
+        placeAt(
+          node,
+          isHub ? 0 : shellForType(node.asset_type),
+          isHub ? node.id : null,
+          Math.cos(angle) * ringR,
+          0,
+          Math.sin(angle) * ringR,
+          undefined,
+          { angle, radius: ringR }
+        );
+      });
+      // Keep empty lane map for shared guide code; roots draws a ring instead.
+    } else {
+      // Chain: per-hub lanes on Z, stages advance on X (left → right).
+      const laneHeights = hubList.map((hub) => {
+        const group = members.get(hub) ?? [];
+        const counts = new Map<number, number>();
+        for (const id of group) {
+          const node = byId.get(id);
+          if (!node) {
+            continue;
           }
-          return a.display_name.localeCompare(b.display_name);
-        });
-      const byShell = new Map<number, LineageNode[]>();
-      for (const node of group) {
-        const shell = shellForType(node.asset_type);
-        const list = byShell.get(shell) ?? [];
-        list.push(node);
-        byShell.set(shell, list);
+          const shell = shellForType(node.asset_type);
+          counts.set(shell, (counts.get(shell) ?? 0) + 1);
+        }
+        const maxStack = Math.max(1, ...counts.values(), 1);
+        return Math.max(NODE_GAP_Z + LANE_PAD_Z, (maxStack - 1) * NODE_GAP_Z + LANE_PAD_Z);
+      });
+      let zCursor = 0;
+      hubList.forEach((id, index) => {
+        const height = laneHeights[index] ?? LANE_PAD_Z;
+        hubLane.set(id, { z: zCursor + height / 2, half: height / 2 });
+        zCursor += height;
+      });
+      const zMid = zCursor / 2;
+      for (const lane of hubLane.values()) {
+        lane.z -= zMid;
       }
-      for (const [shell, list] of byShell) {
-        list.forEach((node, index) => {
-          const offset = (index - (list.length - 1) / 2) * NODE_GAP_Z;
-          // Tiny Y stagger keeps overlapping labels readable without breaking L→R.
-          const y = ((index % 3) - 1) * 8;
-          placeAt(
-            node,
-            shell,
-            hub,
-            FLOW_STAGE_X[shell] ?? FLOW_STAGE_X[LAST_STAGE],
-            y,
-            lane.z + offset
-          );
-        });
-      }
-    }
 
-    if (orphanIds.length) {
-      const byShell = new Map<number, string[]>();
-      for (const id of orphanIds) {
+      hubList.forEach((id) => {
+        const node = byId.get(id);
+        const lane = hubLane.get(id);
+        if (!node || !lane) {
+          return;
+        }
+        placeAt(node, 0, id, FLOW_STAGE_X[0], 0, lane.z);
+      });
+
+      for (const hub of hubList) {
+        const lane = hubLane.get(hub);
+        if (!lane) {
+          continue;
+        }
+        const group = (members.get(hub) ?? [])
+          .map((id) => byId.get(id))
+          .filter((node): node is LineageNode => Boolean(node))
+          .sort((a, b) => {
+            const shellDiff = shellForType(a.asset_type) - shellForType(b.asset_type);
+            if (shellDiff !== 0) {
+              return shellDiff;
+            }
+            return a.display_name.localeCompare(b.display_name);
+          });
+        const byShell = new Map<number, LineageNode[]>();
+        for (const node of group) {
+          const shell = shellForType(node.asset_type);
+          const list = byShell.get(shell) ?? [];
+          list.push(node);
+          byShell.set(shell, list);
+        }
+        for (const [shell, list] of byShell) {
+          list.forEach((node, index) => {
+            const offset = (index - (list.length - 1) / 2) * NODE_GAP_Z;
+            const y = ((index % 3) - 1) * 8;
+            placeAt(
+              node,
+              shell,
+              hub,
+              FLOW_STAGE_X[shell] ?? FLOW_STAGE_X[LAST_STAGE],
+              y,
+              lane.z + offset
+            );
+          });
+        }
+      }
+
+      if (orphanIds.length) {
+        const byShell = new Map<number, string[]>();
+        for (const id of orphanIds) {
+          const node = byId.get(id);
+          if (!node) {
+            continue;
+          }
+          const shell = shellForType(node.asset_type);
+          const list = byShell.get(shell) ?? [];
+          list.push(id);
+          byShell.set(shell, list);
+        }
+        const orphanBaseZ =
+          (hubList.length
+            ? Math.max(...[...hubLane.values()].map((lane) => lane.z + lane.half))
+            : 0) + LANE_PAD_Z;
+        for (const [shell, ids] of byShell) {
+          ids.forEach((id, index) => {
+            const node = byId.get(id);
+            if (!node) {
+              return;
+            }
+            placeAt(
+              node,
+              shell,
+              null,
+              FLOW_STAGE_X[shell] ?? FLOW_STAGE_X[LAST_STAGE],
+              0,
+              orphanBaseZ + index * NODE_GAP_Z
+            );
+          });
+        }
+      }
+
+      // Multi-source VIEW/TABLE: own stage column, midway between parent source lanes.
+      let bridgeIndex = 0;
+      for (const [id, hubs] of bridgeOf) {
         const node = byId.get(id);
         if (!node) {
           continue;
         }
         const shell = shellForType(node.asset_type);
-        const list = byShell.get(shell) ?? [];
-        list.push(id);
-        byShell.set(shell, list);
+        const zs = hubs
+          .map((hub) => hubLane.get(hub)?.z)
+          .filter((value): value is number => typeof value === 'number');
+        const z =
+          zs.length > 0
+            ? zs.reduce((sum, value) => sum + value, 0) / zs.length
+            : (bridgeIndex - (bridgeOf.size - 1) / 2) * NODE_GAP_Z;
+        // Slight X nudge so stacked bridges in the same stage do not overlap.
+        const xNudge = ((bridgeIndex % 3) - 1) * 36;
+        placeAt(
+          node,
+          shell,
+          null,
+          (FLOW_STAGE_X[shell] ?? FLOW_STAGE_X[LAST_STAGE]) + xNudge,
+          52,
+          z + ((bridgeIndex % 2) * 2 - 1) * 18,
+          hubs
+        );
+        bridgeIndex += 1;
       }
-      const orphanBaseZ =
-        (hubList.length ? Math.max(...[...hubLane.values()].map((lane) => lane.z + lane.half)) : 0) +
-        LANE_PAD_Z;
-      for (const [shell, ids] of byShell) {
-        ids.forEach((id, index) => {
-          const node = byId.get(id);
-          if (!node) {
-            return;
-          }
-          placeAt(
-            node,
-            shell,
-            null,
-            FLOW_STAGE_X[shell] ?? FLOW_STAGE_X[LAST_STAGE],
-            0,
-            orphanBaseZ + index * NODE_GAP_Z
-          );
-        });
-      }
-    }
-
-    // Shared leaf assets stay in their own stage column, midway between parent lanes.
-    for (const body of bodies) {
-      if (body.shell < 4 || !body.hubId) {
-        continue;
-      }
-      const neighbours = new Set<string>();
-      for (const next of adj.get(body.id) ?? []) {
-        const hub = nearestHub(next, hubIds, adj);
-        if (hub) {
-          neighbours.add(hub);
-        }
-      }
-      if (neighbours.size < 2) {
-        continue;
-      }
-      let z = 0;
-      let counted = 0;
-      for (const hub of neighbours) {
-        const lane = hubLane.get(hub);
-        if (!lane) {
-          continue;
-        }
-        z += lane.z;
-        counted += 1;
-      }
-      if (!counted) {
-        continue;
-      }
-      body.homeX = FLOW_STAGE_X[body.shell] ?? FLOW_STAGE_X[LAST_STAGE];
-      body.homeZ = z / counted;
-      body.homeY = 16;
-      body.x = body.homeX;
-      body.y = body.homeY;
-      body.z = body.homeZ;
-      body.r += 3;
     }
 
     const fieldBounds = (() => {
@@ -438,9 +520,8 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     let width = 0;
     let height = 0;
     let dpr = 1;
-    // Nearly orthographic overview: X = flow left→right, Z = hub lanes.
-    let yaw = 0.04;
-    let pitch = 0.78;
+    let yaw = mode === 'roots' ? -0.28 : 0.02;
+    let pitch = mode === 'roots' ? 0.52 : 0.82;
     let zoom = 0.85;
     let targetZoom = 0.85;
     let lookX = (fieldBounds.minX + fieldBounds.maxX) / 2;
@@ -464,7 +545,47 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     let hits: ScreenHit[] = [];
     let userAdjustedView = false;
     let followFocus = false;
+    let ringSpin = 0;
+    let exitId: string | null = null;
+    let exitStarted = 0;
+    let exitOrigin: UniverseOrigin | null = null;
+    let exitNavigated = false;
+    let enterMorph = mode === 'chain' && Boolean(enterOrigin) && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let enterStarted = 0;
+    let enterDone = !enterMorph;
+    let endLookX = lookX;
+    let endLookY = lookY;
+    let endLookZ = lookZ;
+    let endZoom = zoom;
+    let endYaw = yaw;
+    let endPitch = pitch;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (enterMorph && enterOrigin) {
+      const hub =
+        bodies.find((body) => body.id === selectedAssetId) ??
+        bodies.find((body) => body.shell === 0) ??
+        null;
+      const hx = hub?.homeX ?? enterOrigin.x;
+      const hz = hub?.homeZ ?? enterOrigin.z;
+      for (const body of bodies) {
+        body.fromX = enterOrigin.x + (body.homeX - hx) * 0.04;
+        body.fromY = enterOrigin.y + body.homeY * 0.15;
+        body.fromZ = enterOrigin.z + (body.homeZ - hz) * 0.04;
+        body.x = body.fromX;
+        body.y = body.fromY;
+        body.z = body.fromZ;
+        body.vx = 0;
+        body.vy = 0;
+        body.vz = 0;
+      }
+      lookX = targetLookX = enterOrigin.x;
+      lookY = targetLookY = enterOrigin.y;
+      lookZ = targetLookZ = enterOrigin.z;
+      yaw = -0.28;
+      pitch = 0.52;
+      zoom = targetZoom = 1.45;
+    }
 
     const recomputeFieldBounds = () => {
       let minX = Infinity;
@@ -499,49 +620,138 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         return;
       }
       followFocus = false;
-      yaw = 0.02;
-      pitch = 0.82;
       velYaw = 0;
       velPitch = 0;
-
-      // Anchor DATA_SOURCE on the left; stretch later stages to fill the width.
-      const sourceX = Math.min(...bodies.map((body) => body.homeX));
-      let maxX = Math.max(...bodies.map((body) => body.homeX));
-      const spanZ = Math.max(
-        200,
-        Math.max(...bodies.map((body) => body.homeZ)) - Math.min(...bodies.map((body) => body.homeZ))
-      );
-      const zoomForZ = (height * 0.78) / (spanZ * 0.95 + 80);
-      targetZoom = Math.max(0.42, Math.min(2.35, zoomForZ));
-
-      const usableWidth = Math.max(320, width - VIEW_LEFT_PAD - VIEW_RIGHT_PAD);
-      const desiredSpanX = usableWidth / targetZoom;
-      const currentSpanX = Math.max(1, maxX - sourceX);
-      if (desiredSpanX > currentSpanX * 1.01) {
-        const scale = desiredSpanX / currentSpanX;
-        for (const body of bodies) {
-          const nextX = sourceX + (body.homeX - sourceX) * scale;
-          body.homeX = nextX;
-          body.x = nextX;
-        }
-        maxX = sourceX + desiredSpanX;
-      }
-      recomputeFieldBounds();
-
-      const cy = (fieldBounds.minY + fieldBounds.maxY) / 2;
-      const cz = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
-      // Place look-at so the leftmost source projects near the left padding.
-      const lookAtX = sourceX + (width / 2 - VIEW_LEFT_PAD) / targetZoom;
-      targetLookX = lookAtX;
-      targetLookY = cy;
-      targetLookZ = cz;
       panX = 0;
       panY = 0;
+
+      if (mode === 'roots') {
+        yaw = -0.28;
+        pitch = 0.52;
+        recomputeFieldBounds();
+        const cx = (fieldBounds.minX + fieldBounds.maxX) / 2;
+        const cy = (fieldBounds.minY + fieldBounds.maxY) / 2;
+        const cz = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
+        const span = Math.max(
+          420,
+          fieldBounds.maxX - fieldBounds.minX,
+          fieldBounds.maxZ - fieldBounds.minZ
+        );
+        targetZoom = clamp((Math.min(width, height) * 0.82) / span, 0.4, 2.2);
+        targetLookX = cx;
+        targetLookY = cy;
+        targetLookZ = cz;
+      endLookX = targetLookX;
+      endLookY = targetLookY;
+      endLookZ = targetLookZ;
+      endZoom = targetZoom;
+      endYaw = yaw;
+      endPitch = pitch;
       if (snap) {
-        lookX = lookAtX;
+        lookX = cx;
         lookY = cy;
         lookZ = cz;
         zoom = targetZoom;
+      }
+      return;
+    }
+
+      // Chain: contain in viewport (labels need side margins). Left-biased, never clip right.
+      yaw = 0;
+      pitch = 0.7;
+      const minX = Math.min(...bodies.map((body) => body.homeX));
+      const maxX = Math.max(...bodies.map((body) => body.homeX));
+      const minZ = Math.min(...bodies.map((body) => body.homeZ));
+      const maxZ = Math.max(...bodies.map((body) => body.homeZ));
+      const minY = Math.min(...bodies.map((body) => body.homeY));
+      const maxY = Math.max(...bodies.map((body) => body.homeY));
+      let spanX = Math.max(280, maxX - minX);
+      const spanZ = Math.max(180, maxZ - minZ);
+      const spanY = Math.max(40, maxY - minY);
+
+      const usableW = Math.max(260, width - CHAIN_PAD_L - CHAIN_PAD_R);
+      const usableH = Math.max(200, height - CHAIN_PAD_T - CHAIN_PAD_B);
+      // Extra world pad ≈ half a long label at typical zoom.
+      const labelPad = Math.max(150, spanX * 0.08);
+      let spanXPad = spanX + labelPad * 2;
+      const spanZPad = spanZ + 90 + spanY * 0.25;
+
+      let nextZoom = clamp(
+        Math.min(usableW / spanXPad, usableH / (spanZPad * 0.92)),
+        0.34,
+        2.1
+      );
+
+      // If height leaves unused width, gently widen stages — but keep a safety margin.
+      const widthRoom = usableW / (spanXPad * nextZoom);
+      if (widthRoom > 1.04 && widthRoom < 1.35) {
+        const scale = Math.min(1.18, widthRoom * 0.92);
+        for (const body of bodies) {
+          const nextX = minX + (body.homeX - minX) * scale;
+          body.homeX = nextX;
+          body.x = nextX;
+        }
+        spanX *= scale;
+        spanXPad = spanX + labelPad * 2;
+        nextZoom = clamp(
+          Math.min(usableW / spanXPad, usableH / (spanZPad * 0.92)),
+          0.34,
+          2.1
+        );
+      }
+
+      // If still wider than the screen, compress X to fit.
+      if (spanXPad * nextZoom > usableW) {
+        const shrink = usableW / (spanXPad * nextZoom);
+        for (const body of bodies) {
+          const nextX = minX + (body.homeX - minX) * shrink;
+          body.homeX = nextX;
+          body.x = nextX;
+        }
+        spanX *= shrink;
+        spanXPad = spanX + labelPad * 2;
+        nextZoom = clamp(
+          Math.min(usableW / spanXPad, usableH / (spanZPad * 0.92)),
+          0.34,
+          2.1
+        );
+      }
+
+      recomputeFieldBounds();
+      const contentMinX = Math.min(...bodies.map((body) => body.homeX));
+      const contentMaxX = Math.max(...bodies.map((body) => body.homeX));
+      const cy = (minY + maxY) / 2;
+      const cz = (minZ + maxZ) / 2;
+      // Left edge of content (+ label pad) at CHAIN_PAD_L.
+      let lookAtX = contentMinX - labelPad + (width / 2 - CHAIN_PAD_L) / nextZoom;
+      // Guarantee right edge also stays inside after perspective slack.
+      const rightWorld = contentMaxX + labelPad;
+      const rightScreen = width / 2 + (rightWorld - lookAtX) * nextZoom;
+      if (rightScreen > width - CHAIN_PAD_R) {
+        const overflow = rightScreen - (width - CHAIN_PAD_R);
+        nextZoom = clamp(nextZoom * (1 - overflow / Math.max(width, 1)), 0.32, nextZoom);
+        lookAtX = contentMinX - labelPad + (width / 2 - CHAIN_PAD_L) / nextZoom;
+        const rightScreen2 = width / 2 + (rightWorld - lookAtX) * nextZoom;
+        if (rightScreen2 > width - CHAIN_PAD_R) {
+          lookAtX += (rightScreen2 - (width - CHAIN_PAD_R)) / nextZoom;
+        }
+      }
+
+      targetZoom = nextZoom;
+      targetLookX = lookAtX;
+      targetLookY = cy;
+      targetLookZ = cz;
+      endLookX = lookAtX;
+      endLookY = cy;
+      endLookZ = cz;
+      endZoom = nextZoom;
+      endYaw = yaw;
+      endPitch = pitch;
+      if (snap && !enterMorph) {
+        lookX = lookAtX;
+        lookY = cy;
+        lookZ = cz;
+        zoom = nextZoom;
       }
     };
 
@@ -598,7 +808,11 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (!userAdjustedView) {
-        fitScene(true);
+        if (enterMorph && !enterDone) {
+          fitScene(false);
+        } else {
+          fitScene(true);
+        }
       }
     };
 
@@ -694,14 +908,71 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     };
 
     const drawFrame = () => {
+      const now = performance.now();
       pulse += reduced ? 0 : 0.03;
-      zoom += (targetZoom - zoom) * 0.08;
-      const lookEase = reduced ? 1 : 0.08;
-      lookX += (targetLookX - lookX) * lookEase;
-      lookY += (targetLookY - lookY) * lookEase;
-      lookZ += (targetLookZ - lookZ) * lookEase;
+
+      // Roots → chain exit: zoom into the chosen source, fade the rest, then navigate.
+      let exitT = 0;
+      if (exitId) {
+        exitT = easeOutCubic((now - exitStarted) / EXIT_MS);
+        const selected = bodyMap.get(exitId);
+        if (selected) {
+          targetLookX = selected.x;
+          targetLookY = selected.y;
+          targetLookZ = selected.z;
+          targetZoom = lerp(targetZoom, 1.55, 0.08);
+          yaw = lerp(yaw, -0.22, 0.06);
+          pitch = lerp(pitch, 0.5, 0.06);
+        }
+        if (exitT >= 1 && !exitNavigated) {
+          exitNavigated = true;
+          onSelect?.(exitId, exitOrigin ?? undefined);
+        }
+      }
+
+      // Chain enter: unfold from ring point into LTR layout.
+      let enterT = 1;
+      if (enterMorph && !enterDone && enterOrigin) {
+        if (!enterStarted) {
+          enterStarted = now;
+        }
+        enterT = easeOutCubic((now - enterStarted) / ENTER_MS);
+        for (const body of bodies) {
+          const fromX = body.fromX ?? body.homeX;
+          const fromY = body.fromY ?? body.homeY;
+          const fromZ = body.fromZ ?? body.homeZ;
+          body.x = lerp(fromX, body.homeX, enterT);
+          body.y = lerp(fromY, body.homeY, enterT);
+          body.z = lerp(fromZ, body.homeZ, enterT);
+          body.vx = 0;
+          body.vy = 0;
+          body.vz = 0;
+        }
+        lookX = lerp(enterOrigin.x, endLookX, enterT);
+        lookY = lerp(enterOrigin.y, endLookY, enterT);
+        lookZ = lerp(enterOrigin.z, endLookZ, enterT);
+        yaw = lerp(-0.28, endYaw, enterT);
+        pitch = lerp(0.52, endPitch, enterT);
+        zoom = lerp(1.45, endZoom, enterT);
+        targetLookX = lookX;
+        targetLookY = lookY;
+        targetLookZ = lookZ;
+        targetZoom = zoom;
+        if (enterT >= 1) {
+          enterDone = true;
+          enterMorph = false;
+          fitScene(true);
+        }
+      } else {
+        zoom += (targetZoom - zoom) * 0.08;
+        const lookEase = reduced ? 1 : 0.08;
+        lookX += (targetLookX - lookX) * lookEase;
+        lookY += (targetLookY - lookY) * lookEase;
+        lookZ += (targetLookZ - lookZ) * lookEase;
+      }
+
       // Soft-follow only after an explicit fly-to (not the default overview).
-      if (followFocus && focusId) {
+      if (followFocus && focusId && !enterMorph && !exitId) {
         const focused = bodyMap.get(focusId);
         if (focused) {
           targetLookX += (focused.x - targetLookX) * 0.12;
@@ -709,8 +980,25 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
           targetLookZ += (focused.z - targetLookZ) * 0.12;
         }
       }
-      // No forced idle spin — keep left→right flow readable.
-      if (!dragMode && !reduced && !hoverId) {
+
+      // Very slow catalogue ring spin (pause while hovering / dragging / exiting).
+      if (mode === 'roots' && !exitId && !dragMode && !hoverId && !reduced) {
+        ringSpin += ROOTS_SPIN;
+        for (const body of bodies) {
+          if (body.ringAngle === undefined || body.ringRadius === undefined) {
+            continue;
+          }
+          const angle = body.ringAngle + ringSpin;
+          const nextX = Math.cos(angle) * body.ringRadius;
+          const nextZ = Math.sin(angle) * body.ringRadius;
+          body.homeX = nextX;
+          body.homeZ = nextZ;
+          body.x = nextX;
+          body.z = nextZ;
+          body.vx = 0;
+          body.vz = 0;
+        }
+      } else if (!dragMode && !reduced && !hoverId && mode === 'chain' && enterDone) {
         yaw += velYaw;
         pitch += velPitch;
         velYaw *= 0.96;
@@ -722,7 +1010,8 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
           velPitch = 0;
         }
       }
-      if (!reduced) {
+
+      if (!reduced && enterDone && !exitId) {
         stepPhysics();
       }
 
@@ -757,55 +1046,80 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         ctx.fill();
       }
 
-      // Flow guides: stage columns left→right + lane separators.
       ctx.save();
-      const zTop = fieldBounds.minZ;
-      const zBottom = fieldBounds.maxZ;
-      const stageXs = FLOW_STAGE_X.map((fallback, shell) => {
-        const xs = bodies.filter((body) => body.shell === shell).map((body) => body.homeX);
-        if (!xs.length) {
-          return fallback;
+      if (mode === 'roots') {
+        const ringR =
+          bodies.reduce((sum, body) => sum + Math.hypot(body.homeX, body.homeZ), 0) /
+            Math.max(1, bodies.length) || 420;
+        const samples = 72;
+        ctx.beginPath();
+        for (let i = 0; i <= samples; i += 1) {
+          const angle = (i / samples) * Math.PI * 2;
+          const p = project(Math.cos(angle) * ringR, 0, Math.sin(angle) * ringR);
+          if (i === 0) {
+            ctx.moveTo(p.x, p.y);
+          } else {
+            ctx.lineTo(p.x, p.y);
+          }
         }
-        return xs.reduce((sum, value) => sum + value, 0) / xs.length;
-      });
-      stageXs.forEach((stageX, index) => {
-        const a = project(stageX, 0, zTop);
-        const b = project(stageX, 0, zBottom);
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle =
-          index === 0 ? 'rgba(125, 211, 252, 0.28)' : 'rgba(148, 163, 184, 0.14)';
-        ctx.lineWidth = index === 0 || index === stageXs.length - 1 ? 1.4 : 1;
-        ctx.setLineDash(index === 0 ? [] : [5, 10]);
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.22)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([6, 12]);
         ctx.stroke();
-        const labelAt = project(stageX, 0, zTop - 36);
-        ctx.font = '11px "Segoe UI", system-ui, sans-serif';
-        ctx.fillStyle = 'rgba(186, 210, 255, 0.7)';
+        const caption = project(0, 0, -ringR - 48);
+        ctx.setLineDash([]);
+        ctx.font = '12px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(186, 210, 255, 0.72)';
         ctx.textAlign = 'center';
-        ctx.fillText(FLOW_STAGE_LABELS[index] ?? '', labelAt.x, labelAt.y);
-      });
-      // Direction cue along the middle lane.
-      const midZ = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
-      const flowFrom = project(stageXs[0] ?? FLOW_STAGE_X[0], 0, midZ);
-      const flowTo = project(stageXs[LAST_STAGE] ?? FLOW_STAGE_X[LAST_STAGE], 0, midZ);
-      ctx.setLineDash([]);
-      ctx.strokeStyle = 'rgba(125, 211, 252, 0.22)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(flowFrom.x, flowFrom.y);
-      ctx.lineTo(flowTo.x, flowTo.y);
-      ctx.stroke();
-      drawArrow(flowFrom.x, flowFrom.y, flowTo.x, flowTo.y, 'rgba(125, 211, 252, 0.55)');
-      for (const lane of hubLane.values()) {
-        const left = project(fieldBounds.minX, 0, lane.z - lane.half + 8);
-        const right = project(fieldBounds.maxX, 0, lane.z - lane.half + 8);
+        ctx.fillText('Каталог источников · клик — открыть поток', caption.x, caption.y);
+      } else {
+        const zTop = fieldBounds.minZ;
+        const zBottom = fieldBounds.maxZ;
+        const stageXs = FLOW_STAGE_X.map((fallback, shell) => {
+          const xs = bodies.filter((body) => body.shell === shell).map((body) => body.homeX);
+          if (!xs.length) {
+            return fallback;
+          }
+          return xs.reduce((sum, value) => sum + value, 0) / xs.length;
+        });
+        stageXs.forEach((stageX, index) => {
+          const a = project(stageX, 0, zTop);
+          const b = project(stageX, 0, zBottom);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.strokeStyle =
+            index === 0 ? 'rgba(125, 211, 252, 0.28)' : 'rgba(148, 163, 184, 0.14)';
+          ctx.lineWidth = index === 0 || index === stageXs.length - 1 ? 1.4 : 1;
+          ctx.setLineDash(index === 0 ? [] : [5, 10]);
+          ctx.stroke();
+          const labelAt = project(stageX, 0, zTop - 36);
+          ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+          ctx.fillStyle = 'rgba(186, 210, 255, 0.7)';
+          ctx.textAlign = 'center';
+          ctx.fillText(FLOW_STAGE_LABELS[index] ?? '', labelAt.x, labelAt.y);
+        });
+        const midZ = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
+        const flowFrom = project(stageXs[0] ?? FLOW_STAGE_X[0], 0, midZ);
+        const flowTo = project(stageXs[LAST_STAGE] ?? FLOW_STAGE_X[LAST_STAGE], 0, midZ);
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.22)';
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(left.x, left.y);
-        ctx.lineTo(right.x, right.y);
-        ctx.strokeStyle = 'rgba(134, 239, 172, 0.1)';
-        ctx.setLineDash([3, 12]);
+        ctx.moveTo(flowFrom.x, flowFrom.y);
+        ctx.lineTo(flowTo.x, flowTo.y);
         ctx.stroke();
+        drawArrow(flowFrom.x, flowFrom.y, flowTo.x, flowTo.y, 'rgba(125, 211, 252, 0.55)');
+        for (const lane of hubLane.values()) {
+          const left = project(fieldBounds.minX, 0, lane.z - lane.half + 8);
+          const right = project(fieldBounds.maxX, 0, lane.z - lane.half + 8);
+          ctx.beginPath();
+          ctx.moveTo(left.x, left.y);
+          ctx.lineTo(right.x, right.y);
+          ctx.strokeStyle = 'rgba(134, 239, 172, 0.1)';
+          ctx.setLineDash([3, 12]);
+          ctx.stroke();
+        }
       }
       ctx.restore();
       ctx.setLineDash([]);
@@ -839,7 +1153,9 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         const grad = ctx.createLinearGradient(item.pa.x, item.pa.y, item.pb.x, item.pb.y);
         grad.addColorStop(0, item.a.color);
         grad.addColorStop(1, item.b.color);
-        ctx.globalAlpha = hot ? 0.95 : 0.55;
+        const exitFade =
+          exitId && item.a.id !== exitId && item.b.id !== exitId ? 1 - exitT * 0.9 : 1;
+        ctx.globalAlpha = (hot ? 0.95 : 0.55) * exitFade;
         ctx.strokeStyle = grad;
         ctx.lineWidth = hot ? 3 : 1.8;
         ctx.beginPath();
@@ -865,6 +1181,31 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         ctx.globalAlpha = 1;
       }
 
+      // Bridge cues: dashed spokes from multi-source VIEW/TABLE to each DATA_SOURCE.
+      if (mode === 'chain') {
+        for (const body of bodies) {
+          if (!body.bridgeHubIds?.length) {
+            continue;
+          }
+          const pb = project(body.x, body.y, body.z);
+          for (const hubId of body.bridgeHubIds) {
+            const hub = bodyMap.get(hubId);
+            if (!hub) {
+              continue;
+            }
+            const ph = project(hub.x, hub.y, hub.z);
+            ctx.setLineDash([5, 8]);
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(ph.x, ph.y);
+            ctx.lineTo(pb.x, pb.y);
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        }
+      }
+
       hits = [];
       const projectedBodies = bodies
         .map((body) => ({ body, p: project(body.x, body.y, body.z) }))
@@ -878,6 +1219,8 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         const radius = Math.max(10, body.r * p.depth * (active ? 1.35 : 1.15));
         const hitR = Math.max(28, radius + 18);
         hits.push({ id: body.id, x: p.x, y: p.y, r: hitR, z: p.z });
+        const exitFade = exitId && body.id !== exitId ? 1 - exitT * 0.92 : 1;
+        ctx.globalAlpha = exitFade;
 
         const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius * 2.8);
         glow.addColorStop(0, `${body.color}bb`);
@@ -914,13 +1257,25 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
           ctx.arc(p.x, p.y, radius + 8, 0, Math.PI * 2);
           ctx.stroke();
         }
+        if (body.bridgeHubIds?.length) {
+          ctx.strokeStyle = `rgba(251, 191, 36,${0.45 + Math.sin(pulse * 2) * 0.2})`;
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([4, 5]);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, radius + 10, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
 
         drawLabel(body.label, p.x, p.y + radius + 10, active);
         ctx.font = '10px "Segoe UI", system-ui, sans-serif';
         ctx.fillStyle = active ? 'rgba(186, 210, 255, 0.95)' : 'rgba(186, 210, 255, 0.65)';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(body.type, p.x, p.y + radius + 36);
+        const typeLine = body.bridgeHubIds?.length
+          ? `${body.type} · bridge×${body.bridgeHubIds.length}`
+          : body.type;
+        ctx.fillText(typeLine, p.x, p.y + radius + 36);
         if (active) {
           ctx.fillStyle = 'rgba(255,255,255,0.78)';
           ctx.fillText(
@@ -931,6 +1286,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
             p.y + radius + 50
           );
         }
+        ctx.globalAlpha = 1;
       }
 
       // legend + controls
@@ -954,14 +1310,23 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         legendY += 18;
       }
 
-      const tip = hoverId ? byId.get(hoverId) : focusId ? byId.get(focusId) : null;
+      const tipId = hoverId ?? focusId;
+      const tip = tipId ? byId.get(tipId) : null;
+      const tipBody = tipId ? bodyMap.get(tipId) : null;
       if (tip) {
         overlay.dataset.visible = '1';
+        const bridgeNames = (tipBody?.bridgeHubIds ?? [])
+          .map((id) => byId.get(id)?.display_name || id)
+          .join(' · ');
         const action =
           mode === 'roots'
-            ? 'Кликните, чтобы раскрыть цепочку вокруг источника'
-            : 'Кликните, чтобы открыть карточку объекта';
-        overlay.innerHTML = `<strong>${tip.display_name}</strong><span>${tip.asset_type}</span><em>${tip.qualified_name || tip.id}</em><small>${action}</small>`;
+            ? 'Кликните, чтобы раскрыть поток источника слева направо'
+            : tipBody?.bridgeHubIds?.length
+              ? `Мост между источниками: ${bridgeNames}`
+              : 'Кликните, чтобы открыть карточку объекта';
+        overlay.innerHTML = `<strong>${tip.display_name}</strong><span>${tip.asset_type}${
+          tipBody?.bridgeHubIds?.length ? ' · BRIDGE' : ''
+        }</span><em>${tip.qualified_name || tip.id}</em><small>${action}</small>`;
       } else {
         overlay.dataset.visible = '0';
       }
@@ -1051,7 +1416,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       event.preventDefault();
     };
     const onClick = (event: MouseEvent) => {
-      if (moved) {
+      if (moved || exitId) {
         return;
       }
       const rect = canvas.getBoundingClientRect();
@@ -1060,6 +1425,17 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         return;
       }
       focusId = id;
+      if (mode === 'roots') {
+        const body = bodyMap.get(id);
+        if (!body) {
+          return;
+        }
+        exitId = id;
+        exitStarted = performance.now();
+        exitOrigin = { x: body.x, y: body.y, z: body.z };
+        followFocus = true;
+        return;
+      }
       onSelect?.(id);
     };
     const onDblClick = (event: MouseEvent) => {
@@ -1129,7 +1505,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [nodes, edges, selectedAssetId, mode, onSelect]);
+  }, [nodes, edges, selectedAssetId, mode, onSelect, enterOrigin]);
 
   return (
     <div className="lineage-universe-scene">

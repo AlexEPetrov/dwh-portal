@@ -3,19 +3,44 @@ import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { Button, Empty, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import LineageUniverseScene from '../components/LineageUniverseScene';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import LineageUniverseScene, {
+  type UniverseOrigin,
+} from '../components/LineageUniverseScene';
 import '../components/lineageUniverse.css';
+
+type LocationState = {
+  fromRing?: UniverseOrigin;
+};
 
 const LineageUniversePage = () => {
   const { assetId } = useParams<{ assetId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const mode = assetId ? 'chain' : 'roots';
   const [nodes, setNodes] = useState<LineageNode[]>([]);
   const [edges, setEdges] = useState<LineageEdge[]>([]);
   const [title, setTitle] = useState('Universe');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [enterOrigin, setEnterOrigin] = useState<UniverseOrigin | null>(() => {
+    const state = location.state as LocationState | null;
+    return state?.fromRing ?? null;
+  });
+
+  useEffect(() => {
+    const state = location.state as LocationState | null;
+    if (state?.fromRing) {
+      setEnterOrigin(state.fromRing);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (!assetId) {
+      setEnterOrigin(null);
+    }
+  }, [assetId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,9 +77,11 @@ const LineageUniversePage = () => {
   }, [assetId]);
 
   const onSelect = useCallback(
-    (id: string) => {
+    (id: string, origin?: UniverseOrigin) => {
       if (mode === 'roots') {
-        navigate(`/lineage/universe/${id}`);
+        navigate(`/lineage/universe/${id}`, {
+          state: origin ? { fromRing: origin } : null,
+        });
         return;
       }
       navigate(`/objects/${id}`);
@@ -85,8 +112,8 @@ const LineageUniversePage = () => {
         </div>
         <Typography.Paragraph className="lineage-universe-hint">
           {mode === 'roots'
-            ? 'Поток слева направо: SOURCE → TABLE. Каждый источник — своя полоса. Клик — цепочка.'
-            : 'Слева источник, справа таблицы. Move / Zoom на панели; Reset — весь поток на экран.'}
+            ? 'Кольцо медленно вращается. Клик — анимация перехода в поток источника.'
+            : 'Поток слева направо. Жёлтый bridge — VIEW/TABLE из нескольких DATA_SOURCE.'}
         </Typography.Paragraph>
       </header>
       <main className="lineage-universe-stage">
@@ -108,6 +135,7 @@ const LineageUniversePage = () => {
             edges={edges}
             selectedAssetId={assetId}
             mode={mode}
+            enterOrigin={mode === 'chain' ? enterOrigin : null}
             onSelect={onSelect}
           />
         )}
