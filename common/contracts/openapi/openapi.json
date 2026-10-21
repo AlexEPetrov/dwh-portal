@@ -5,83 +5,13 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/api/management/scenarios/": {
+    "/health": {
       "get": {
         "tags": [
-          "management",
-          "scenarios"
+          "system"
         ],
-        "summary": "Get Scenarios List",
-        "description": "Возвращает список сценариев",
-        "operationId": "get_scenarios_list_api_management_scenarios__get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ObjectInfoModel"
-                  },
-                  "type": "array",
-                  "title": "Response Get Scenarios List Api Management Scenarios  Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/requests/{request_id}": {
-      "get": {
-        "tags": [
-          "requests"
-        ],
-        "summary": "Get Report Status",
-        "description": "Получение статуса фоновой операции",
-        "operationId": "get_report_status_api_requests__request_id__get",
-        "parameters": [
-          {
-            "name": "request_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Request Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/requests/api/requests": {
-      "get": {
-        "tags": [
-          "requests"
-        ],
-        "summary": "Get Requests",
-        "description": "Получение списка фоновых операций",
-        "operationId": "get_requests_api_requests_api_requests_get",
+        "summary": "Health Check",
+        "operationId": "health_check_health_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -419,8 +349,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Asset type, or comma-separated types (TABLE,VIEW).",
               "title": "Type"
-            }
+            },
+            "description": "Asset type, or comma-separated types (TABLE,VIEW)."
           },
           {
             "name": "source",
@@ -2284,125 +2216,6 @@
           "password"
         ],
         "title": "LoginRequest"
-      },
-      "ObjectInfoModel": {
-        "properties": {
-          "version": {
-            "type": "integer",
-            "title": "Version",
-            "default": 1,
-            "ui:group": {
-              "name": "Версия",
-              "priority": 100
-            },
-            "ui:property_priority": 1
-          },
-          "version_description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version Description",
-            "ui:group": {
-              "name": "Версия",
-              "priority": 100
-            },
-            "ui:property_priority": 2
-          },
-          "author": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Author",
-            "ui:group": {
-              "name": "Версия",
-              "priority": 100
-            },
-            "ui:property_priority": 3
-          },
-          "id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id",
-            "description": "Идентификатор объекта",
-            "ui:hidden": true
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "modified_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Modified At"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Наименование объекта",
-            "ui:property_priority": 1
-          },
-          "slug": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Slug",
-            "description": "Системное имя или код объекта (только английский)",
-            "ui:property_priority": 2
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description",
-            "description": "Описание объекта",
-            "ui:property_priority": 3
-          }
-        },
-        "type": "object",
-        "title": "ObjectInfoModel",
-        "description": "Типовые свойства объектов для загрузки списка моделей"
       },
       "OverviewResponse": {
         "properties": {

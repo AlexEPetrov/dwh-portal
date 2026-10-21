@@ -7,14 +7,18 @@ from typing import Protocol
 from domains.catalog.models import (
     Asset,
     AssetColumn,
+    AssetCountSummary,
+    AssetListEntry,
     AssetQuery,
     AssetSnapshot,
+    ChangeCountSummary,
     ChangeEvent,
     ChangeQuery,
     CollectionRun,
     DiscoveryDiagnostic,
     Relationship,
     RelationshipType,
+    StorageSummary,
 )
 
 
@@ -32,6 +36,21 @@ class PortalStore(Protocol):
     ) -> Asset | None: ...
 
     def list_assets(self, query: AssetQuery) -> tuple[list[Asset], int]: ...
+
+    def list_asset_page(self, query: AssetQuery) -> tuple[list[AssetListEntry], int]: ...
+
+    def count_assets(self) -> AssetCountSummary: ...
+
+    def summarize_storage(self, *, largest_limit: int = 20) -> StorageSummary: ...
+
+    def count_changes(
+        self,
+        *,
+        since: datetime.datetime | None = None,
+        until: datetime.datetime | None = None,
+    ) -> ChangeCountSummary: ...
+
+    def schema_descriptions(self) -> dict[str, str]: ...
 
     def replace_columns(self, asset_id: uuid.UUID, columns: list[AssetColumn]) -> None: ...
 

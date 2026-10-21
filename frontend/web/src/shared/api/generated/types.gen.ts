@@ -231,33 +231,6 @@ export type LoginRequest = {
     password: string;
 };
 
-/**
- * Типовые свойства объектов для загрузки списка моделей
- */
-export type ObjectInfoModel = {
-    version?: number;
-    version_description?: string | null;
-    author?: string | null;
-    /**
-     * Идентификатор объекта
-     */
-    id?: string | null;
-    created_at?: string | null;
-    modified_at?: string | null;
-    /**
-     * Наименование объекта
-     */
-    name?: string;
-    /**
-     * Системное имя или код объекта (только английский)
-     */
-    slug?: string | null;
-    /**
-     * Описание объекта
-     */
-    description?: string | null;
-};
-
 export type OverviewResponse = {
     asset_counts: AssetCounts;
     storage_totals: StorageTotals;
@@ -349,15 +322,7 @@ export type ValidationError = {
     type: string;
 };
 
-export type GetScenariosListApiManagementScenariosGetResponse = Array<ObjectInfoModel>;
-
-export type GetReportStatusApiRequestsRequestIdGetData = {
-    requestId: string;
-};
-
-export type GetReportStatusApiRequestsRequestIdGetResponse = unknown;
-
-export type GetRequestsApiRequestsApiRequestsGetResponse = unknown;
+export type HealthCheckHealthGetResponse = unknown;
 
 export type LoginApiAuthLoginPostData = {
     requestBody: LoginRequest;
@@ -401,6 +366,9 @@ export type ListAssetsData = {
     sort?: string;
     source?: string | null;
     status?: AssetStatus;
+    /**
+     * Asset type, or comma-separated types (TABLE,VIEW).
+     */
     type?: string | null;
 };
 
@@ -478,32 +446,7 @@ export type RunPortalCollectData = {
 export type RunPortalCollectResponse = CollectResponse;
 
 export type $OpenApiTs = {
-    '/api/management/scenarios/': {
-        get: {
-            res: {
-                /**
-                 * Successful Response
-                 */
-                200: Array<ObjectInfoModel>;
-            };
-        };
-    };
-    '/api/requests/{request_id}': {
-        get: {
-            req: GetReportStatusApiRequestsRequestIdGetData;
-            res: {
-                /**
-                 * Successful Response
-                 */
-                200: unknown;
-                /**
-                 * Validation Error
-                 */
-                422: HTTPValidationError;
-            };
-        };
-    };
-    '/api/requests/api/requests': {
+    '/health': {
         get: {
             res: {
                 /**

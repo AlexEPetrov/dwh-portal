@@ -41,6 +41,15 @@ from domains.catalog.services.lineage_service import LineageService
 assets_router = APIRouter()
 
 
+def _parse_asset_types(raw: str | None) -> list[AssetType] | None:
+    if not raw:
+        return None
+    values = [part.strip() for part in raw.split(",") if part.strip()]
+    if not values:
+        return None
+    return [AssetType(value) for value in values]
+
+
 @assets_router.get(
     "/lineage/roots", response_model=LineageRootsResponse, operation_id="listLineageRoots"
 )
@@ -66,7 +75,11 @@ def list_assets(
     q: str | None = None,
     database: str | None = None,
     schema: str | None = Query(default=None, alias="schema"),
-    type: str | None = Query(default=None, alias="type"),
+    type: str | None = Query(
+        default=None,
+        alias="type",
+        description="Asset type, or comma-separated types (TABLE,VIEW).",
+    ),
     source: str | None = None,
     status: AssetStatus = AssetStatus.ACTIVE,
     changed_since: datetime.datetime | None = None,
@@ -76,12 +89,13 @@ def list_assets(
 ) -> AssetListResponse:
     settings = get_portal_settings()
     resolved_page_size = min(page_size or settings.default_page_size, settings.max_page_size)
-    asset_type = AssetType(type) if type else None
+    asset_types = _parse_asset_types(type)
     query = AssetQuery(
         q=q,
         database=database,
         schema_name=schema,
-        asset_type=asset_type,
+        asset_type=asset_types[0] if asset_types and len(asset_types) == 1 else None,
+        asset_types=asset_types,
         source=source,
         status=status,
         changed_since=changed_since,
@@ -89,11 +103,9 @@ def list_assets(
         page=page,
         page_size=resolved_page_size,
     )
-    items, total = service.list_assets(query)
-    store = get_portal_store()
+    rows, total = service.list_page(query)
     mapped = [
-        asset_list_item(asset, store.latest_snapshot(asset.id), service.latest_change_at(asset.id))
-        for asset in items
+        asset_list_item(row.asset, row.snapshot, row.last_changed_at) for row in rows
     ]
     return AssetListResponse(
         items=mapped,

@@ -1,46 +1,27 @@
 from uuid import uuid4
 
+from fastapi import FastAPI, Request
 from starlette.middleware.base import RequestResponseEndpoint
 
-from shared.request_manager import (
-    correlation_id_ctx_var,
-    request_id_ctx_var,
+from shared.request_context import (
+    bind_request_ids,
     get_correlation_id,
     get_request_id,
+    reset_request_ids,
 )
 
-# CORRELATION_ID_CTX_KEY = 'correlation_id'
-# REQUEST_ID_CTX_KEY = 'request_id'
 
-# _correlation_id_ctx_var: ContextVar[str] = ContextVar(CORRELATION_ID_CTX_KEY, default=None)
-# _request_id_ctx_var: ContextVar[str] = ContextVar(REQUEST_ID_CTX_KEY, default=None)
+def register(app: FastAPI) -> None:
+    """Attach request correlation headers to the Portal FastAPI app."""
 
-
-# def get_correlation_id() -> str:
-#     return _correlation_id_ctx_var.get()
-
-
-# def get_request_id() -> str:
-#     return _request_id_ctx_var.get()
-
-from api.host import app
-from fastapi import Request
-
-
-@app.middleware("http")
-async def request_correlation_id(request: Request, call_next: RequestResponseEndpoint):
-
-    correlation_id = correlation_id_ctx_var.set(
-        request.headers.get("X-Correlation-ID", str(uuid4()))
-    )
-    request_id = request_id_ctx_var.set(str(uuid4()))
-
-    response = await call_next(request)
-
-    response.headers["X-Correlation-ID"] = get_correlation_id()
-    response.headers["X-Request-ID"] = get_request_id()
-
-    correlation_id_ctx_var.reset(correlation_id)
-    request_id_ctx_var.reset(request_id)
-
-    return response
+    @app.middleware("http")
+    async def request_correlation_id(request: Request, call_next: RequestResponseEndpoint):
+        correlation_token, request_token = bind_request_ids(
+            correlation_id=request.headers.get("X-Correlation-ID", str(uuid4())),
+            request_id=str(uuid4()),
+        )
+        response = await call_next(request)
+        response.headers["X-Correlation-ID"] = get_correlation_id() or ""
+        response.headers["X-Request-ID"] = get_request_id() or ""
+        reset_request_ids(correlation_token, request_token)
+        return response

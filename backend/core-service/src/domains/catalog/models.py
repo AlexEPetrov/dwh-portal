@@ -114,6 +114,59 @@ class AssetSnapshot(BaseModel):
     structure_hash: str | None = None
 
 
+class AssetListEntry(BaseModel):
+    """One catalog-list row: the asset plus the fields the grid renders beside it."""
+
+    asset: Asset
+    snapshot: AssetSnapshot | None = None
+    last_changed_at: datetime.datetime | None = None
+
+
+class AssetCountSummary(BaseModel):
+    """Active-catalog counts used by the Overview screen."""
+
+    total: int
+    tables: int
+    views: int
+
+
+class ChangeCountSummary(BaseModel):
+    """Change-event totals for a time window."""
+
+    total: int
+    added: int
+    changed: int
+    removed: int
+
+
+class SchemaStorageRow(BaseModel):
+    schema_name: str
+    total_bytes: int
+    description: str | None = None
+
+
+class StorageObjectRow(BaseModel):
+    asset_id: uuid.UUID
+    qualified_name: str
+    display_name: str
+    asset_type: AssetType
+    total_bytes: int
+    table_bytes: int | None = None
+    index_bytes: int | None = None
+    row_estimate: int | None = None
+
+
+class StorageSummary(BaseModel):
+    """Storage aggregates from the latest snapshot of each sized object."""
+
+    as_of: datetime.datetime | None = None
+    table_bytes: int = 0
+    index_bytes: int = 0
+    total_bytes: int = 0
+    by_schema: list[SchemaStorageRow] = Field(default_factory=list)
+    largest_objects: list[StorageObjectRow] = Field(default_factory=list)
+
+
 class Relationship(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     from_asset_id: uuid.UUID
@@ -156,7 +209,10 @@ class AssetQuery(BaseModel):
     q: str | None = None
     database: str | None = None
     schema_name: str | None = None
+    # Single-type filter used by collectors and simple callers.
     asset_type: AssetType | None = None
+    # Multi-type filter for the catalog list screen (comma-separated API type=).
+    asset_types: list[AssetType] | None = None
     source: str | None = None
     status: AssetStatus = AssetStatus.ACTIVE
     changed_since: datetime.datetime | None = None

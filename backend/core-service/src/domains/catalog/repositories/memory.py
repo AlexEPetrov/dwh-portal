@@ -4,19 +4,36 @@ import datetime
 import threading
 import uuid
 
+from collections import defaultdict
+
 from domains.catalog.models import (
     Asset,
     AssetColumn,
+    AssetCountSummary,
+    AssetListEntry,
     AssetQuery,
     AssetSnapshot,
     AssetStatus,
+    AssetType,
+    ChangeCountSummary,
     ChangeEvent,
     ChangeQuery,
+    ChangeType,
     CollectionRun,
     DiscoveryDiagnostic,
     Relationship,
     RelationshipType,
+    SchemaStorageRow,
+    StorageObjectRow,
+    StorageSummary,
 )
+
+_STORAGE_TYPES = {
+    AssetType.TABLE,
+    AssetType.VIEW,
+    AssetType.MATERIALIZED_VIEW,
+    AssetType.STORAGE_LOCATION,
+}
 
 
 class InMemoryPortalStore:
@@ -75,7 +92,10 @@ class InMemoryPortalStore:
             items = [item for item in items if item.deleted_at is None]
         elif query.status == AssetStatus.DELETED:
             items = [item for item in items if item.deleted_at is not None]
-        if query.asset_type is not None:
+        if query.asset_types:
+            allowed = set(query.asset_types)
+            items = [item for item in items if item.asset_type in allowed]
+        elif query.asset_type is not None:
             items = [item for item in items if item.asset_type == query.asset_type]
         if query.source:
             items = [item for item in items if item.source_provider == query.source]
@@ -117,6 +137,113 @@ class InMemoryPortalStore:
         start = max(query.page - 1, 0) * query.page_size
         page_items = [item.model_copy(deep=True) for item in items[start : start + query.page_size]]
         return page_items, total
+
+    def list_asset_page(self, query: AssetQuery) -> tuple[list[AssetListEntry], int]:
+        assets, total = self.list_assets(query)
+        return [
+            AssetListEntry(
+                asset=asset,
+                snapshot=self.latest_snapshot(asset.id),
+                last_changed_at=self._latest_change_at(asset.id),
+            )
+            for asset in assets
+        ], total
+
+    def count_assets(self) -> AssetCountSummary:
+        active = [item for item in self.assets.values() if item.deleted_at is None]
+        tables = sum(1 for item in active if item.asset_type == AssetType.TABLE)
+        views = sum(
+            1
+            for item in active
+            if item.asset_type in {AssetType.VIEW, AssetType.MATERIALIZED_VIEW}
+        )
+        return AssetCountSummary(total=len(active), tables=tables, views=views)
+
+    def summarize_storage(self, *, largest_limit: int = 20) -> StorageSummary:
+        by_schema: dict[str, int] = defaultdict(int)
+        largest: list[StorageObjectRow] = []
+        table_bytes = 0
+        index_bytes = 0
+        total_bytes = 0
+        as_of: datetime.datetime | None = None
+        for asset in self.assets.values():
+            if asset.deleted_at is not None or asset.asset_type not in _STORAGE_TYPES:
+                continue
+            snapshot = self.latest_snapshot(asset.id)
+            if snapshot is None:
+                continue
+            as_of = snapshot.snapshot_at if as_of is None else max(as_of, snapshot.snapshot_at)
+            table_bytes += snapshot.table_bytes or 0
+            index_bytes += snapshot.index_bytes or 0
+            item_total = snapshot.total_bytes or (snapshot.table_bytes or 0) + (
+                snapshot.index_bytes or 0
+            )
+            total_bytes += item_total
+            schema_name = asset.attributes.get("schema") or asset.asset_type.value
+            by_schema[str(schema_name)] += item_total
+            largest.append(
+                StorageObjectRow(
+                    asset_id=asset.id,
+                    qualified_name=asset.qualified_name,
+                    display_name=str(
+                        asset.attributes.get("display_name") or asset.qualified_name
+                    ),
+                    asset_type=asset.asset_type,
+                    total_bytes=item_total,
+                    table_bytes=snapshot.table_bytes,
+                    index_bytes=snapshot.index_bytes,
+                    row_estimate=snapshot.row_estimate,
+                )
+            )
+        largest.sort(key=lambda item: item.total_bytes, reverse=True)
+        schema_rows = [
+            SchemaStorageRow(schema_name=name, total_bytes=size)
+            for name, size in sorted(by_schema.items(), key=lambda item: item[1], reverse=True)
+        ]
+        return StorageSummary(
+            as_of=as_of,
+            table_bytes=table_bytes,
+            index_bytes=index_bytes,
+            total_bytes=total_bytes,
+            by_schema=schema_rows,
+            largest_objects=largest[:largest_limit],
+        )
+
+    def count_changes(
+        self,
+        *,
+        since: datetime.datetime | None = None,
+        until: datetime.datetime | None = None,
+    ) -> ChangeCountSummary:
+        items = list(self.changes.values())
+        if since is not None:
+            items = [item for item in items if item.detected_at >= since]
+        if until is not None:
+            items = [item for item in items if item.detected_at <= until]
+        added = sum(1 for item in items if item.change_type == ChangeType.ADDED)
+        removed = sum(1 for item in items if item.change_type == ChangeType.REMOVED)
+        return ChangeCountSummary(
+            total=len(items),
+            added=added,
+            changed=len(items) - added - removed,
+            removed=removed,
+        )
+
+    def schema_descriptions(self) -> dict[str, str]:
+        descriptions: dict[str, str] = {}
+        for item in self.assets.values():
+            if item.deleted_at is not None or item.asset_type != AssetType.SCHEMA:
+                continue
+            if not item.description:
+                continue
+            name = item.attributes.get("schema") or item.name
+            if isinstance(name, str):
+                descriptions[name] = item.description
+        return descriptions
+
+    def _latest_change_at(self, asset_id: uuid.UUID) -> datetime.datetime | None:
+        events, _ = self.list_changes(ChangeQuery(asset_id=asset_id, page=1, page_size=1))
+        return events[0].detected_at if events else None
 
     def replace_columns(self, asset_id: uuid.UUID, columns: list[AssetColumn]) -> None:
         with self._lock:

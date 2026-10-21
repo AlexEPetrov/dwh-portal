@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from domains.catalog.models import Asset, AssetColumn, AssetQuery, ChangeQuery
+from domains.catalog.models import Asset, AssetColumn, AssetListEntry, AssetQuery, ChangeQuery
 from domains.catalog.repositories.ports import PortalStore
 
 
@@ -15,6 +15,14 @@ class AssetService:
 
     def list_assets(self, query: AssetQuery) -> tuple[list[Asset], int]:
         return self._store.list_assets(query)
+
+    def list_page(self, query: AssetQuery) -> tuple[list[AssetListEntry], int]:
+        """Return one grid page with its latest size snapshot and change time.
+
+        Callers that need the asset alone keep using ``list_assets``. The list
+        screen uses this so size and change time are not loaded per row.
+        """
+        return self._store.list_asset_page(query)
 
     def get_asset(self, asset_id: uuid.UUID) -> Asset | None:
         return self._store.get_asset(asset_id)

@@ -3,47 +3,16 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { GetScenariosListApiManagementScenariosGetResponse, GetReportStatusApiRequestsRequestIdGetData, GetReportStatusApiRequestsRequestIdGetResponse, GetRequestsApiRequestsApiRequestsGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListLineageRootsResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, ListAssetLoadsData, ListAssetLoadsResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse, RunPortalCollectData, RunPortalCollectResponse } from './types.gen';
+import type { HealthCheckHealthGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListLineageRootsResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, ListAssetLoadsData, ListAssetLoadsResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse, RunPortalCollectData, RunPortalCollectResponse } from './types.gen';
 
 /**
- * Get Scenarios List
- * Возвращает список сценариев
- * @returns ObjectInfoModel Successful Response
- * @throws ApiError
- */
-export const getScenariosListApiManagementScenariosGet = (): CancelablePromise<GetScenariosListApiManagementScenariosGetResponse> => { return __request(OpenAPI, {
-    method: 'GET',
-    url: '/api/management/scenarios/'
-}); };
-
-/**
- * Get Report Status
- * Получение статуса фоновой операции
- * @param data The data for the request.
- * @param data.requestId
+ * Health Check
  * @returns unknown Successful Response
  * @throws ApiError
  */
-export const getReportStatusApiRequestsRequestIdGet = (data: GetReportStatusApiRequestsRequestIdGetData): CancelablePromise<GetReportStatusApiRequestsRequestIdGetResponse> => { return __request(OpenAPI, {
+export const healthCheckHealthGet = (): CancelablePromise<HealthCheckHealthGetResponse> => { return __request(OpenAPI, {
     method: 'GET',
-    url: '/api/requests/{request_id}',
-    path: {
-        request_id: data.requestId
-    },
-    errors: {
-        422: 'Validation Error'
-    }
-}); };
-
-/**
- * Get Requests
- * Получение списка фоновых операций
- * @returns unknown Successful Response
- * @throws ApiError
- */
-export const getRequestsApiRequestsApiRequestsGet = (): CancelablePromise<GetRequestsApiRequestsApiRequestsGetResponse> => { return __request(OpenAPI, {
-    method: 'GET',
-    url: '/api/requests/api/requests'
+    url: '/health'
 }); };
 
 /**
@@ -162,7 +131,7 @@ export const listLineageRoots = (): CancelablePromise<ListLineageRootsResponse> 
  * @param data.q
  * @param data.database
  * @param data.schema
- * @param data.type
+ * @param data.type Asset type, or comma-separated types (TABLE,VIEW).
  * @param data.source
  * @param data.status
  * @param data.changedSince

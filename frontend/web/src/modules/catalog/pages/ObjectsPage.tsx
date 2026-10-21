@@ -3,7 +3,7 @@ import type { AssetListItem } from '@shared/api/generated';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FilterChipGroup,
@@ -25,49 +25,39 @@ const TYPE_TOGGLES = [
   { key: 'VIEW', label: 'View' },
 ] as const;
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = ['10', '25', '50', '100'] as const;
 
 const ObjectsPage = () => {
   const navigate = useNavigate();
   /** Empty = show all types. Client/UI state — stays in useState, not Query. */
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [q, setQ] = useState('');
+  const deferredQ = useDeferredValue(q.trim());
   const [status, setStatus] = useState<'active' | 'deleted'>('active');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  const typeFilter = selectedTypes.length > 0 ? selectedTypes.join(',') : undefined;
 
   const assetsQuery = useQuery({
-    queryKey: ['catalog', 'assets', { status }],
-    queryFn: () => listAssets({ status, page: 1, pageSize: 200 }),
+    queryKey: ['catalog', 'assets', { status, q: deferredQ, typeFilter, page, pageSize }],
+    queryFn: () =>
+      listAssets({
+        status,
+        page,
+        pageSize,
+        q: deferredQ || undefined,
+        type: typeFilter,
+      }),
   });
 
   const items = assetsQuery.data?.items ?? [];
+  const total = assetsQuery.data?.total ?? 0;
   const freshness = assetsQuery.data?.collector_freshness ?? [];
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return items.filter((item) => {
-      if (selectedTypes.length > 0 && !selectedTypes.includes(item.asset_type)) {
-        return false;
-      }
-      if (!needle) {
-        return true;
-      }
-      const haystack = [item.display_name, item.name, item.qualified_name, item.description]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(needle);
-    });
-  }, [items, selectedTypes, q]);
-
-  const pageItems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
 
   useEffect(() => {
     setPage(1);
-  }, [selectedTypes, q, status]);
+  }, [selectedTypes, deferredQ, status]);
 
   const toggleType = (type: string) => {
     setSelectedTypes((prev) =>
@@ -190,12 +180,17 @@ const ObjectsPage = () => {
         rowKey="id"
         loading={assetsQuery.isPending || assetsQuery.isFetching}
         columns={columns}
-        dataSource={pageItems}
+        dataSource={items}
         pagination={{
           current: page,
-          pageSize: PAGE_SIZE,
-          total: filtered.length,
-          onChange: setPage,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          pageSizeOptions: [...PAGE_SIZE_OPTIONS],
+          onChange: (nextPage, nextSize) => {
+            setPage(nextPage);
+            setPageSize(nextSize);
+          },
         }}
         onRow={(row) => ({
           onClick: () => navigate(`/objects/${row.id}`),

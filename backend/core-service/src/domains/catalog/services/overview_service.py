@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 
-from domains.catalog.models import AssetQuery, AssetStatus, AssetType, ChangeQuery, ChangeType
+from domains.catalog.models import ChangeQuery
 from domains.catalog.repositories.ports import PortalStore
 from domains.catalog.services.collection_status_service import CollectionStatusService
 from domains.catalog.services.storage_service import StorageService
@@ -17,27 +17,22 @@ class OverviewService:
         self._status = CollectionStatusService(store, stale_after_hours=stale_after_hours)
 
     def get_overview(self) -> dict:
-        """Compose counts, recent changes, and per-schema storage with schema comments."""
-        objects, _ = self._store.list_assets(
-            AssetQuery(status=AssetStatus.ACTIVE, page=1, page_size=10_000)
-        )
-        tables = [item for item in objects if item.asset_type == AssetType.TABLE]
-        views = [
-            item
-            for item in objects
-            if item.asset_type in {AssetType.VIEW, AssetType.MATERIALIZED_VIEW}
-        ]
+        """Compose counts, recent changes, and per-schema storage with schema comments.
+
+        Asset and change totals are full-catalog aggregates. The recent-change
+        list still returns only the newest eight events for the page.
+        """
+        counts = self._store.count_assets()
         since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
-        recent, _ = self._store.list_changes(ChangeQuery(since=since, page=1, page_size=200))
-        added = sum(1 for item in recent if item.change_type == ChangeType.ADDED)
-        removed = sum(1 for item in recent if item.change_type == ChangeType.REMOVED)
-        changed = len(recent) - added - removed
+        change_counts = self._store.count_changes(since=since)
+        recent, _ = self._store.list_changes(ChangeQuery(since=since, page=1, page_size=8))
         storage = self._storage.current()
+        descriptions = self._store.schema_descriptions()
         return {
             "asset_counts": {
-                "total": len(objects),
-                "tables": len(tables),
-                "views": len(views),
+                "total": counts.total,
+                "tables": counts.tables,
+                "views": counts.views,
             },
             "storage_totals": {
                 "total_bytes": storage["total_bytes"],
@@ -45,29 +40,15 @@ class OverviewService:
                 "index_bytes": storage["index_bytes"],
             },
             "recent_changes": {
-                "total": len(recent),
-                "added": added,
-                "changed": changed,
-                "removed": removed,
-                "items": recent[:8],
+                "total": change_counts.total,
+                "added": change_counts.added,
+                "changed": change_counts.changed,
+                "removed": change_counts.removed,
+                "items": recent,
             },
             "collector_freshness": self._status.list_status(),
-            "storage_by_schema": self._with_schema_descriptions(storage["by_schema"]),
+            "storage_by_schema": [
+                {**row, "description": descriptions.get(row["schema_name"])}
+                for row in storage["by_schema"]
+            ],
         }
-
-    def _with_schema_descriptions(self, rows: list[dict]) -> list[dict]:
-        """Attach each schema asset comment to the matching storage row."""
-        schemas, _ = self._store.list_assets(
-            AssetQuery(
-                asset_type=AssetType.SCHEMA,
-                status=AssetStatus.ACTIVE,
-                page=1,
-                page_size=10_000,
-            )
-        )
-        descriptions: dict[str, str] = {}
-        for item in schemas:
-            name = item.attributes.get("schema") or item.name
-            if isinstance(name, str) and item.description:
-                descriptions[name] = item.description
-        return [{**row, "description": descriptions.get(row["schema_name"])} for row in rows]

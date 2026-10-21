@@ -5,7 +5,7 @@ import logging.config
 import os
 from typing import Dict, Optional
 
-from shared.request_manager import get_correlation_id, get_request_id
+from shared.request_context import get_correlation_id, get_request_id
 
 # ограничиваем объем информации, записываемой в лог
 _skip_fields = {
