@@ -1,6 +1,7 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { ExtensionCategory, Graph, register, type GraphOptions } from '@antv/g6';
 import { ReactNode } from '@antv/g6-extension-react';
+import { useThemeMode } from '@asset-management/app-shell/theme';
 import { Empty } from 'antd';
 import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -60,6 +61,8 @@ const LineageMapView = ({
   rootsOverview = false,
 }: Props) => {
   const navigate = useNavigate();
+  const { resolvedMode } = useThemeMode();
+  const dark = resolvedMode === 'dark';
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
   const drawQueue = useRef(Promise.resolve());
@@ -151,7 +154,6 @@ const LineageMapView = ({
         return;
       }
       const initial = modelRef.current;
-      const dark = document.documentElement.dataset.theme === 'dark';
       const instance = new Graph({
         container,
         width: container.clientWidth,
@@ -210,7 +212,7 @@ const LineageMapView = ({
           type: 'polyline',
           style: {
             stroke: (datum: { data?: { incident?: boolean } }) =>
-              datum.data?.incident ? '#3b82f6' : dark ? '#475569' : '#b7b7b7',
+              datum.data?.incident ? '#3b82f6' : dark ? '#64748b' : '#b7b7b7',
             lineWidth: (datum: { data?: { incident?: boolean } }) =>
               datum.data?.incident ? 1.8 : 1.15,
             radius: 12,
@@ -245,7 +247,8 @@ const LineageMapView = ({
         plugins: [
           {
             type: 'grid-line',
-            stroke: '#edf0f5',
+            // Light hairline in light mode; muted slate in dark (never near-white).
+            stroke: dark ? 'rgba(148, 163, 184, 0.14)' : '#edf0f5',
             size: 20,
             follow: { translate: true, zoom: false },
             border: false,
@@ -311,7 +314,7 @@ const LineageMapView = ({
         graphRef.current = null;
       }
     };
-  }, [active]);
+  }, [active, dark]);
 
   useEffect(() => {
     const graph = graphRef.current;

@@ -30,6 +30,7 @@
     "./styles.css": "./src/styles.css",
     "./navigation": "./src/navigation/index.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./theme": "./src/theme/index.ts",
     "./user": "./src/user/index.ts",
     "./help": "./src/help/index.ts"
   }

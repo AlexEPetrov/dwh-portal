@@ -51,6 +51,8 @@
 
 .lineage-asset-chip.is-process {
   border-style: dashed;
+  --lineage-wash: rgba(8, 151, 156, 0.08);
+  background: var(--lineage-wash);
 }
 
 .lineage-asset-chip.is-unresolved {
@@ -313,6 +315,13 @@
   background:
     radial-gradient(900px 420px at 12% -10%, rgba(37, 99, 235, 0.18), transparent 60%),
     linear-gradient(180deg, #0b1220 0%, #020617 48%);
+}
+
+/* G6 grid-line paints via inline backgroundImage (#eee by default) — force mute in dark. */
+[data-theme='dark'] .lineage-map .g6-grid-line {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px) !important;
 }
 
 [data-theme='dark'] .lineage-map .g6-toolbar {

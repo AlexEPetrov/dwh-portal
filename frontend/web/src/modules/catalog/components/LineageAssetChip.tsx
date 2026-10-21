@@ -1,7 +1,7 @@
 import { AimOutlined, ExperimentOutlined, ExportOutlined } from '@ant-design/icons';
 import { Tag, Tooltip, Typography } from 'antd';
 import type { CSSProperties, KeyboardEvent, MouseEvent, MouseEventHandler, ReactNode } from 'react';
-import { TYPE_ACCENT, TYPE_COLOR, TYPE_WASH } from './lineageFlow';
+import { TYPE_ACCENT, TYPE_COLOR } from './lineageFlow';
 
 type Props = {
   assetType: string;
@@ -89,7 +89,6 @@ const LineageAssetChip = ({
       style={
         {
           '--lineage-accent': accent,
-          ...(isProcess && !unresolved ? { '--lineage-wash': TYPE_WASH.PROCESS } : null),
           ...style,
         } as CSSProperties
       }
