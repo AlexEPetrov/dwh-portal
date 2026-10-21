@@ -9,9 +9,9 @@ import {
   FilterClear,
   FilterSep,
   FilterToolbar,
-} from '../components/FilterToolbar';
-import FreshnessBar from '../components/FreshnessBar';
-import { formatDateTime } from '../format';
+  FreshnessBar,
+  formatDateTime,
+} from '@shared/ui/portal';
 
 const OP_TOGGLES = [
   { key: 'ADDED', label: 'Added' },

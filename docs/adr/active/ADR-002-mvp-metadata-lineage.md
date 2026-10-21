@@ -7,36 +7,39 @@
 
 ## 1. Context
 
-The DWH already contains useful metadata, but there is no complete metadata platform or automated lineage layer yet.
+В DWH уже есть полезные метаданные, но полноценной платформы метаданных и
+автоматизированного слоя lineage пока нет.
 
-Available sources of truth today:
+Актуальные источники истины:
 
-1. PostgreSQL system catalog and comments for database objects.
-2. `sys.data_extraction_sources` as the root registry for ETL ingestion definitions.
-3. `sys.data_source_items` as the referenced business/source-system registry.
-4. `sys.data_load_schedules` as the referenced load schedule registry.
-5. File storage described by `storage_options`.
-6. Loader implementations described by `load_options`.
+1. Системный каталог PostgreSQL и комментарии к объектам БД.
+2. `sys.data_extraction_sources` — корневой реестр определений ETL-ingestion.
+3. `sys.data_source_items` — реестр бизнес-/source-систем.
+4. `sys.data_load_schedules` — реестр расписаний загрузки.
+5. Файловое хранилище, описываемое `storage_options`.
+6. Реализации загрузчиков, описываемые `load_options`.
 
-OpenMetadata is a planned future metadata platform, but MVP development must not depend on its deployment.
+OpenMetadata планируется как будущая платформа метаданных, но разработка MVP
+не должна зависеть от его развёртывания.
 
-The MVP must support:
+MVP должен поддерживать:
 
-- browsing DWH objects;
-- filtering and search;
-- storage usage and historical snapshots;
-- source-to-DWH lineage;
-- detection of added, removed and structurally changed database objects;
-- a stable Python backend that can later use OpenMetadata as a provider.
+- просмотр объектов DWH;
+- фильтрацию и поиск;
+- использование хранилища и исторические снимки;
+- lineage от источника до DWH;
+- обнаружение добавленных, удалённых и структурно изменённых объектов БД;
+- стабильный Python-backend, который позже сможет использовать OpenMetadata
+  как provider.
 
-The following are explicitly postponed to Phase 2:
+Явно отложено на Phase 2:
 
-- AI dialogue;
-- database usage/activity analytics from query logs.
+- AI-диалог;
+- аналитика использования/активности БД по query logs.
 
-## 2. Existing ETL root entity
+## 2. Существующая корневая сущность ETL
 
-The root ingestion registry is `sys.data_extraction_sources`.
+Корневой реестр ingestion — `sys.data_extraction_sources`.
 
 ```sql
 CREATE TABLE sys.data_extraction_sources (
@@ -64,7 +67,7 @@ CREATE TABLE sys.data_extraction_sources (
 );
 ```
 
-For the current MVP, supported extraction is primarily email:
+Для текущего MVP поддерживаемая extraction в основном email:
 
 ```text
 extract_source_type_id = 1
@@ -73,7 +76,7 @@ storage_options         = ExtractStorageOptions
 load_options            = ExtractLoadOptions
 ```
 
-`load_options.handlers[]` currently supports:
+`load_options.handlers[]` сейчас поддерживает:
 
 - `PythonV0`;
 - `Python`;
@@ -81,9 +84,11 @@ load_options            = ExtractLoadOptions
 
 ## 3. Decision
 
-### 3.1 DWH Portal owns a canonical metadata model
+### 3.1 DWH Portal владеет канонической моделью метаданных
 
-The portal backend will expose its own stable domain model. It will not expose PostgreSQL catalog rows, ETL JSON structures, or future OpenMetadata entities directly to the frontend.
+Backend портала экспонирует собственную стабильную доменную модель. Он не
+отдаёт фронтенду напрямую строки каталога PostgreSQL, ETL JSON-структуры или
+будущие сущности OpenMetadata.
 
 ```mermaid
 flowchart LR
@@ -96,13 +101,16 @@ flowchart LR
     API --> UI[DWH Portal UI]
 ```
 
-The canonical model is intentionally smaller than OpenMetadata and specific enough for the portal product.
+Каноническая модель намеренно уже OpenMetadata и достаточно специфична для
+продукта портала.
 
-### 3.2 Metadata collection is snapshot-based
+### 3.2 Сбор метаданных — на основе снимков
 
-The UI must not execute expensive metadata/statistics queries against the DWH on page load.
+UI не должен выполнять тяжёлые запросы метаданных/статистики к DWH при загрузке
+страницы.
 
-Collectors run periodically, initially once per day, and persist normalized snapshots in the Portal DB.
+Collectors запускаются периодически, изначально раз в сутки, и сохраняют
+нормализованные снимки в Portal DB.
 
 ```mermaid
 flowchart LR
@@ -120,9 +128,9 @@ flowchart LR
     DIFF --> PDB
 ```
 
-### 3.3 Source-to-DWH lineage is reconstructed from the ETL registry
+### 3.3 Lineage source-to-DWH восстанавливается из реестра ETL
 
-The first supported lineage chain is:
+Первая поддерживаемая цепочка lineage:
 
 ```text
 Data source
@@ -132,7 +140,7 @@ Data source
   -> DWH table
 ```
 
-Example:
+Пример:
 
 ```mermaid
 flowchart LR
@@ -142,9 +150,10 @@ flowchart LR
     LOAD --> RAW[raw.ice_brent]
 ```
 
-The graph is allowed to be incomplete. Missing target metadata must not invalidate the entire source definition.
+Граф может быть неполным. Отсутствие метаданных о целевом объекте не должно
+инвалидировать всё определение источника.
 
-## 4. Canonical domain model
+## 4. Каноническая доменная модель
 
 ### 4.1 Asset
 
@@ -163,7 +172,7 @@ Asset
 - attributes: JSON                 # provider-specific non-core metadata
 ```
 
-Initial `asset_type` values:
+Начальные значения `asset_type`:
 
 ```text
 DATABASE
@@ -190,7 +199,7 @@ Relationship
 - attributes: JSON
 ```
 
-Initial relationship types:
+Начальные типы связей:
 
 ```text
 CONTAINS
@@ -202,49 +211,54 @@ DERIVED_FROM
 PARENT_OF
 ```
 
-Only data-flow relationships (`EXTRACTS_TO`, `READS_FROM`, `WRITES_TO`, `DERIVED_FROM`) are considered lineage edges.
+Только data-flow связи (`EXTRACTS_TO`, `READS_FROM`, `WRITES_TO`,
+`DERIVED_FROM`) считаются рёбрами lineage.
 
-`PARENT_OF` is structural metadata and is used for `sys.data_extraction_sources.parent_id`.
+`PARENT_OF` — структурные метаданные; используются для
+`sys.data_extraction_sources.parent_id`.
 
-## 5. Mapping `sys.data_extraction_sources`
+## 5. Маппинг `sys.data_extraction_sources`
 
-| Registry field | Canonical representation |
+| Поле реестра | Каноническое представление |
 |---|---|
 | `id` | `EXTRACTION_SOURCE.native_id` |
 | `name` | `EXTRACTION_SOURCE.name` |
 | `descr` | `EXTRACTION_SOURCE.description` |
-| `access_level` | asset attribute |
-| `is_active` | asset attribute |
-| `extract_source_type_id` | asset attribute + extractor dispatch key |
-| `extract_options` | parsed source-specific attributes |
-| `storage_options` | materialized as `STORAGE_LOCATION` where possible |
-| `load_options` | one or more `PROCESS` assets and target discovery |
-| `load_schedule_id` | process/source attribute |
-| `data_source_id` | relationship to `DATA_SOURCE` |
-| `tags` | normalized tags in attributes for MVP |
-| `parent_id` | `PARENT_OF` relationship |
-| `comment` | secondary human-readable annotation |
+| `access_level` | атрибут asset |
+| `is_active` | атрибут asset |
+| `extract_source_type_id` | атрибут asset + ключ диспетчеризации extractor |
+| `extract_options` | разобранные source-specific атрибуты |
+| `storage_options` | материализуются как `STORAGE_LOCATION`, где возможно |
+| `load_options` | один или несколько `PROCESS` assets и обнаружение целей |
+| `load_schedule_id` | атрибут process/source |
+| `data_source_id` | связь с `DATA_SOURCE` |
+| `tags` | нормализованные теги в attributes для MVP |
+| `parent_id` | связь `PARENT_OF` |
+| `comment` | вторичная человекочитаемая аннотация |
 
-## 6. Current option contracts
+## 6. Текущие контракты options
 
 ### 6.1 Email extraction
 
-For `extract_source_type_id = 1`, `extract_options` is interpreted as `ExtractEmailOptions`:
+Для `extract_source_type_id = 1` поле `extract_options` интерпретируется как
+`ExtractEmailOptions`:
 
 ```text
 attachment_patterns
 subject_patterns
 ```
 
-The MVP treats one `data_extraction_sources` row as one logical extraction source/document definition, not as one runtime email attachment.
+MVP считает одну строку `data_extraction_sources` одним логическим определением
+extraction source / документа, а не одним runtime email-вложением.
 
-Runtime files are not individual catalog assets in Phase 1.
+Runtime-файлы не являются отдельными catalog assets в Phase 1.
 
 ### 6.2 Storage
 
-`storage_options` is interpreted as `ExtractStorageOptions`.
+`storage_options` интерпретируется как `ExtractStorageOptions`.
 
-The canonical storage asset represents the logical landing/archive location described by:
+Канонический storage asset представляет логическое landing/archive-расположение,
+описанное полями:
 
 ```text
 path
@@ -255,11 +269,12 @@ need_to_unpack
 comment
 ```
 
-Secrets, credentials and host-specific environment details are not copied into the Portal DB.
+Секреты, credentials и host-specific детали окружения в Portal DB не
+копируются.
 
 ### 6.3 Load handlers
 
-`ExtractLoadOptions.handlers[]` is dispatched by `handler_type`:
+`ExtractLoadOptions.handlers[]` диспетчеризуется по `handler_type`:
 
 ```text
 PythonV0 -> LoadPythonHandlerOption
@@ -267,27 +282,27 @@ Python   -> LoadPythonExtendedHandlerOption
 RestApi  -> LoadRestApiHandlerOption
 ```
 
-Each handler becomes a canonical `PROCESS` asset.
+Каждый handler становится каноническим `PROCESS` asset.
 
-## 7. Loader metadata contract
+## 7. Контракт метаданных загрузчика
 
-### 7.1 Design goal
+### 7.1 Цель проектирования
 
-Lineage discovery must not depend on executing the loader itself.
+Обнаружение lineage не должно зависеть от выполнения самого загрузчика.
 
-Metadata discovery must be:
+Discovery метаданных должен быть:
 
-- side-effect free;
-- fast;
-- deterministic for a given deployed version;
-- callable without loading business data;
-- independent of runtime payloads whenever possible.
+- без побочных эффектов;
+- быстрым;
+- детерминированным для данной развёрнутой версии;
+- вызываемым без загрузки бизнес-данных;
+- по возможности независимым от runtime payloads.
 
-### 7.2 Versioned metadata payload
+### 7.2 Версионированный metadata payload
 
-All loader types must expose the same logical metadata payload.
+Все типы загрузчиков должны отдавать один и тот же логический metadata payload.
 
-Minimum MVP contract:
+Минимальный контракт MVP:
 
 ```python
 {
@@ -305,7 +320,7 @@ Minimum MVP contract:
 }
 ```
 
-Optional fields reserved from the start:
+Опциональные поля зарезервированы с самого начала:
 
 ```python
 {
@@ -317,11 +332,12 @@ Optional fields reserved from the start:
 }
 ```
 
-`writes_to` is required for a lineage-enabled loader. Multiple targets are supported.
+`writes_to` обязателен для загрузчика с поддержкой lineage. Несколько целей
+поддерживаются.
 
-### 7.3 Target reference
+### 7.3 Ссылка на цель
 
-MVP target reference:
+MVP-ссылка на цель:
 
 ```python
 {
@@ -332,32 +348,34 @@ MVP target reference:
 }
 ```
 
-The collector resolves this reference against the DWH catalog snapshot.
+Collector разрешает эту ссылку относительно снимка каталога DWH.
 
-A target that cannot be resolved is stored as an unresolved lineage reference and reported diagnostically; the collector run does not fail globally.
+Неразрешённая цель сохраняется как unresolved lineage reference и
+диагностируется; прогон collector не падает глобально.
 
-## 8. Python handler discovery
+## 8. Discovery для Python handler
 
-### 8.1 Module identity
+### 8.1 Идентичность модуля
 
-`LoadPythonHandlerOption.module` and `LoadPythonExtendedHandlerOption.module` are treated as the full import path of a Python module.
+`LoadPythonHandlerOption.module` и `LoadPythonExtendedHandlerOption.module`
+трактуются как полный import path Python-модуля.
 
-Example:
+Пример:
 
 ```text
 company_dwh.loaders.market_data.ice_brent
 ```
 
-### 8.2 Required metadata entry point
+### 8.2 Обязательная точка входа метаданных
 
-For MVP, the module itself must expose a module-level function:
+Для MVP модуль должен экспонировать функцию на уровне модуля:
 
 ```python
 def get_metadata() -> dict:
     ...
 ```
 
-Example:
+Пример:
 
 ```python
 def get_metadata() -> dict:
@@ -376,39 +394,42 @@ def get_metadata() -> dict:
     }
 ```
 
-### 8.3 Why module-level `get_metadata()`
+### 8.3 Почему module-level `get_metadata()`
 
-The MVP deliberately does not instantiate the runtime loader class and does not call `entry_point` for metadata discovery.
+MVP намеренно не инстанцирует runtime-класс загрузчика и не вызывает
+`entry_point` для discovery метаданных.
 
-This avoids:
+Это избегает:
 
-- loader constructor side effects;
-- dependency on runtime context;
-- accidental writes during catalog collection;
-- coupling metadata collection to changing loader class hierarchies.
+- побочных эффектов конструктора загрузчика;
+- зависимости от runtime-контекста;
+- случайных записей во время сбора каталога;
+- связки сбора метаданных с меняющимися иерархиями классов загрузчиков.
 
-`entry_point` remains execution metadata, not metadata-discovery metadata.
+`entry_point` остаётся execution metadata, а не metadata-discovery metadata.
 
-### 8.4 PythonV0 and Python
+### 8.4 PythonV0 и Python
 
-Both `PythonV0` and `Python` use the same metadata discovery convention.
+И `PythonV0`, и `Python` используют одну и ту же конвенцию discovery метаданных.
 
-The difference between legacy and extended runtime handlers must not leak into the canonical lineage model.
+Различие между legacy и extended runtime handlers не должно протекать в
+каноническую модель lineage.
 
-If a legacy module does not implement `get_metadata()`, the process is imported but marked:
+Если legacy-модуль не реализует `get_metadata()`, process импортируется, но
+помечается:
 
 ```text
 metadata_status = MISSING
 lineage_status  = UNRESOLVED
 ```
 
-The ETL job itself remains unaffected.
+Сам ETL-job при этом не затрагивается.
 
-## 9. REST handler discovery
+## 9. Discovery для REST handler
 
-### 9.1 MVP convention
+### 9.1 Конвенция MVP
 
-The existing runtime option is:
+Существующая runtime option:
 
 ```text
 connection_id
@@ -420,45 +441,48 @@ headers
 ...
 ```
 
-To avoid changing the existing configuration immediately, MVP metadata discovery uses the convention:
+Чтобы не менять существующую конфигурацию сразу, discovery метаданных в MVP
+использует конвенцию:
 
 ```text
 GET {resolved_runtime_url_path}/metadata
 ```
 
-Example:
+Пример:
 
 ```text
 runtime:  POST https://loader.internal/api/v1/ice/brent
 metadata: GET  https://loader.internal/api/v1/ice/brent/metadata
 ```
 
-The response follows the same versioned metadata contract as Python `get_metadata()`.
+Ответ следует тому же версионированному контракту метаданных, что и Python
+`get_metadata()`.
 
-### 9.2 Future override
+### 9.2 Будущий override
 
-If the convention proves insufficient, add an optional backward-compatible field:
+Если конвенции окажется недостаточно, добавить опциональное
+обратно-совместимое поле:
 
 ```python
 metadata_url_path: str | None = None
 ```
 
-When provided, it overrides the `/metadata` convention.
+Если задано, оно перекрывает конвенцию `/metadata`.
 
-This field is intentionally not required for MVP.
+Для MVP это поле намеренно не требуется.
 
-### 9.3 Safety
+### 9.3 Безопасность
 
-Metadata discovery calls:
+Вызовы discovery метаданных:
 
-- use `GET` regardless of the runtime method;
-- never send the runtime payload;
-- must not trigger data loading;
-- use a short dedicated timeout;
-- apply a small retry policy;
-- record failures as diagnostics rather than breaking the complete catalog collection.
+- используют `GET` независимо от runtime method;
+- никогда не отправляют runtime payload;
+- не должны запускать загрузку данных;
+- используют короткий отдельный timeout;
+- применяют небольшую retry policy;
+- фиксируют сбои как diagnostics, а не ломают полный сбор каталога.
 
-## 10. Collector flow
+## 10. Поток collector
 
 ```mermaid
 sequenceDiagram
@@ -481,9 +505,9 @@ sequenceDiagram
     C->>P: upsert assets + relationships + diagnostics
 ```
 
-## 11. Portal persistence
+## 11. Persistence портала
 
-Minimum persistence model:
+Минимальная модель persistence:
 
 ```mermaid
 erDiagram
@@ -544,26 +568,28 @@ erDiagram
     }
 ```
 
-## 12. Identity and idempotency
+## 12. Идентичность и идемпотентность
 
-Collectors must be safe to run repeatedly.
+Collectors должны быть безопасны для повторного запуска.
 
-Canonical identities:
+Канонические идентичности:
 
-- PostgreSQL database asset: provider + connection identity + database name;
-- PostgreSQL schema asset: database asset + schema name;
-- PostgreSQL table asset: schema asset + object name;
+- PostgreSQL database asset: provider + connection identity + имя БД;
+- PostgreSQL schema asset: database asset + имя схемы;
+- PostgreSQL table asset: schema asset + имя объекта;
 - extraction source: `sys.data_extraction_sources.id`;
 - data source: `sys.data_source_items.id`;
-- process: extraction source ID + handler ordinal/stable handler key;
-- storage location: normalized storage descriptor;
-- future OpenMetadata asset: OpenMetadata entity ID mapped to canonical asset.
+- process: ID extraction source + ordinal handler / стабильный ключ handler;
+- storage location: нормализованный дескриптор хранилища;
+- будущий OpenMetadata asset: ID сущности OpenMetadata, отображённый на
+  канонический asset.
 
-No collector creates a new canonical asset merely because a display name changes.
+Ни один collector не создаёт новый канонический asset только из-за смены
+отображаемого имени.
 
-## 13. Object-change detection
+## 13. Обнаружение изменений объектов
 
-Phase 1 tracks:
+Phase 1 отслеживает:
 
 ```text
 ADDED
@@ -573,7 +599,7 @@ STRUCTURE_CHANGED
 DESCRIPTION_CHANGED
 ```
 
-For PostgreSQL tables/views, a normalized structure representation is hashed:
+Для таблиц/views PostgreSQL нормализованное представление структуры хешируется:
 
 ```text
 object type
@@ -583,41 +609,47 @@ nullable
 PK/FK/unique constraints as selected for MVP
 ```
 
-A hash mismatch triggers detailed diff generation.
+Несовпадение хеша запускает генерацию детального diff.
 
-Within the same PostgreSQL database lifecycle, native OID can be used as supporting evidence for rename detection. OID is not treated as globally stable across restore/migration.
+В рамках одного жизненного цикла БД PostgreSQL native OID может использоваться
+как вспомогательное свидетельство для обнаружения rename. OID не считается
+глобально стабильным после restore/migration.
 
-## 14. Failure handling
+## 14. Обработка сбоев
 
-Failures are localized.
+Сбои локализуются.
 
-Examples:
+Примеры:
 
-- Python module cannot be imported -> diagnostic on that process;
-- `get_metadata()` missing -> process visible, lineage unresolved;
-- malformed metadata payload -> diagnostic, no edge created;
-- REST metadata endpoint unavailable -> diagnostic, previous valid lineage retained until stale policy says otherwise;
-- target table not found -> unresolved target diagnostic;
-- S3 unavailable -> storage snapshot marked failed, catalog snapshot can still succeed.
+- Python-модуль не импортируется → diagnostic на этом process;
+- отсутствует `get_metadata()` → process виден, lineage unresolved;
+- некорректный metadata payload → diagnostic, ребро не создаётся;
+- REST metadata endpoint недоступен → diagnostic, предыдущий валидный lineage
+  сохраняется, пока stale policy не скажет иное;
+- целевая таблица не найдена → diagnostic unresolved target;
+- S3 недоступен → storage snapshot помечен как failed, catalog snapshot всё ещё
+  может завершиться успешно.
 
-The daily collection run should produce a completeness summary rather than an all-or-nothing result.
+Ежедневный прогон сбора должен давать сводку полноты, а не результат
+«всё или ничего».
 
 ## 15. Security
 
-MVP requirements:
+Требования MVP:
 
-- DWH collector credentials are read-only;
-- loader metadata discovery must not execute the loader;
-- metadata payload must not contain credentials or secrets;
-- runtime HTTP headers/payload values are not persisted unless explicitly whitelisted;
-- `access_level` is retained as metadata and can later participate in portal authorization;
-- the Portal DB is not a secret store.
+- credentials collector к DWH — только read-only;
+- discovery метаданных загрузчика не должен выполнять загрузчик;
+- metadata payload не должен содержать credentials или secrets;
+- runtime HTTP headers/payload не персистятся, если явно не whitelisted;
+- `access_level` сохраняется как метаданные и позже может участвовать в
+  авторизации портала;
+- Portal DB — не хранилище секретов.
 
-## 16. API impact
+## 16. Влияние на API
 
-The frontend reads only the DWH Portal API.
+Фронтенд читает только DWH Portal API.
 
-Minimum Phase 1 endpoints:
+Минимальные endpoints Phase 1:
 
 ```text
 GET /api/v1/overview
@@ -632,11 +664,12 @@ GET /api/v1/changes/{change_id}
 GET /api/v1/collection-status
 ```
 
-The API contract must not expose provider-specific JSON schemas as its primary model.
+Контракт API не должен экспонировать provider-specific JSON-схемы как основную
+модель.
 
-## 17. OpenMetadata integration later
+## 17. Интеграция OpenMetadata позже
 
-OpenMetadata is integrated behind provider boundaries.
+OpenMetadata подключается за границами provider.
 
 ```mermaid
 flowchart LR
@@ -647,55 +680,60 @@ flowchart LR
     MP -. later .-> OM[OpenMetadata]
 ```
 
-Expected long-term split:
+Ожидаемое долгосрочное разделение:
 
-- OpenMetadata: authoritative catalog, descriptions, governance, standardized lineage;
-- Portal DB: snapshots, historical storage statistics, change history, UI-specific aggregates;
-- DWH/S3 direct providers: live or source-specific operations where appropriate;
-- Portal backend: stable product API and composition layer.
+- OpenMetadata: авторитетный каталог, описания, governance, стандартизированный
+  lineage;
+- Portal DB: снимки, историческая статистика хранилища, история изменений,
+  UI-specific агрегаты;
+- прямые providers DWH/S3: live или source-specific операции там, где это
+  уместно;
+- Portal backend: стабильный product API и слой композиции.
 
 ## 18. Consequences
 
-### Positive
+### Положительные
 
-- MVP can start immediately without OpenMetadata.
-- Loader runtime behavior is not coupled to metadata collection.
-- Python and REST loaders expose one logical metadata contract.
-- Source-to-DWH lineage can be progressively completed.
-- Daily snapshots reduce DWH load and provide historical trends naturally.
-- Frontend survives future migration to OpenMetadata unchanged.
+- MVP можно начинать сразу, без OpenMetadata.
+- Runtime-поведение загрузчика не связано со сбором метаданных.
+- Python и REST loaders отдают один логический контракт метаданных.
+- Lineage source-to-DWH можно достраивать постепенно.
+- Ежедневные снимки снижают нагрузку на DWH и естественно дают исторические
+  тренды.
+- Фронтенд переживает будущую миграцию на OpenMetadata без изменений.
 
-### Negative / cost
+### Отрицательные / стоимость
 
-- A small canonical model and Portal DB must be maintained.
-- Loader modules/services need to implement metadata discovery.
-- Incomplete or outdated metadata contracts must be diagnosed and governed.
-- There is temporary duplication between direct DWH metadata and future OpenMetadata catalog content.
+- Нужно поддерживать небольшую каноническую модель и Portal DB.
+- Модули/сервисы загрузчиков должны реализовать discovery метаданных.
+- Неполные или устаревшие контракты метаданных нужно диагностировать и
+  управлять.
+- Временно дублируются прямые метаданные DWH и будущий каталог OpenMetadata.
 
-## 19. MVP implementation order
+## 19. Порядок реализации MVP
 
-1. Portal DB schema and canonical models.
-2. PostgreSQL catalog collector.
-3. Object list + object card API/UI.
-4. Storage snapshot collector.
-5. `sys.data_extraction_sources` parser.
-6. Python `get_metadata()` contract and resolver.
-7. REST `/metadata` convention and resolver.
-8. Canonical lineage graph persistence.
-9. Lineage UI.
-10. Object-change detection and Changes UI.
-11. Collector diagnostics and hardening.
-12. OpenMetadata provider spike after MVP value is demonstrated.
+1. Схема Portal DB и канонические модели.
+2. Collector каталога PostgreSQL.
+3. API/UI списка объектов и карточки объекта.
+4. Collector снимков хранилища.
+5. Парсер `sys.data_extraction_sources`.
+6. Контракт Python `get_metadata()` и resolver.
+7. Конвенция REST `/metadata` и resolver.
+8. Persistence канонического графа lineage.
+9. UI lineage.
+10. Обнаружение изменений объектов и UI Changes.
+11. Diagnostics collectors и hardening.
+12. Spike OpenMetadata provider после демонстрации ценности MVP.
 
-## 20. Deferred decisions
+## 20. Отложенные решения
 
-Not required to start MVP:
+Не требуется, чтобы начать MVP:
 
-- exact OpenMetadata entity mapping;
+- точный маппинг сущностей OpenMetadata;
 - column-level lineage;
-- AI tool contract;
-- query-log/usage model;
-- general metadata contract for non-table targets;
-- first-class representation of every runtime file;
-- custom metadata endpoint override for REST handlers;
+- контракт AI tools;
+- модель query-log/usage;
+- общий контракт метаданных для non-table целей;
+- first-class представление каждого runtime-файла;
+- custom override metadata endpoint для REST handlers;
 - ownership/glossary/governance workflow.

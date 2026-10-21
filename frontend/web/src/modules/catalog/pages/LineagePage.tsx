@@ -5,7 +5,7 @@ import { Alert, Button, Card, Empty, Select, Space, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
-import FreshnessBar from '../components/FreshnessBar';
+import { FreshnessBar } from '@shared/ui/portal';
 import LineageGraph from '../components/LineageGraph';
 
 const LINEAGE_PICKER_TYPES = [

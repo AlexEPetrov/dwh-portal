@@ -3,8 +3,7 @@ import type { StorageHistoryResponse, StorageResponse } from '@shared/api/genera
 import { Card, Col, Empty, Progress, Row, Space, Statistic, Table, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import FreshnessBar from '../components/FreshnessBar';
-import { formatBytes, formatDateTime, formatRows } from '../format';
+import { FreshnessBar, formatBytes, formatDateTime, formatRows } from '@shared/ui/portal';
 
 const StoragePage = () => {
   const navigate = useNavigate();

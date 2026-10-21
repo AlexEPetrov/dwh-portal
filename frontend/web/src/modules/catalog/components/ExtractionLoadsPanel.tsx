@@ -2,7 +2,7 @@ import { listAssetLoads } from '@shared/api/generated';
 import type { LoadFileItem, LoadFileListResponse } from '@shared/api/generated';
 import { Card, Empty, Table } from 'antd';
 import { useEffect, useState } from 'react';
-import { formatBytes, formatDateTime } from '../format';
+import { formatBytes, formatDateTime } from '@shared/ui/portal';
 
 type Props = {
   assetId: string;

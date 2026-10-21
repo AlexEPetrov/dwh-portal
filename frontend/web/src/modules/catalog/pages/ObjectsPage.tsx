@@ -10,9 +10,11 @@ import {
   FilterClear,
   FilterSep,
   FilterToolbar,
-} from '../components/FilterToolbar';
-import FreshnessBar from '../components/FreshnessBar';
-import { formatBytes, formatDateTime, formatRows } from '../format';
+  FreshnessBar,
+  formatBytes,
+  formatDateTime,
+  formatRows,
+} from '@shared/ui/portal';
 
 const TYPE_TOGGLES = [
   { key: 'DATA_SOURCE', label: 'Source' },

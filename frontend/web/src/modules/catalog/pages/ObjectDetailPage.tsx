@@ -9,9 +9,14 @@ import { Button, Card, Descriptions, Empty, Space, Table, Tabs, Tag, Typography 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
-import FreshnessBar from '../components/FreshnessBar';
 import LineageGraph from '../components/LineageGraph';
-import { changeGlyph, formatBytes, formatDateTime, formatRows } from '../format';
+import {
+  FreshnessBar,
+  changeGlyph,
+  formatBytes,
+  formatDateTime,
+  formatRows,
+} from '@shared/ui/portal';
 
 const nextStepHint = (assetType: string): string => {
   switch (assetType) {

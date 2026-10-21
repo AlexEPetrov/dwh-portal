@@ -9,6 +9,7 @@ describe('viewer screen permissions', () => {
         expect(canPerform(permissions, 'contracts-screen', 'view')).toBe(false);
         expect(canPerform(permissions, 'factor-analysis-screen', 'view')).toBe(false);
         expect(canPerform(permissions, 'scenario-analysis-screen', 'view')).toBe(false);
+        expect(canPerform(permissions, 'admin', 'edit')).toBe(false);
     });
 
     it('allows restricted screens for admins', () => {
@@ -17,5 +18,6 @@ describe('viewer screen permissions', () => {
         expect(canPerform(permissions, 'contracts-screen', 'view')).toBe(true);
         expect(canPerform(permissions, 'factor-analysis-screen', 'view')).toBe(true);
         expect(canPerform(permissions, 'scenario-analysis-screen', 'view')).toBe(true);
+        expect(canPerform(permissions, 'admin', 'edit')).toBe(true);
     });
 });

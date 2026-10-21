@@ -1,6 +1,6 @@
 import type { FreshnessItem } from '@shared/api/generated';
 import { Space, Tag, Typography } from 'antd';
-import { formatDateTime } from '../format';
+import { formatDateTime } from './format';
 
 const STATUS_COLOR: Record<string, string> = {
   SUCCESS: 'success',

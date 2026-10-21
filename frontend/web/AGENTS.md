@@ -67,7 +67,9 @@ src/app/
   HomePage and Vite module discovery/router bootstrap
 
 src/modules/
-  feature modules such as contracts, calculations, market-data, reports, visualizations
+  self-contained feature modules auto-discovered via
+  import.meta.glob('/src/modules/*/index.tsx')
+  (portal: assistant, catalog, documents, admin); each exports ModuleRegistration
 
 src/shared/
   reusable UI, hooks, utilities, generated/shared API consumers

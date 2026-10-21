@@ -18,8 +18,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
-import { FilterClear, FilterToolbar } from '../components/FilterToolbar';
-import FreshnessBar from '../components/FreshnessBar';
+import { FilterClear, FilterToolbar, FreshnessBar, formatDateTime } from '@shared/ui/portal';
 import OptionsForm from '../extractionOptions/OptionsForm';
 import '../extractionOptions/optionsForm.css';
 import {
@@ -28,7 +27,6 @@ import {
 } from '../extractionOptions/loadDraft';
 import { compactPatternList, validateRegexPatternList } from '../extractionOptions/regex';
 import { extractSchemaKeyForTypeId } from '../extractionOptions/schema';
-import { formatDateTime } from '../format';
 
 const compactExtractOptions = (options: Record<string, unknown>): Record<string, unknown> => ({
   ...options,

@@ -31,6 +31,12 @@ export interface PluginRegistryContract {
 
 export interface ModuleRegistration {
   enabled?: boolean;
+  /**
+   * Lower values appear earlier in the sidebar when modules are
+   * auto-discovered. Omitted order sorts after numbered modules,
+   * then by discovery path.
+   */
+  order?: number;
   menu: MenuItem[];
   routes: () => RouteObject[];
   registerContributions?: (registry: PluginRegistryContract) => void;

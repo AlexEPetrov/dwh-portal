@@ -6,43 +6,49 @@
 
 ## 1. Purpose
 
-DWH Portal is a user-facing catalog and operational metadata application for discovering DWH assets, understanding their origin and dependencies, monitoring storage footprint, and seeing structural changes over time.
+DWH Portal — пользовательское приложение каталога и operational metadata для
+обнаружения активов DWH, понимания их происхождения и зависимостей, мониторинга
+объёма хранилища и просмотра структурных изменений во времени.
 
-The portal is deliberately separated from OpenMetadata.
+Портал намеренно отделён от OpenMetadata.
 
-OpenMetadata may become a metadata system of record later, but the DWH Portal backend and frontend are long-lived product components.
+OpenMetadata позже может стать system of record для метаданных, но backend и
+frontend DWH Portal — долгоживущие продуктовые компоненты.
 
-## 2. MVP scope
+## 2. Объём MVP
 
 ### Phase 1
 
-- database/schema/table/view catalog;
-- search and filtering;
-- object detail page;
-- table/column descriptions from PostgreSQL metadata/comments;
-- storage size and storage distribution;
-- historical storage snapshots;
-- source-to-DWH lineage;
-- structural object change tracking;
-- collector health / freshness status.
+- каталог database/schema/table/view;
+- поиск и фильтрация;
+- страница деталей объекта;
+- описания таблиц/колонок из метаданных/комментариев PostgreSQL;
+- размер хранилища и распределение storage;
+- исторические снимки хранилища;
+- lineage source-to-DWH;
+- отслеживание структурных изменений объектов;
+- здоровье collector / freshness status.
 
 ### Phase 2
 
-- AI dialogue;
-- database usage/activity analytics supplied from query/audit logs;
-- OpenMetadata provider and governance integration;
-- richer semantic search;
-- optional column-level lineage.
+- AI-диалог;
+- аналитика использования/активности БД из query/audit logs;
+- OpenMetadata provider и интеграция governance;
+- более богатый semantic search;
+- опциональный column-level lineage.
 
-## 3. Architectural principles
+## 3. Архитектурные принципы
 
-1. **The browser talks only to the Portal API.**
-2. **UI pages do not run metadata scans against the DWH.**
-3. **Operational metadata is collected periodically and stored as snapshots.**
-4. **Portal API contracts use a canonical product model, not provider-native DTOs.**
-5. **OpenMetadata is a replaceable metadata provider, not the frontend backend contract.**
-6. **Live DWH/S3 access is reserved for operations that genuinely need live data.**
-7. **Collection failures are localized and observable.**
+1. **Браузер общается только с Portal API.**
+2. **Страницы UI не запускают сканирование метаданных против DWH.**
+3. **Operational metadata собирается периодически и хранится как снимки.**
+4. **Контракты Portal API используют каноническую продуктовую модель, а не
+   provider-native DTO.**
+5. **OpenMetadata — заменяемый metadata provider, а не контракт backend для
+   frontend.**
+6. **Прямой доступ к DWH/S3 зарезервирован для операций, которым реально нужны
+   live-данные.**
+7. **Сбои сбора локализуются и наблюдаемы.**
 
 ## 4. System context
 
@@ -64,9 +70,9 @@ flowchart TB
     AI[AI agent - Phase 2] -.-> API
 ```
 
-## 5. Runtime request path
+## 5. Путь runtime-запроса
 
-The normal user request path is intentionally short:
+Обычный путь пользовательского запроса намеренно короткий:
 
 ```mermaid
 sequenceDiagram
@@ -83,7 +89,7 @@ sequenceDiagram
     W-->>U: render page
 ```
 
-No DWH-wide scan is triggered by the page request.
+Запрос страницы не запускает DWH-wide scan.
 
 ## 6. Deployment view
 
@@ -111,7 +117,7 @@ flowchart LR
     OM[OpenMetadata - later] -.-> API
 ```
 
-Recommended deployment boundary:
+Рекомендуемая граница развёртывания:
 
 ```text
 portal-web        stateless
@@ -120,7 +126,7 @@ portal-db         persistent
 collector jobs    launched/orchestrated by existing Airflow
 ```
 
-## 7. Backend component design
+## 7. Дизайн компонентов backend
 
 ```mermaid
 flowchart TB
@@ -143,7 +149,7 @@ flowchart TB
     REPO --> PDB[(Portal DB)]
 ```
 
-### Provider responsibilities
+### Ответственность providers
 
 `MetadataProvider`
 
@@ -161,9 +167,10 @@ get_relationships()
 resolve_process_targets()
 ```
 
-Collectors are separate from request-time providers because they create persistent snapshots.
+Collectors отделены от request-time providers, потому что создают персистентные
+снимки.
 
-## 8. Suggested repository structure
+## 8. Предлагаемая структура репозитория
 
 ```text
 dwh-portal/
@@ -208,7 +215,7 @@ dwh-portal/
 └── frontend/
 ```
 
-## 9. Canonical metadata model
+## 9. Каноническая модель метаданных
 
 ```mermaid
 erDiagram
@@ -269,11 +276,12 @@ erDiagram
     }
 ```
 
-## 10. Catalog collection
+## 10. Сбор каталога
 
-The PostgreSQL catalog collector reads metadata using a dedicated read-only connection.
+Collector каталога PostgreSQL читает метаданные через выделенное read-only
+соединение.
 
-Sources include:
+Источники включают:
 
 ```text
 pg_database
@@ -285,15 +293,15 @@ pg_constraint
 pg_indexes / catalog equivalents
 ```
 
-The collector does not execute full-table `COUNT(*)` scans merely to populate the UI.
+Collector не выполняет полные `COUNT(*)` по таблицам только чтобы заполнить UI.
 
-For row count, use estimates suitable for catalog purposes.
+Для числа строк используются оценки, пригодные для каталога.
 
-## 11. Storage collection
+## 11. Сбор storage
 
 ### PostgreSQL
 
-Collect at least:
+Собирать как минимум:
 
 ```text
 table_bytes
@@ -302,7 +310,7 @@ total_bytes
 row_estimate
 ```
 
-Typical source functions/catalog data:
+Типичные функции/данные каталога:
 
 ```text
 pg_relation_size(...)
@@ -312,9 +320,10 @@ pg_total_relation_size(...)
 
 ### S3 / file storage
 
-Collect logical prefix/storage-location metrics, not one Portal asset per runtime file.
+Собирать метрики логического prefix / storage-location, а не по одному Portal
+asset на каждый runtime-файл.
 
-Typical aggregation:
+Типичная агрегация:
 
 ```text
 logical storage location
@@ -323,9 +332,9 @@ size_bytes
 snapshot_at
 ```
 
-## 12. Collection schedule
+## 12. Расписание сбора
 
-Initial baseline: daily.
+Начальный baseline: ежедневно.
 
 ```mermaid
 flowchart LR
@@ -337,11 +346,12 @@ flowchart LR
     DIFF --> PUB[Publish collector status]
 ```
 
-The schedule can later be split by metric freshness requirement.
+Позже расписание можно разделить по требованиям к freshness метрик.
 
-## 13. Source-to-DWH lineage
+## 13. Lineage source-to-DWH
 
-The first lineage chain comes from `sys.data_extraction_sources` and loader metadata.
+Первая цепочка lineage строится из `sys.data_extraction_sources` и метаданных
+загрузчиков.
 
 ```mermaid
 flowchart LR
@@ -351,7 +361,7 @@ flowchart LR
     PROC --> TBL[DWH table]
 ```
 
-For email sources:
+Для email-источников:
 
 ```text
 extract_source_type_id = 1
@@ -367,16 +377,16 @@ LoadPythonHandlerOption.module
 LoadPythonExtendedHandlerOption.module
 ```
 
-are treated as full Python module paths.
+трактуются как полные пути Python-модулей.
 
-The module implements:
+Модуль реализует:
 
 ```python
 def get_metadata() -> dict:
     ...
 ```
 
-Minimum result:
+Минимальный результат:
 
 ```json
 {
@@ -395,18 +405,18 @@ Minimum result:
 
 ### REST loaders
 
-MVP convention:
+Конвенция MVP:
 
 ```text
 Runtime  : <url_path>
 Metadata : GET <url_path>/metadata
 ```
 
-The endpoint returns the same logical metadata contract.
+Endpoint возвращает тот же логический контракт метаданных.
 
-## 14. Change tracking
+## 14. Отслеживание изменений
 
-Phase 1 tracks:
+Phase 1 отслеживает:
 
 ```text
 ADDED
@@ -416,22 +426,23 @@ STRUCTURE_CHANGED
 DESCRIPTION_CHANGED
 ```
 
-Normalized structure is hashed on each catalog run.
+Нормализованная структура хешируется на каждом прогоне каталога.
 
 ```mermaid
 flowchart LR
     TODAY[Today's canonical object] --> HASH1[structure_hash]
     PREV[Previous canonical object] --> HASH0[previous structure_hash]
-    HASH1 --> CMP{Equal?}
+    HASH1 --> CMP{equal?}
     HASH0 --> CMP
     CMP -->|yes| NONE[No structural event]
     CMP -->|no| DIFF[Detailed object/column diff]
     DIFF --> EVT[Change event]
 ```
 
-A removed object is soft-deleted in the Portal DB so that historical snapshots and change history remain queryable.
+Удалённый объект soft-delete'ится в Portal DB, чтобы исторические снимки и
+история изменений оставались запрашиваемыми.
 
-## 15. API design
+## 15. Дизайн API
 
 ### Overview
 
@@ -439,7 +450,7 @@ A removed object is soft-deleted in the Portal DB so that historical snapshots a
 GET /api/v1/overview
 ```
 
-Returns:
+Возвращает:
 
 ```text
 asset counts
@@ -457,7 +468,7 @@ GET /api/v1/assets/{asset_id}/columns
 GET /api/v1/assets/{asset_id}/lineage
 ```
 
-Filters:
+Фильтры:
 
 ```text
 q
@@ -491,7 +502,7 @@ GET /api/v1/changes/{change_id}
 GET /api/v1/collection-status
 ```
 
-## 16. UI information architecture
+## 16. Информационная архитектура UI
 
 ```text
 DWH Portal
@@ -504,7 +515,7 @@ Overview | Objects | Storage | Usage | Lineage | Changes | Ask AI
 
 ## 17. UI concept - Overview
 
-Illustrative values only.
+Только иллюстративные значения.
 
 ```text
 +---------------------------------------------------------------+
@@ -570,7 +581,8 @@ settlement_price    numeric(18,6)   Settlement price
 currency            varchar(3)      Currency
 ```
 
-The same object page should expose source origin rather than forcing a normal user to open OpenMetadata.
+Та же страница объекта должна показывать происхождение источника, а не
+заставлять обычного пользователя открывать OpenMetadata.
 
 ## 20. UI concept - Storage
 
@@ -595,7 +607,8 @@ raw.trade_events                                     1.7 TB
 dwh.fact_sales                                       0.8 TB
 ```
 
-Historical snapshots enable trend charts without querying live DWH tables at render time.
+Исторические снимки позволяют строить тренды без запросов к live-таблицам DWH
+в момент рендера.
 
 ## 21. UI concept - Lineage
 
@@ -607,13 +620,13 @@ flowchart LR
     RAW --> DWH[dwh.market_prices]
 ```
 
-UI requirements:
+Требования к UI:
 
-- upstream/downstream traversal;
-- visual distinction between source, storage, process and database assets;
-- click-through to object detail;
-- unresolved targets shown explicitly, not silently omitted;
-- structural relationships visually distinguished from data-flow lineage.
+- обход upstream/downstream;
+- визуальное различение source, storage, process и database assets;
+- переход к деталям объекта;
+- unresolved targets показываются явно, а не молча опускаются;
+- структурные связи визуально отличаются от data-flow lineage.
 
 ## 22. UI concept - Changes
 
@@ -637,11 +650,12 @@ Added                 Changed                 Removed
 - stage.old_ice_prices
 ```
 
-## 23. Freshness and diagnostics
+## 23. Freshness и diagnostics
 
-Every user-facing page that depends on snapshots should expose freshness.
+Каждая пользовательская страница, зависящая от снимков, должна показывать
+freshness.
 
-Examples:
+Примеры:
 
 ```text
 Metadata updated: 06 Sep 2026 02:12
@@ -649,7 +663,7 @@ Storage updated : 06 Sep 2026 02:17
 Lineage updated : 06 Sep 2026 02:19
 ```
 
-Collector status must distinguish:
+Статус collector должен различать:
 
 ```text
 SUCCESS
@@ -658,90 +672,90 @@ FAILED
 STALE
 ```
 
-A partial source/loader metadata failure must not hide the rest of the catalog.
+Частичный сбой метаданных source/loader не должен скрывать остальной каталог.
 
 ## 24. Security
 
-Phase 1 minimum:
+Минимум Phase 1:
 
-- read-only DWH access for collectors;
-- no database credentials returned to the frontend;
-- no raw Airflow connection secrets persisted in Portal DB;
-- no runtime REST payload/headers persisted unless whitelisted;
-- `access_level` preserved as metadata for future authorization rules;
-- portal API is the only browser-facing data interface.
+- read-only доступ collectors к DWH;
+- credentials БД не возвращаются на frontend;
+- raw secrets соединений Airflow не персистятся в Portal DB;
+- runtime REST payload/headers не персистятся без whitelist;
+- `access_level` сохраняется как метаданные для будущих правил авторизации;
+- Portal API — единственный browser-facing интерфейс данных.
 
-## 25. Performance expectations
+## 25. Ожидания по производительности
 
-Because user-facing reads are served from Portal DB:
+Поскольку пользовательские чтения обслуживаются из Portal DB:
 
-- object list must paginate;
-- filters need appropriate indexes;
-- lineage traversal is bounded by depth/page size;
-- historical snapshots are append-oriented;
-- no `COUNT(*)` across large DWH tables for routine portal display;
-- expensive S3 enumeration occurs only in collectors.
+- список объектов должен пагинироваться;
+- фильтрам нужны подходящие индексы;
+- обход lineage ограничен глубиной/размером страницы;
+- исторические снимки append-oriented;
+- нет `COUNT(*)` по большим таблицам DWH для обычного отображения портала;
+- дорогая enumeration S3 выполняется только в collectors.
 
-## 26. MVP delivery plan
+## 26. План поставки MVP
 
 ### Workstream 1 - Foundation
 
-- FastAPI skeleton;
-- Portal PostgreSQL schema;
-- canonical domain models;
-- configuration and provider interfaces;
-- collector run/freshness model.
+- каркас FastAPI;
+- схема Portal PostgreSQL;
+- канонические доменные модели;
+- конфигурация и интерфейсы providers;
+- модель прогона collector / freshness.
 
 ### Workstream 2 - Catalog
 
-- PostgreSQL metadata collector;
-- comments and column descriptions;
-- `Objects` API;
-- object detail API/UI;
-- search/filter/pagination.
+- collector метаданных PostgreSQL;
+- комментарии и описания колонок;
+- API `Objects`;
+- API/UI деталей объекта;
+- поиск/фильтрация/пагинация.
 
 ### Workstream 3 - Storage
 
-- PostgreSQL size collector;
-- S3 logical-prefix size collector where required;
-- daily snapshots;
-- overview/storage API;
-- storage UI.
+- collector размеров PostgreSQL;
+- collector размеров logical-prefix S3 там, где нужно;
+- ежедневные снимки;
+- API overview/storage;
+- UI storage.
 
 ### Workstream 4 - Source lineage
 
-- parser for `sys.data_extraction_sources`;
-- `ExtractEmailOptions`, `ExtractStorageOptions`, `ExtractLoadOptions` mapping;
-- Python `get_metadata()` resolver;
-- REST `/metadata` resolver;
-- relationship persistence;
-- lineage API/UI.
+- парсер `sys.data_extraction_sources`;
+- маппинг `ExtractEmailOptions`, `ExtractStorageOptions`, `ExtractLoadOptions`;
+- resolver Python `get_metadata()`;
+- resolver REST `/metadata`;
+- persistence связей;
+- API/UI lineage.
 
 ### Workstream 5 - Changes
 
-- structure normalization/hash;
-- add/remove/change detection;
-- detailed column diff;
-- rename support where reliable;
-- Changes API/UI.
+- нормализация/хеш структуры;
+- обнаружение add/remove/change;
+- детальный column diff;
+- поддержка rename там, где надёжно;
+- API/UI Changes.
 
 ### Workstream 6 - Hardening
 
 - Airflow DAGs;
-- retries/idempotency;
+- retries/идемпотентность;
 - diagnostics;
-- collector status;
-- RBAC boundary;
+- статус collector;
+- граница RBAC;
 - logging/metrics;
 - operational documentation.
 
-## 27. Phase 2 extension points
+## 27. Точки расширения Phase 2
 
 ### Usage/activity
 
-A separate usage pipeline will populate usage aggregates.
+Отдельный usage pipeline будет наполнять агрегаты использования.
 
-Planned backend boundary:
+Планируемая граница backend:
 
 ```text
 UsageProvider
@@ -753,7 +767,8 @@ get_usage_trend()
 
 ### AI
 
-The AI agent will use Portal backend tools instead of querying OpenMetadata directly.
+AI-агент будет использовать tools Portal backend вместо прямых запросов к
+OpenMetadata.
 
 ```mermaid
 flowchart LR
@@ -764,9 +779,10 @@ flowchart LR
     API -.-> DWH[DWH live provider]
 ```
 
-This allows questions that combine metadata, lineage, storage, changes and later usage.
+Это позволяет вопросы, комбинирующие метаданные, lineage, storage, changes и
+позже usage.
 
-## 28. OpenMetadata migration path
+## 28. Путь миграции на OpenMetadata
 
 Phase 1:
 
@@ -775,7 +791,7 @@ Portal Backend -> Direct PostgreSQL metadata provider
 Portal Backend -> Portal DB snapshots
 ```
 
-Later:
+Позже:
 
 ```text
 Portal Backend -> OpenMetadata provider
@@ -783,11 +799,11 @@ Portal Backend -> Portal DB snapshots/history
 Portal Backend -> DWH/S3 for selected live/source-specific operations
 ```
 
-OpenMetadata does not replace the Portal backend.
+OpenMetadata не заменяет Portal backend.
 
-## 29. Key architectural decision
+## 29. Ключевое архитектурное решение
 
-The long-lived product boundary is:
+Долгоживущая продуктовая граница:
 
 ```text
                        DWH Portal
@@ -804,4 +820,5 @@ User ---------->| UI                  |
       snapshots           providers        later
 ```
 
-This lets the project start immediately while preserving a clean migration path to a full metadata platform.
+Это позволяет стартовать сразу и сохранить чистый путь миграции к полноценной
+платформе метаданных.

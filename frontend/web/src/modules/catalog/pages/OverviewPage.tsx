@@ -3,8 +3,7 @@ import type { OverviewResponse } from '@shared/api/generated';
 import { Card, Col, Empty, List, Progress, Row, Space, Statistic, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import FreshnessBar from '../components/FreshnessBar';
-import { changeGlyph, formatBytes } from '../format';
+import { FreshnessBar, changeGlyph, formatBytes } from '@shared/ui/portal';
 
 const OverviewPage = () => {
   const navigate = useNavigate();
