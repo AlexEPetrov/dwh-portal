@@ -63,8 +63,43 @@
   text-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
 }
 
+.lineage-universe-top__right {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(380px, 46vw);
+}
+
+.lineage-universe-search {
+  width: min(340px, 100%);
+  color: #e8eefc;
+}
+
+.lineage-universe-search.ant-input-affix-wrapper {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(125, 211, 252, 0.35);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.lineage-universe-search.ant-input-affix-wrapper input {
+  background: transparent;
+  color: #f8fbff;
+}
+
+.lineage-universe-search.ant-input-affix-wrapper-focused {
+  border-color: rgba(125, 211, 252, 0.7);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.18);
+}
+
+.lineage-universe-search-count {
+  color: rgba(186, 210, 255, 0.7) !important;
+  font-size: 11px;
+}
+
 .lineage-universe-hint {
-  max-width: 320px;
+  max-width: 340px;
   margin: 0 !important;
   text-align: right;
   color: var(--universe-muted) !important;

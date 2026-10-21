@@ -63,8 +63,6 @@ type Body = {
   homeZ: number;
 };
 
-/** ~1 full turn in ~8–9 minutes at 60fps — perceptible but calm. */
-const ROOTS_SPIN = 0.00012;
 const EXIT_MS = 720;
 const ENTER_MS = 1100;
 
@@ -312,31 +310,34 @@ const LineageUniverseScene = ({
     };
 
     if (mode === 'roots') {
-      // Sparse catalogue ring: one object per sector, chord spacing stays readable.
-      const ringNodes = [
+      // Flat catalogue grid — a spinning ring is unusable past a few dozen hubs.
+      const catalogue = [
         ...hubList.map((id) => byId.get(id)).filter((node): node is LineageNode => Boolean(node)),
         ...orphanIds
           .map((id) => byId.get(id))
           .filter((node): node is LineageNode => Boolean(node)),
-      ];
-      const count = Math.max(1, ringNodes.length);
-      const minChord = 240;
-      const ringR = Math.max(420, (minChord * count) / (2 * Math.PI));
-      ringNodes.forEach((node, index) => {
-        const angle = (index / count) * Math.PI * 2 - Math.PI / 2;
+      ].sort(
+        (a, b) =>
+          a.display_name.localeCompare(b.display_name) || a.id.localeCompare(b.id)
+      );
+      const count = Math.max(1, catalogue.length);
+      const cols = Math.max(1, Math.ceil(Math.sqrt(count * 1.4)));
+      const rows = Math.max(1, Math.ceil(count / cols));
+      const gapX = count <= 40 ? 220 : 168;
+      const gapZ = count <= 40 ? 120 : 96;
+      catalogue.forEach((node, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
         const isHub = hubIds.has(node.id);
         placeAt(
           node,
           isHub ? 0 : shellForType(node.asset_type),
           isHub ? node.id : null,
-          Math.cos(angle) * ringR,
+          (col - (cols - 1) / 2) * gapX,
           0,
-          Math.sin(angle) * ringR,
-          undefined,
-          { angle, radius: ringR }
+          (row - (rows - 1) / 2) * gapZ
         );
       });
-      // Keep empty lane map for shared guide code; roots draws a ring instead.
     } else {
       // Chain: per-hub lanes on Z, stages advance on X (left → right).
       const laneHeights = hubList.map((hub) => {
@@ -545,7 +546,6 @@ const LineageUniverseScene = ({
     let hits: ScreenHit[] = [];
     let userAdjustedView = false;
     let followFocus = false;
-    let ringSpin = 0;
     let exitId: string | null = null;
     let exitStarted = 0;
     let exitOrigin: UniverseOrigin | null = null;
@@ -626,18 +626,17 @@ const LineageUniverseScene = ({
       panY = 0;
 
       if (mode === 'roots') {
-        yaw = -0.28;
-        pitch = 0.52;
+        // Slight tilt over a flat XZ grid — readable rows, not an edge-on ring.
+        yaw = 0;
+        pitch = 0.72;
         recomputeFieldBounds();
         const cx = (fieldBounds.minX + fieldBounds.maxX) / 2;
         const cy = (fieldBounds.minY + fieldBounds.maxY) / 2;
         const cz = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
-        const span = Math.max(
-          420,
-          fieldBounds.maxX - fieldBounds.minX,
-          fieldBounds.maxZ - fieldBounds.minZ
-        );
-        targetZoom = clamp((Math.min(width, height) * 0.82) / span, 0.4, 2.2);
+        const spanX = Math.max(280, fieldBounds.maxX - fieldBounds.minX);
+        const spanZ = Math.max(220, fieldBounds.maxZ - fieldBounds.minZ);
+        const span = Math.max(spanX, spanZ * 1.05);
+        targetZoom = clamp((Math.min(width, height) * 0.86) / span, 0.18, 2.4);
         targetLookX = cx;
         targetLookY = cy;
         targetLookZ = cz;
@@ -981,24 +980,8 @@ const LineageUniverseScene = ({
         }
       }
 
-      // Very slow catalogue ring spin (pause while hovering / dragging / exiting).
-      if (mode === 'roots' && !exitId && !dragMode && !hoverId && !reduced) {
-        ringSpin += ROOTS_SPIN;
-        for (const body of bodies) {
-          if (body.ringAngle === undefined || body.ringRadius === undefined) {
-            continue;
-          }
-          const angle = body.ringAngle + ringSpin;
-          const nextX = Math.cos(angle) * body.ringRadius;
-          const nextZ = Math.sin(angle) * body.ringRadius;
-          body.homeX = nextX;
-          body.homeZ = nextZ;
-          body.x = nextX;
-          body.z = nextZ;
-          body.vx = 0;
-          body.vz = 0;
-        }
-      } else if (!dragMode && !reduced && !hoverId && mode === 'chain' && enterDone) {
+      // Catalogue grid stays still; orbit inertia only in chain view.
+      if (!dragMode && !reduced && !hoverId && mode === 'chain' && enterDone) {
         yaw += velYaw;
         pitch += velPitch;
         velYaw *= 0.96;
@@ -1267,24 +1250,32 @@ const LineageUniverseScene = ({
           ctx.setLineDash([]);
         }
 
-        drawLabel(body.label, p.x, p.y + radius + 10, active);
-        ctx.font = '10px "Segoe UI", system-ui, sans-serif';
-        ctx.fillStyle = active ? 'rgba(186, 210, 255, 0.95)' : 'rgba(186, 210, 255, 0.65)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        const typeLine = body.bridgeHubIds?.length
-          ? `${body.type} · bridge×${body.bridgeHubIds.length}`
-          : body.type;
-        ctx.fillText(typeLine, p.x, p.y + radius + 36);
-        if (active) {
-          ctx.fillStyle = 'rgba(255,255,255,0.78)';
-          ctx.fillText(
-            mode === 'roots'
-              ? 'клик — цепочка · двойной — сюда'
-              : 'клик — карточка · двойной — сюда',
-            p.x,
-            p.y + radius + 50
-          );
+        // Dense catalogues: labels only for focus/hover, or when zoomed in enough.
+        const showLabel =
+          active ||
+          bodies.length <= 48 ||
+          zoom >= 0.75 ||
+          (mode === 'roots' && bodies.length <= 72 && zoom >= 0.45);
+        if (showLabel) {
+          drawLabel(body.label, p.x, p.y + radius + 10, active);
+          ctx.font = '10px "Segoe UI", system-ui, sans-serif';
+          ctx.fillStyle = active ? 'rgba(186, 210, 255, 0.95)' : 'rgba(186, 210, 255, 0.65)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          const typeLine = body.bridgeHubIds?.length
+            ? `${body.type} · bridge×${body.bridgeHubIds.length}`
+            : body.type;
+          ctx.fillText(typeLine, p.x, p.y + radius + 36);
+          if (active) {
+            ctx.fillStyle = 'rgba(255,255,255,0.78)';
+            ctx.fillText(
+              mode === 'roots'
+                ? 'клик — цепочка · двойной — сюда'
+                : 'клик — карточка · двойной — сюда',
+              p.x,
+              p.y + radius + 50
+            );
+          }
         }
         ctx.globalAlpha = 1;
       }

@@ -1,8 +1,8 @@
 import { getAssetLineage, listLineageRoots } from '@shared/api/generated';
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
-import { ArrowLeftOutlined } from '@ant-design/icons';
-import { Button, Empty, Spin, Typography } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Empty, Input, Spin, Typography } from 'antd';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import LineageUniverseScene, {
   type UniverseOrigin,
@@ -11,6 +11,22 @@ import '../components/lineageUniverse.css';
 
 type LocationState = {
   fromRing?: UniverseOrigin;
+};
+
+const matchesQuery = (node: LineageNode, query: string) => {
+  if (!query) {
+    return true;
+  }
+  const hay = [
+    node.display_name,
+    node.name,
+    node.qualified_name,
+    node.asset_type,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return hay.includes(query);
 };
 
 const LineageUniversePage = () => {
@@ -23,6 +39,8 @@ const LineageUniversePage = () => {
   const [title, setTitle] = useState('Universe');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
   const [enterOrigin, setEnterOrigin] = useState<UniverseOrigin | null>(() => {
     const state = location.state as LocationState | null;
     return state?.fromRing ?? null;
@@ -76,6 +94,21 @@ const LineageUniversePage = () => {
     };
   }, [assetId]);
 
+  const filteredNodes = useMemo(
+    () => nodes.filter((node) => matchesQuery(node, deferredQuery)),
+    [nodes, deferredQuery]
+  );
+
+  const filteredEdges = useMemo(() => {
+    if (!deferredQuery) {
+      return edges;
+    }
+    const ids = new Set(filteredNodes.map((node) => node.id));
+    return edges.filter(
+      (edge) => ids.has(edge.from_asset_id) && ids.has(edge.to_asset_id)
+    );
+  }, [edges, filteredNodes, deferredQuery]);
+
   const onSelect = useCallback(
     (id: string, origin?: UniverseOrigin) => {
       if (mode === 'roots') {
@@ -110,11 +143,30 @@ const LineageUniversePage = () => {
             </Typography.Title>
           </div>
         </div>
-        <Typography.Paragraph className="lineage-universe-hint">
-          {mode === 'roots'
-            ? 'Кольцо медленно вращается. Клик — анимация перехода в поток источника.'
-            : 'Поток слева направо. Жёлтый bridge — VIEW/TABLE из нескольких DATA_SOURCE.'}
-        </Typography.Paragraph>
+        <div className="lineage-universe-top__right">
+          <Input
+            allowClear
+            size="middle"
+            prefix={<SearchOutlined />}
+            className="lineage-universe-search"
+            placeholder={
+              mode === 'roots' ? 'Поиск источника…' : 'Фильтр объектов в потоке…'
+            }
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            autoFocus={mode === 'roots'}
+          />
+          <Typography.Text className="lineage-universe-search-count">
+            {deferredQuery
+              ? `${filteredNodes.length} из ${nodes.length}`
+              : `${nodes.length} объектов`}
+          </Typography.Text>
+          <Typography.Paragraph className="lineage-universe-hint">
+            {mode === 'roots'
+              ? 'Сетка источников. Печатайте — список сразу сужается. Клик — поток источника.'
+              : 'Поток слева направо. Жёлтый bridge — VIEW/TABLE из нескольких DATA_SOURCE.'}
+          </Typography.Paragraph>
+        </div>
       </header>
       <main className="lineage-universe-stage">
         {loading ? (
@@ -129,10 +181,20 @@ const LineageUniversePage = () => {
           <div className="lineage-universe-state">
             <Empty description="Нет объектов для Universe" />
           </div>
+        ) : !filteredNodes.length ? (
+          <div className="lineage-universe-state">
+            <Empty
+              description={
+                deferredQuery
+                  ? `Ничего не найдено по «${query.trim()}»`
+                  : 'Нет объектов для Universe'
+              }
+            />
+          </div>
         ) : (
           <LineageUniverseScene
-            nodes={nodes}
-            edges={edges}
+            nodes={filteredNodes}
+            edges={filteredEdges}
             selectedAssetId={assetId}
             mode={mode}
             enterOrigin={mode === 'chain' ? enterOrigin : null}
