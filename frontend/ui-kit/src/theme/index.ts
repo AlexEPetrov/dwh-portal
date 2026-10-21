@@ -1,1 +1,2 @@
-export { appTheme } from './appTheme';
+export { appTheme, createAppTheme } from './appTheme';
+export type { AppColorMode } from './appTheme';

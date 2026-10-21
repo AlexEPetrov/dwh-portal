@@ -107,6 +107,7 @@ const LineageGraph = ({
     <Tabs
       activeKey={activeKey}
       onChange={(key) => setView(key === 'map' ? 'map' : 'list')}
+      destroyInactiveTabPane
       className={fillHeight ? 'lineage-views-tabs fill-height' : 'lineage-views-tabs'}
       style={
         fillHeight

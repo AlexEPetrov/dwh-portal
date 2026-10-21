@@ -7,6 +7,7 @@ import {
   type SideNavigationItem,
 } from '../navigation';
 import { useOptionalApplicationCanAccess } from '../runtime';
+import { ThemeModeControl } from '../theme/ThemeModeControl';
 import { ApplicationUserMenu, type ApplicationUserMenuProps } from '../user/ApplicationUserMenu';
 import { AppShellLayout } from './AppShellLayout';
 
@@ -58,15 +59,14 @@ export function ApplicationLayout({
 
   const standardHelp = help ? <ApplicationHelpDrawer {...help} /> : null;
   const standardUserMenu = showUserMenu ? <ApplicationUserMenu {...userMenu} /> : null;
-  const resolvedHeaderActions = standardHelp || headerActions || standardUserMenu
-    ? (
-      <>
-        {standardHelp}
-        {headerActions}
-        {standardUserMenu}
-      </>
-    )
-    : undefined;
+  const resolvedHeaderActions = (
+    <>
+      <ThemeModeControl />
+      {standardHelp}
+      {headerActions}
+      {standardUserMenu}
+    </>
+  );
 
   return (
     <AppShellLayout

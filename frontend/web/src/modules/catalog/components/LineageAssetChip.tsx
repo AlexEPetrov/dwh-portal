@@ -45,7 +45,6 @@ const LineageAssetChip = ({
 }: Props) => {
   const accent = unresolved ? '#ff4d4f' : TYPE_ACCENT[assetType] || '#8c8c8c';
   const isProcess = actor || assetType === 'PROCESS';
-  const wash = unresolved ? '#fff1f0' : isProcess ? TYPE_WASH.PROCESS || '#ffffff' : '#ffffff';
   const classes = [
     'lineage-asset-chip',
     isProcess ? 'is-process' : '',
@@ -87,7 +86,7 @@ const LineageAssetChip = ({
       style={
         {
           '--lineage-accent': accent,
-          '--lineage-wash': wash,
+          ...(isProcess && !unresolved ? { '--lineage-wash': TYPE_WASH.PROCESS } : null),
           ...style,
         } as CSSProperties
       }

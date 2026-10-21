@@ -94,12 +94,12 @@ export function AppShellLayout({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: token.Layout?.headerBg || 'rgba(255,255,255,0.88)',
+          background: token.Layout?.headerBg || token.colorBgContainer,
           borderBottom: `1px solid ${token.colorBorderSecondary}`,
           padding: '0 24px',
           height: headerHeight,
           flexShrink: 0,
-          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+          boxShadow: `0 1px 2px ${token.colorBgSpotlight}14`,
           backdropFilter: 'blur(10px)',
         }}
       >

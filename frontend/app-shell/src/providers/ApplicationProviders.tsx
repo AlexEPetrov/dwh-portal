@@ -1,7 +1,7 @@
-import { appTheme } from '@asset-management/ui-kit/theme';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider, type ThemeConfig } from 'antd';
 import type { ComponentProps, ReactNode } from 'react';
+import { ThemeModeProvider } from '../theme/ThemeModeProvider';
 
 const defaultQueryClient = new QueryClient();
 
@@ -15,13 +15,13 @@ export interface ApplicationProvidersProps {
 export function ApplicationProviders({
   children,
   locale,
-  theme = appTheme,
+  theme,
   queryClient = defaultQueryClient,
 }: ApplicationProvidersProps) {
   return (
     <ConfigProvider locale={locale}>
       <QueryClientProvider client={queryClient}>
-        <ConfigProvider theme={theme}>{children}</ConfigProvider>
+        <ThemeModeProvider theme={theme}>{children}</ThemeModeProvider>
       </QueryClientProvider>
     </ConfigProvider>
   );

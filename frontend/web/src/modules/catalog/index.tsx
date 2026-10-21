@@ -8,6 +8,7 @@ const ObjectsPage = lazy(() => import('./pages/ObjectsPage'));
 const ObjectDetailPage = lazy(() => import('./pages/ObjectDetailPage'));
 const StoragePage = lazy(() => import('./pages/StoragePage'));
 const LineagePage = lazy(() => import('./pages/LineagePage'));
+const LineageUniversePage = lazy(() => import('./pages/LineageUniversePage'));
 const ChangesPage = lazy(() => import('./pages/ChangesPage'));
 const DocumentUploadPage = lazy(() => import('./pages/DocumentUploadPage'));
 const ExtractionSourcesEditPage = lazy(() => import('./pages/ExtractionSourcesEditPage'));
@@ -21,6 +22,8 @@ const routes: ModuleRegistration['routes'] = () => [
   { path: '/objects/:assetId', element: wrap(<ObjectDetailPage />) },
   { path: '/storage', element: wrap(<StoragePage />) },
   { path: '/lineage', element: wrap(<LineagePage />) },
+  { path: '/lineage/universe', element: wrap(<LineageUniversePage />) },
+  { path: '/lineage/universe/:assetId', element: wrap(<LineageUniversePage />) },
   { path: '/lineage/:assetId', element: wrap(<LineagePage />) },
   { path: '/changes', element: wrap(<ChangesPage />) },
   { path: '/documents/upload', element: wrap(<DocumentUploadPage />) },

@@ -1,6 +1,7 @@
 import { getAssetLineage, listAssets, listLineageRoots } from '@shared/api/generated';
 import type { AssetListItem, LineageResponse, LineageRootsResponse } from '@shared/api/generated';
-import { Alert, Card, Empty, Select, Typography } from 'antd';
+import { ExperimentOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Empty, Select, Space, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
@@ -108,16 +109,29 @@ const LineagePage = () => {
         <FreshnessBar items={lineage?.collector_freshness} />
       </div>
       <Card style={{ flex: '0 0 auto' }}>
-        <Select
-          showSearch
-          allowClear
-          optionFilterProp="label"
-          placeholder="Все корни, или выберите объект…"
-          style={{ width: '100%', maxWidth: 640 }}
-          value={assetId}
-          options={options}
-          onChange={(value) => navigate(value ? `/lineage/${value}` : '/lineage')}
-        />
+        <Space wrap style={{ width: '100%' }} size={12}>
+          <Select
+            showSearch
+            allowClear
+            optionFilterProp="label"
+            placeholder="Все корни, или выберите объект…"
+            style={{ width: 'min(100%, 640px)', minWidth: 280 }}
+            value={assetId}
+            options={options}
+            onChange={(value) => navigate(value ? `/lineage/${value}` : '/lineage')}
+          />
+          <Button
+            type="primary"
+            ghost
+            icon={<ExperimentOutlined />}
+            className="lineage-universe-entry"
+            onClick={() =>
+              navigate(assetId ? `/lineage/universe/${assetId}` : '/lineage/universe')
+            }
+          >
+            Universe
+          </Button>
+        </Space>
       </Card>
       {assetId && lineage?.unresolved_targets.length ? (
         <Alert

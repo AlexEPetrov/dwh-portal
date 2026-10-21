@@ -3,10 +3,10 @@ import { Space, Tag, Typography } from 'antd';
 import { formatDateTime } from '../format';
 
 const STATUS_COLOR: Record<string, string> = {
-  SUCCESS: 'green',
-  PARTIAL: 'gold',
-  FAILED: 'red',
-  STALE: 'orange',
+  SUCCESS: 'success',
+  PARTIAL: 'warning',
+  FAILED: 'error',
+  STALE: 'warning',
 };
 
 type Props = {

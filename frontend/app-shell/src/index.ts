@@ -11,5 +11,7 @@ export * from './runtime';
 
 export { ApplicationProviders } from './providers/ApplicationProviders';
 export type { ApplicationProvidersProps } from './providers/ApplicationProviders';
+export { ThemeModeControl, ThemeModeProvider, useOptionalThemeMode, useThemeMode } from './theme';
+export type { ThemeModeProviderProps, ThemePreference } from './theme';
 
 export * from './user';
