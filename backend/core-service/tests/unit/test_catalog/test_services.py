@@ -76,6 +76,17 @@ def test_overview_and_storage_read_snapshots_only(seeded_store):
     assert any(row["schema_name"] == "history" for row in storage["by_schema"])
 
 
+def test_overview_includes_schema_description(seeded_store):
+    schema = seeded_store.find_by_qualified_name("dwh.raw")
+    assert schema is not None
+    seeded_store.upsert_asset(schema.model_copy(update={"description": "Raw landings"}))
+    overview = OverviewService(seeded_store).get_overview()
+    row = next(item for item in overview["storage_by_schema"] if item["schema_name"] == "raw")
+    assert row["description"] == "Raw landings"
+    untitled = next(item for item in overview["storage_by_schema"] if item["schema_name"] == "history")
+    assert untitled["description"] is None
+
+
 def test_changes_are_queryable(seeded_store):
     events, total = seeded_store.list_changes(ChangeQuery(page=1, page_size=20))
     assert total == 3

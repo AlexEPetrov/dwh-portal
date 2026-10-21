@@ -62,8 +62,8 @@ type ScreenHit = { id: string; x: number; y: number; r: number; z: number };
 
 const FOCAL = 820;
 const DRAG = 0.86;
-const HOME_PULL = 0.045;
-const CHARGE = 2800;
+const HOME_PULL = 0.038;
+const CHARGE = 2200;
 
 const shellForType = (type: string): number => {
   if (type === 'DATA_SOURCE') return 0;
@@ -73,11 +73,38 @@ const shellForType = (type: string): number => {
   return 4;
 };
 
-const shellRadius = (shell: number, hubCount: number) => {
-  if (shell === 0) {
-    return hubCount <= 1 ? 0 : 140;
+/** Landscape-first grid so hubs fill a rectangular field instead of a tight ring. */
+const hubGridDims = (count: number, aspect = 1.6) => {
+  if (count <= 1) {
+    return { cols: 1, rows: 1 };
   }
-  return 210 + shell * 155;
+  let cols = Math.max(1, Math.round(Math.sqrt(count * aspect)));
+  let rows = Math.max(1, Math.ceil(count / cols));
+  while (cols > 1 && (cols - 1) * rows >= count) {
+    cols -= 1;
+  }
+  while (rows > 1 && cols * (rows - 1) >= count) {
+    rows -= 1;
+  }
+  if (cols * rows < count) {
+    cols = Math.ceil(count / rows);
+  }
+  return { cols, rows };
+};
+
+const clusterRadiusFor = (memberCount: number, hubCount: number) => {
+  const local = 160 + Math.min(260, Math.sqrt(Math.max(1, memberCount)) * 52);
+  // Fewer hubs → let each constellation breathe across the viewport.
+  const hubBoost = hubCount <= 1 ? 1.35 : hubCount <= 4 ? 1.15 : 1;
+  return local * hubBoost;
+};
+
+const shellEllipse = (shell: number, shellCount: number, clusterR: number) => {
+  const t = shell / 4;
+  const grow = 1 + Math.min(0.5, Math.max(0, shellCount - 1) * 0.045);
+  const rx = clusterR * (0.3 + t * 0.7) * grow;
+  const rz = rx * 0.76;
+  return { rx, rz };
 };
 
 const seeded = (seed: number) => {
@@ -170,11 +197,13 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         }
       }
     }
-    const hubList = [...hubIds];
-    const hubAngle = new Map<string, number>();
-    hubList.forEach((id, index) => {
-      hubAngle.set(id, (index / Math.max(hubList.length, 1)) * Math.PI * 2 - Math.PI / 2);
-    });
+    const hubList = hubs.length
+      ? hubs.map((node) => node.id)
+      : [...hubIds].sort((a, b) => {
+          const left = byId.get(a)?.display_name ?? a;
+          const right = byId.get(b)?.display_name ?? b;
+          return left.localeCompare(right) || a.localeCompare(b);
+        });
 
     const members = new Map<string, string[]>();
     for (const hub of hubList) {
@@ -193,18 +222,38 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       }
     }
 
+    const maxMembers = Math.max(
+      1,
+      ...hubList.map((hub) => members.get(hub)?.length ?? 0),
+      orphanIds.length
+    );
+    const clusterR = clusterRadiusFor(maxMembers, Math.max(1, hubList.length));
+    const { cols, rows } = hubGridDims(Math.max(1, hubList.length));
+    const gapX = clusterR * 2.7;
+    const gapZ = clusterR * 2.15;
+    const originX = -((cols - 1) * gapX) / 2;
+    const originZ = -((rows - 1) * gapZ) / 2;
+    const hubPos = new Map<string, { x: number; z: number; clusterR: number }>();
+    hubList.forEach((id, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const localMembers = members.get(id)?.length ?? 0;
+      hubPos.set(id, {
+        x: originX + col * gapX,
+        z: originZ + row * gapZ,
+        clusterR: clusterRadiusFor(localMembers, hubList.length),
+      });
+    });
+
     const bodies: Body[] = [];
-    const place = (
+    const placeAt = (
       node: LineageNode,
       shell: number,
-      angle: number,
       hubId: string | null,
-      lift = 0
+      x: number,
+      y: number,
+      z: number
     ) => {
-      const radius = shellRadius(shell, hubList.length);
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      const y = lift + (shell - 2) * 18;
       const size =
         shell === 0 ? 22 : shell === 1 ? 16 : shell === 4 ? 14 : node.asset_type === 'PROCESS' ? 15 : 13;
       bodies.push({
@@ -230,14 +279,18 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
 
     hubList.forEach((id) => {
       const node = byId.get(id);
-      if (!node) {
+      const pos = hubPos.get(id);
+      if (!node || !pos) {
         return;
       }
-      place(node, 0, hubAngle.get(id) ?? 0, id, 0);
+      placeAt(node, 0, id, pos.x, 0, pos.z);
     });
 
     for (const hub of hubList) {
-      const base = hubAngle.get(hub) ?? 0;
+      const pos = hubPos.get(hub);
+      if (!pos) {
+        continue;
+      }
       const group = (members.get(hub) ?? [])
         .map((id) => byId.get(id))
         .filter((node): node is LineageNode => Boolean(node))
@@ -256,25 +309,45 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         byShell.set(shell, list);
       }
       for (const [shell, list] of byShell) {
+        const { rx, rz } = shellEllipse(shell, list.length, pos.clusterR);
         list.forEach((node, index) => {
-          const spread = Math.min(1.1, 0.28 + list.length * 0.12);
-          const offset = list.length === 1 ? 0 : ((index / (list.length - 1)) - 0.5) * spread;
-          place(node, shell, base + offset, hub, (index % 3) * 10 - 10);
+          const angle =
+            (index / Math.max(list.length, 1)) * Math.PI * 2 + shell * 0.4 - Math.PI / 2;
+          const x = pos.x + Math.cos(angle) * rx;
+          const z = pos.z + Math.sin(angle) * rz;
+          const y = (shell - 2) * 22 + (index % 3) * 12 - 12;
+          placeAt(node, shell, hub, x, y, z);
         });
       }
     }
 
-    orphanIds.forEach((id, index) => {
-      const node = byId.get(id);
-      if (!node) {
-        return;
-      }
-      const shell = shellForType(node.asset_type);
-      const angle = (index / Math.max(orphanIds.length, 1)) * Math.PI * 2;
-      place(node, shell, angle, null, 0);
-    });
+    if (orphanIds.length) {
+      const orphanCols = Math.max(1, Math.ceil(Math.sqrt(orphanIds.length * 1.5)));
+      const orphanRows = Math.max(1, Math.ceil(orphanIds.length / orphanCols));
+      const orphanGap = clusterR * 0.85;
+      const fieldBottom =
+        hubList.length > 0 ? originZ + (rows - 1) * gapZ + clusterR * 1.35 : 0;
+      const orphanOriginX = -((orphanCols - 1) * orphanGap) / 2;
+      const orphanOriginZ = hubList.length > 0 ? fieldBottom : -((orphanRows - 1) * orphanGap) / 2;
+      orphanIds.forEach((id, index) => {
+        const node = byId.get(id);
+        if (!node) {
+          return;
+        }
+        const col = index % orphanCols;
+        const row = Math.floor(index / orphanCols);
+        placeAt(
+          node,
+          shellForType(node.asset_type),
+          null,
+          orphanOriginX + col * orphanGap,
+          0,
+          orphanOriginZ + row * orphanGap
+        );
+      });
+    }
 
-    // Bridge hint: if two hubs share a peripheral TABLE/VIEW, pull that node between them.
+    // Bridge hint: shared TABLE/VIEW sits between its hubs on the rectangular field.
     for (const body of bodies) {
       if (body.shell < 4 || !body.hubId) {
         continue;
@@ -292,20 +365,58 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       const hubsAround = [...neighbours];
       let x = 0;
       let z = 0;
+      let counted = 0;
       for (const hub of hubsAround) {
-        const angle = hubAngle.get(hub) ?? 0;
-        const radius = shellRadius(4, hubList.length);
-        x += Math.cos(angle) * radius;
-        z += Math.sin(angle) * radius;
+        const pos = hubPos.get(hub);
+        if (!pos) {
+          continue;
+        }
+        x += pos.x;
+        z += pos.z;
+        counted += 1;
       }
-      body.homeX = x / hubsAround.length;
-      body.homeZ = z / hubsAround.length;
-      body.homeY = 36;
+      if (!counted) {
+        continue;
+      }
+      body.homeX = x / counted;
+      body.homeZ = z / counted;
+      body.homeY = 40;
       body.x = body.homeX;
       body.y = body.homeY;
       body.z = body.homeZ;
       body.r += 3;
     }
+
+    const fieldBounds = (() => {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (const body of bodies) {
+        minX = Math.min(minX, body.homeX);
+        maxX = Math.max(maxX, body.homeX);
+        minY = Math.min(minY, body.homeY);
+        maxY = Math.max(maxY, body.homeY);
+        minZ = Math.min(minZ, body.homeZ);
+        maxZ = Math.max(maxZ, body.homeZ);
+      }
+      if (!Number.isFinite(minX)) {
+        return { minX: -200, maxX: 200, minY: -40, maxY: 40, minZ: -160, maxZ: 160 };
+      }
+      // Pad so labels and outer shells keep margin inside the frame.
+      const padX = Math.max(140, (maxX - minX) * 0.12);
+      const padZ = Math.max(120, (maxZ - minZ) * 0.12);
+      return {
+        minX: minX - padX,
+        maxX: maxX + padX,
+        minY: minY - 40,
+        maxY: maxY + 40,
+        minZ: minZ - padZ,
+        maxZ: maxZ + padZ,
+      };
+    })();
 
     const bodyMap = new Map(bodies.map((body) => [body.id, body]));
     const stars: Star[] = Array.from({ length: 180 }, (_, index) => {
@@ -321,30 +432,61 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     let width = 0;
     let height = 0;
     let dpr = 1;
-    let yaw = -0.35;
-    let pitch = 0.42;
-    let zoom = 0.92;
-    let targetZoom = 0.92;
-    let lookX = 0;
-    let lookY = 0;
-    let lookZ = 0;
-    let targetLookX = 0;
-    let targetLookY = 0;
-    let targetLookZ = 0;
+    // Flatter overview angle suits a rectangular field.
+    let yaw = -0.18;
+    let pitch = 0.58;
+    let zoom = 0.85;
+    let targetZoom = 0.85;
+    let lookX = (fieldBounds.minX + fieldBounds.maxX) / 2;
+    let lookY = (fieldBounds.minY + fieldBounds.maxY) / 2;
+    let lookZ = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
+    let targetLookX = lookX;
+    let targetLookY = lookY;
+    let targetLookZ = lookZ;
     let panX = 0;
     let panY = 0;
     let dragMode: 'rotate' | 'pan' | null = null;
     let moved = false;
     let lastX = 0;
     let lastY = 0;
-    let velYaw = 0.00022;
+    let velYaw = 0.00018;
     let velPitch = 0;
     let hoverId: string | null = null;
     let focusId = selectedAssetId ?? hubList[0] ?? bodies[0]?.id ?? null;
     let pulse = 0;
     let raf = 0;
     let hits: ScreenHit[] = [];
+    let userAdjustedView = false;
+    let followFocus = false;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const fitScene = (snap = false) => {
+      if (!width || !height || !bodies.length) {
+        return;
+      }
+      followFocus = false;
+      const cx = (fieldBounds.minX + fieldBounds.maxX) / 2;
+      const cy = (fieldBounds.minY + fieldBounds.maxY) / 2;
+      const cz = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
+      targetLookX = cx;
+      targetLookY = cy;
+      targetLookZ = cz;
+      panX = 0;
+      panY = 0;
+      const spanX = Math.max(320, fieldBounds.maxX - fieldBounds.minX);
+      const spanZ = Math.max(260, fieldBounds.maxZ - fieldBounds.minZ);
+      const spanY = Math.max(80, fieldBounds.maxY - fieldBounds.minY);
+      // Perspective foreshortening: Z contributes less on screen at this pitch.
+      const worldSpan = Math.max(spanX * 0.58, spanZ * 0.5, spanY * 0.35);
+      const viewSpan = Math.min(width, height) * 0.78;
+      targetZoom = Math.max(0.42, Math.min(2.35, viewSpan / worldSpan));
+      if (snap) {
+        lookX = cx;
+        lookY = cy;
+        lookZ = cz;
+        zoom = targetZoom;
+      }
+    };
 
     const flyToBody = (id: string | null) => {
       if (!id) {
@@ -355,21 +497,14 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         return;
       }
       focusId = id;
+      followFocus = true;
+      userAdjustedView = true;
       targetLookX = body.x;
       targetLookY = body.y;
       targetLookZ = body.z;
       panX *= 0.35;
       panY *= 0.35;
     };
-
-    if (focusId) {
-      const initial = bodyMap.get(focusId);
-      if (initial) {
-        lookX = targetLookX = initial.x;
-        lookY = targetLookY = initial.y;
-        lookZ = targetLookZ = initial.z;
-      }
-    }
 
     const project = (x: number, y: number, z: number) => {
       const lx = x - lookX;
@@ -405,6 +540,9 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!userAdjustedView) {
+        fitScene(true);
+      }
     };
 
     const stepPhysics = () => {
@@ -501,8 +639,8 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       lookX += (targetLookX - lookX) * lookEase;
       lookY += (targetLookY - lookY) * lookEase;
       lookZ += (targetLookZ - lookZ) * lookEase;
-      // Keep the orbit centre on a moving focus body (soft follow).
-      if (focusId) {
+      // Soft-follow only after an explicit fly-to (not the default overview).
+      if (followFocus && focusId) {
         const focused = bodyMap.get(focusId);
         if (focused) {
           targetLookX += (focused.x - targetLookX) * 0.12;
@@ -555,22 +693,42 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         ctx.fill();
       }
 
-      // Orbit guides around hub ring and table shell
+      // Rectangular field frame + local ellipses around each DATA_SOURCE.
       ctx.save();
-      for (const shell of [0, 4]) {
-        const samples = 64;
+      const frame = [
+        project(fieldBounds.minX, 0, fieldBounds.minZ),
+        project(fieldBounds.maxX, 0, fieldBounds.minZ),
+        project(fieldBounds.maxX, 0, fieldBounds.maxZ),
+        project(fieldBounds.minX, 0, fieldBounds.maxZ),
+      ];
+      ctx.beginPath();
+      frame.forEach((point, index) => {
+        if (index === 0) {
+          ctx.moveTo(point.x, point.y);
+        } else {
+          ctx.lineTo(point.x, point.y);
+        }
+      });
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.16)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([6, 10]);
+      ctx.stroke();
+
+      for (const [hubId, pos] of hubPos) {
+        const samples = 48;
+        const { rx, rz } = shellEllipse(4, members.get(hubId)?.length ?? 1, pos.clusterR);
         ctx.beginPath();
         for (let i = 0; i <= samples; i += 1) {
           const angle = (i / samples) * Math.PI * 2;
-          const radius = shellRadius(shell, hubList.length);
-          const p = project(Math.cos(angle) * radius, shell === 0 ? 0 : 24, Math.sin(angle) * radius);
+          const p = project(pos.x + Math.cos(angle) * rx, 18, pos.z + Math.sin(angle) * rz);
           if (i === 0) {
             ctx.moveTo(p.x, p.y);
           } else {
             ctx.lineTo(p.x, p.y);
           }
         }
-        ctx.strokeStyle = shell === 0 ? 'rgba(125, 211, 252, 0.18)' : 'rgba(134, 239, 172, 0.14)';
+        ctx.strokeStyle = 'rgba(134, 239, 172, 0.12)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 10]);
         ctx.stroke();
@@ -739,15 +897,12 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
 
     const resetView = () => {
       focusId = selectedAssetId ?? hubList[0] ?? bodies[0]?.id ?? null;
-      const home = focusId ? bodyMap.get(focusId) : null;
-      targetLookX = home?.x ?? 0;
-      targetLookY = home?.y ?? 0;
-      targetLookZ = home?.z ?? 0;
-      panX = 0;
-      panY = 0;
-      targetZoom = 0.92;
+      userAdjustedView = false;
+      yaw = -0.18;
+      pitch = 0.58;
       velYaw = 0.00016;
       velPitch = 0;
+      fitScene(true);
     };
 
     controlsRef.current = {
@@ -759,6 +914,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       },
       resetView,
       nudge: (dx, dy) => {
+        userAdjustedView = true;
         panX += dx;
         panY += dy;
       },
@@ -802,6 +958,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       }
       lastX = event.clientX;
       lastY = event.clientY;
+      userAdjustedView = true;
       if (dragMode === 'pan') {
         panX += dx;
         panY += dy;
@@ -843,17 +1000,11 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         flyToBody(id);
         return;
       }
-      // Empty space: return to scene origin / hub ring.
-      focusId = selectedAssetId ?? hubList[0] ?? bodies[0]?.id ?? null;
-      const home = focusId ? bodyMap.get(focusId) : null;
-      targetLookX = home?.x ?? 0;
-      targetLookY = home?.y ?? 0;
-      targetLookZ = home?.z ?? 0;
-      panX = 0;
-      panY = 0;
+      resetView();
     };
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      userAdjustedView = true;
       targetZoom = Math.max(0.45, Math.min(2.4, targetZoom * (event.deltaY > 0 ? 0.92 : 1.08)));
     };
     const onKeyDown = (event: KeyboardEvent) => {

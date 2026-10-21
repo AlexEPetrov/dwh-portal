@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends
 from api.portal.dto import (
     AssetCounts,
     OverviewResponse,
+    OverviewSchemaRow,
     RecentChanges,
-    SchemaStorageRow,
     StorageTotals,
     change_item,
     freshness_items,
@@ -38,6 +38,6 @@ def get_overview(
         ),
         collector_freshness=freshness_items(payload["collector_freshness"]),
         storage_by_schema=[
-            SchemaStorageRow.model_validate(row) for row in payload["storage_by_schema"]
+            OverviewSchemaRow.model_validate(row) for row in payload["storage_by_schema"]
         ],
     )

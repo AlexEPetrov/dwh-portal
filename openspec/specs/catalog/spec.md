@@ -165,6 +165,10 @@ lineage: все `DATA_SOURCE` и те `EXTRACTION_SOURCE`, у которых н�
 `GET /api/v1/overview` MUST возвращать число объектов, итоги хранения,
 сводку изменений и свежесть коллекторов.
 
+`storage_by_schema` MUST содержать строку на каждую схему из снимков
+хранения: `schema_name`, `total_bytes` и `description` активного объекта
+`SCHEMA` с тем же именем. Если описания нет, `description` MUST быть пустым.
+
 `GET /api/v1/storage` и `GET /api/v1/storage/history` MUST отдавать
 агрегаты и историю из снимков, а не live-запросы к DWH.
 
@@ -180,6 +184,13 @@ lineage: все `DATA_SOURCE` и те `EXTRACTION_SOURCE`, у которых н�
 - GIVEN последние снимки уже сохранены в Portal DB
 - WHEN клиент вызывает `GET /api/v1/overview`
 - THEN ответ собирается только из снимков Portal DB
+
+#### Scenario: Описание схемы в overview
+
+- GIVEN активный объект `SCHEMA` `raw` с описанием
+- AND у схемы есть снимок хранения
+- WHEN клиент вызывает `GET /api/v1/overview`
+- THEN в `storage_by_schema` у `raw` то же описание
 
 ### Requirement: Загрузки EXTRACTION_SOURCE из реестра
 

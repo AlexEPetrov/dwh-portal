@@ -34,6 +34,12 @@ class SchemaStorageRow(BaseModel):
     total_bytes: int
 
 
+class OverviewSchemaRow(SchemaStorageRow):
+    """Storage total for one schema together with its catalog description."""
+
+    description: str | None = None
+
+
 class ChangeSummaryItem(BaseModel):
     id: uuid.UUID
     asset_id: uuid.UUID
@@ -60,7 +66,7 @@ class OverviewResponse(BaseModel):
     storage_totals: StorageTotals
     recent_changes: RecentChanges
     collector_freshness: list[FreshnessItem]
-    storage_by_schema: list[SchemaStorageRow]
+    storage_by_schema: list[OverviewSchemaRow]
 
 
 class SnapshotMetrics(BaseModel):

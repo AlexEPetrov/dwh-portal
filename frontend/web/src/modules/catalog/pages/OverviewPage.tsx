@@ -74,8 +74,15 @@ const OverviewPage = () => {
             {data?.storage_by_schema.length ? (
               data.storage_by_schema.map((row) => (
                 <div key={row.schema_name} style={{ marginBottom: 12 }}>
-                  <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                    <Typography.Text strong>{row.schema_name}</Typography.Text>
+                  <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+                    <Space direction="vertical" size={0}>
+                      <Typography.Text strong>{row.schema_name}</Typography.Text>
+                      {row.description ? (
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {row.description}
+                        </Typography.Text>
+                      ) : null}
+                    </Space>
                     <Typography.Text>{formatBytes(row.total_bytes)}</Typography.Text>
                   </Space>
                   <Progress percent={Math.round((row.total_bytes / maxSchema) * 100)} showInfo={false} />

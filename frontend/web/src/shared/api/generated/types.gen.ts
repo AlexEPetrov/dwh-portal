@@ -263,7 +263,16 @@ export type OverviewResponse = {
     storage_totals: StorageTotals;
     recent_changes: RecentChanges;
     collector_freshness: Array<FreshnessItem>;
-    storage_by_schema: Array<SchemaStorageRow>;
+    storage_by_schema: Array<OverviewSchemaRow>;
+};
+
+/**
+ * Storage total for one schema together with its catalog description.
+ */
+export type OverviewSchemaRow = {
+    schema_name: string;
+    total_bytes: number;
+    description?: string | null;
 };
 
 export type RecentChanges = {

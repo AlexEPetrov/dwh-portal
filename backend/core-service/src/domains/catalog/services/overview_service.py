@@ -17,6 +17,7 @@ class OverviewService:
         self._status = CollectionStatusService(store, stale_after_hours=stale_after_hours)
 
     def get_overview(self) -> dict:
+        """Compose counts, recent changes, and per-schema storage with schema comments."""
         objects, _ = self._store.list_assets(
             AssetQuery(status=AssetStatus.ACTIVE, page=1, page_size=10_000)
         )
@@ -51,5 +52,22 @@ class OverviewService:
                 "items": recent[:8],
             },
             "collector_freshness": self._status.list_status(),
-            "storage_by_schema": storage["by_schema"],
+            "storage_by_schema": self._with_schema_descriptions(storage["by_schema"]),
         }
+
+    def _with_schema_descriptions(self, rows: list[dict]) -> list[dict]:
+        """Attach each schema asset comment to the matching storage row."""
+        schemas, _ = self._store.list_assets(
+            AssetQuery(
+                asset_type=AssetType.SCHEMA,
+                status=AssetStatus.ACTIVE,
+                page=1,
+                page_size=10_000,
+            )
+        )
+        descriptions: dict[str, str] = {}
+        for item in schemas:
+            name = item.attributes.get("schema") or item.name
+            if isinstance(name, str) and item.description:
+                descriptions[name] = item.description
+        return [{**row, "description": descriptions.get(row["schema_name"])} for row in rows]

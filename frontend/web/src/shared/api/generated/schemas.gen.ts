@@ -1215,7 +1215,7 @@ export const $OverviewResponse = {
         },
         storage_by_schema: {
             items: {
-                '$ref': '#/components/schemas/SchemaStorageRow'
+                '$ref': '#/components/schemas/OverviewSchemaRow'
             },
             type: 'array',
             title: 'Storage By Schema'
@@ -1224,6 +1224,34 @@ export const $OverviewResponse = {
     type: 'object',
     required: ['asset_counts', 'storage_totals', 'recent_changes', 'collector_freshness', 'storage_by_schema'],
     title: 'OverviewResponse'
+} as const;
+
+export const $OverviewSchemaRow = {
+    properties: {
+        schema_name: {
+            type: 'string',
+            title: 'Schema Name'
+        },
+        total_bytes: {
+            type: 'integer',
+            title: 'Total Bytes'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        }
+    },
+    type: 'object',
+    required: ['schema_name', 'total_bytes'],
+    title: 'OverviewSchemaRow',
+    description: 'Storage total for one schema together with its catalog description.'
 } as const;
 
 export const $RecentChanges = {
