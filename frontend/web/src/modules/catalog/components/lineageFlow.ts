@@ -299,7 +299,17 @@ const ROW_GAP = 32;
 
 export type LineagePoint = { x: number; y: number };
 
-export type FlowLink = { from: string; to: string };
+export type FlowLink = { from: string; to: string; id?: string; label?: string };
+
+export type MapSegment = {
+  id: string;
+  groupId: string;
+  source: string;
+  target: string;
+  label: string;
+  arrow: boolean;
+  incident: boolean;
+};
 
 const pushLink = (map: Map<string, string[]>, key: string, value: string) => {
   const list = map.get(key);
@@ -416,139 +426,407 @@ export const focusFlowRows = (
   return { rows: next, anchorKey: anchor.key, dependencyKeys };
 };
 
-const stageColumn = (assetType: string): number => {
-  const index = STAGE_ORDER.indexOf(assetType);
-  return index < 0 ? STAGE_ORDER.length : index;
+/** How many hops around the focused asset the map draws. */
+export const MAP_HOPS = 4;
+
+const LAYER_GAP = 128;
+
+/**
+ * Upstream and downstream assets within `hops` of the focus.
+ * Sibling branches beyond that distance stay off the map.
+ */
+export const neighborhoodIds = (focusId: string, links: FlowLink[], hops = MAP_HOPS): Set<string> => {
+  const downstream = new Map<string, string[]>();
+  const upstream = new Map<string, string[]>();
+  for (const link of links) {
+    pushLink(downstream, link.from, link.to);
+    pushLink(upstream, link.to, link.from);
+  }
+  const result = new Set<string>([focusId]);
+  const walk = (next: Map<string, string[]>) => {
+    let frontier = [focusId];
+    const seen = new Set<string>([focusId]);
+    for (let hop = 0; hop < hops; hop += 1) {
+      const upcoming: string[] = [];
+      for (const id of frontier) {
+        for (const neighbour of next.get(id) ?? []) {
+          if (seen.has(neighbour)) {
+            continue;
+          }
+          seen.add(neighbour);
+          result.add(neighbour);
+          upcoming.push(neighbour);
+        }
+      }
+      frontier = upcoming;
+    }
+  };
+  walk(downstream);
+  walk(upstream);
+  return result;
 };
 
-const baseColumnPositions = (
-  nodes: Array<{ id: string; asset_type: string; display_name: string }>
-): Map<string, LineagePoint> => {
-  const columns = new Map<number, Array<{ id: string; asset_type: string; display_name: string }>>();
-  for (const node of nodes) {
-    const column = stageColumn(node.asset_type);
-    const list = columns.get(column);
-    if (list) {
-      list.push(node);
-    } else {
-      columns.set(column, [node]);
+const WAYPOINT_SIZE = 8;
+const WAYPOINT_GAP = 20;
+
+type RankSlot = { id: string; dummy: boolean };
+
+const reachable = (start: string, next: Map<string, string[]>, allowed: Set<string>): Set<string> => {
+  const result = new Set<string>([start]);
+  const stack = [start];
+  while (stack.length) {
+    const id = stack.pop();
+    if (!id) {
+      continue;
+    }
+    for (const neighbour of next.get(id) ?? []) {
+      if (!allowed.has(neighbour) || result.has(neighbour)) {
+        continue;
+      }
+      result.add(neighbour);
+      stack.push(neighbour);
     }
   }
-  const positions = new Map<string, LineagePoint>();
-  const columnsInOrder = [...columns.keys()].sort((a, b) => a - b);
-  columnsInOrder.forEach((column, visualIndex) => {
-    const list = columns.get(column) ?? [];
-    list.sort(
-      (a, b) => a.display_name.localeCompare(b.display_name) || a.id.localeCompare(b.id)
-    );
-    list.forEach((node, row) => {
-      positions.set(node.id, {
-        x: visualIndex * (LINEAGE_NODE_WIDTH + COLUMN_GAP),
-        y: row * (LINEAGE_NODE_HEIGHT + ROW_GAP),
+  return result;
+};
+
+const longestDistances = (
+  start: string,
+  next: Map<string, string[]>,
+  allowed: Set<string>
+): Map<string, number> => {
+  const dist = new Map<string, number>([[start, 0]]);
+  const ids = [...allowed];
+  for (let pass = 0; pass < ids.length; pass += 1) {
+    let changed = false;
+    for (const id of ids) {
+      const base = dist.get(id);
+      if (base === undefined) {
+        continue;
+      }
+      for (const neighbour of next.get(id) ?? []) {
+        if (!allowed.has(neighbour)) {
+          continue;
+        }
+        const candidate = base + 1;
+        if ((dist.get(neighbour) ?? -1) < candidate) {
+          dist.set(neighbour, candidate);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
+  return dist;
+};
+
+/** Longest path from the focus, so a shortcut cannot pull a node back across another edge. */
+const flowRanks = (focusId: string, links: FlowLink[], visible: Set<string>): Map<string, number> => {
+  const outgoing = new Map<string, string[]>();
+  const incoming = new Map<string, string[]>();
+  for (const link of links) {
+    if (!visible.has(link.from) || !visible.has(link.to)) {
+      continue;
+    }
+    pushLink(outgoing, link.from, link.to);
+    pushLink(incoming, link.to, link.from);
+  }
+  const downstream = reachable(focusId, outgoing, visible);
+  const upstream = reachable(focusId, incoming, visible);
+  upstream.delete(focusId);
+  const downDist = longestDistances(focusId, outgoing, downstream);
+  const upDist = longestDistances(focusId, incoming, upstream);
+  const rank = new Map<string, number>();
+  for (const [id, distance] of downDist) {
+    rank.set(id, distance);
+  }
+  for (const [id, distance] of upDist) {
+    if (!rank.has(id)) {
+      rank.set(id, -distance);
+    }
+  }
+  for (const id of visible) {
+    if (!rank.has(id)) {
+      rank.set(id, 0);
+    }
+  }
+  const ids = [...visible];
+  for (let pass = 0; pass < ids.length; pass += 1) {
+    let changed = false;
+    for (const link of links) {
+      if (!visible.has(link.from) || !visible.has(link.to)) {
+        continue;
+      }
+      const from = rank.get(link.from) ?? 0;
+      const to = rank.get(link.to) ?? 0;
+      if (to <= from) {
+        rank.set(link.to, from + 1);
+        changed = true;
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
+  return rank;
+};
+
+const expandSegments = (
+  links: FlowLink[],
+  rank: Map<string, number>,
+  focusId: string
+): { layers: Map<number, RankSlot[]>; segments: MapSegment[] } => {
+  const layers = new Map<number, RankSlot[]>();
+  const seen = new Map<number, Set<string>>();
+  const add = (layer: number, id: string, dummy: boolean) => {
+    const taken = seen.get(layer) ?? new Set<string>();
+    if (taken.has(id)) {
+      return;
+    }
+    taken.add(id);
+    seen.set(layer, taken);
+    const list = layers.get(layer) ?? [];
+    list.push({ id, dummy });
+    layers.set(layer, list);
+  };
+  for (const [id, layer] of rank) {
+    add(layer, id, false);
+  }
+  const segments: MapSegment[] = [];
+  let dummySeq = 0;
+  for (const link of links) {
+    const fromRank = rank.get(link.from);
+    const toRank = rank.get(link.to);
+    if (fromRank === undefined || toRank === undefined || toRank <= fromRank) {
+      continue;
+    }
+    const groupId = link.id ?? `${link.from}->${link.to}`;
+    const incident = link.from === focusId || link.to === focusId;
+    let previous = link.from;
+    for (let layer = fromRank + 1; layer < toRank; layer += 1) {
+      const dummyId = `way:${groupId}:${layer}:${dummySeq}`;
+      dummySeq += 1;
+      add(layer, dummyId, true);
+      segments.push({
+        id: `${groupId}:${layer}:${dummySeq}`,
+        groupId,
+        source: previous,
+        target: dummyId,
+        label: '',
+        arrow: false,
+        incident,
       });
+      previous = dummyId;
+    }
+    segments.push({
+      id: `${groupId}:end`,
+      groupId,
+      source: previous,
+      target: link.to,
+      label: link.label ?? '',
+      arrow: true,
+      incident,
+    });
+  }
+  return { layers, segments };
+};
+
+const average = (values: number[], fallback: number) => {
+  if (!values.length) {
+    return fallback;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+};
+
+const crossingCount = (left: RankSlot[], right: RankSlot[], segments: MapSegment[]): number => {
+  const leftPos = new Map(left.map((slot, index) => [slot.id, index]));
+  const rightPos = new Map(right.map((slot, index) => [slot.id, index]));
+  const pairs: Array<[number, number]> = [];
+  for (const segment of segments) {
+    const source = leftPos.get(segment.source);
+    const target = rightPos.get(segment.target);
+    if (source === undefined || target === undefined) {
+      continue;
+    }
+    pairs.push([source, target]);
+  }
+  let count = 0;
+  for (let i = 0; i < pairs.length; i += 1) {
+    for (let j = i + 1; j < pairs.length; j += 1) {
+      const [leftA, rightA] = pairs[i];
+      const [leftB, rightB] = pairs[j];
+      if ((leftA - leftB) * (rightA - rightB) < 0) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+};
+
+const orderLayers = (
+  layers: Map<number, RankSlot[]>,
+  segments: MapSegment[],
+  nameOf: (id: string) => string
+) => {
+  const ranks = [...layers.keys()].sort((a, b) => a - b);
+  for (const list of layers.values()) {
+    list.sort((a, b) => nameOf(a.id).localeCompare(nameOf(b.id)) || a.id.localeCompare(b.id));
+  }
+  const neighborPositions = (id: string, other: Map<string, number>) => {
+    const values: number[] = [];
+    for (const segment of segments) {
+      if (segment.source === id) {
+        const position = other.get(segment.target);
+        if (position !== undefined) {
+          values.push(position);
+        }
+      }
+      if (segment.target === id) {
+        const position = other.get(segment.source);
+        if (position !== undefined) {
+          values.push(position);
+        }
+      }
+    }
+    return values;
+  };
+  for (let pass = 0; pass < 8; pass += 1) {
+    const sequence = pass % 2 === 0 ? ranks : [...ranks].reverse();
+    const direction = pass % 2 === 0 ? 1 : -1;
+    for (const rank of sequence) {
+      const list = layers.get(rank);
+      const other = layers.get(rank + direction);
+      if (!list || !other) {
+        continue;
+      }
+      const otherPos = new Map(other.map((slot, index) => [slot.id, index]));
+      const current = new Map(list.map((slot, index) => [slot.id, index]));
+      list.sort((a, b) => {
+        const diff =
+          average(neighborPositions(a.id, otherPos), current.get(a.id) ?? 0) -
+          average(neighborPositions(b.id, otherPos), current.get(b.id) ?? 0);
+        if (diff !== 0) {
+          return diff;
+        }
+        return nameOf(a.id).localeCompare(nameOf(b.id)) || a.id.localeCompare(b.id);
+      });
+    }
+  }
+  for (let pass = 0; pass < ranks.length; pass += 1) {
+    for (let index = 0; index < ranks.length - 1; index += 1) {
+      const left = layers.get(ranks[index]);
+      const right = layers.get(ranks[index + 1]);
+      if (!left || !right || left.length < 2) {
+        continue;
+      }
+      let improved = true;
+      let guard = 0;
+      while (improved && guard < left.length * left.length) {
+        improved = false;
+        guard += 1;
+        for (let slot = 0; slot < left.length - 1; slot += 1) {
+          const before = crossingCount(left, right, segments);
+          const current = left[slot];
+          left[slot] = left[slot + 1];
+          left[slot + 1] = current;
+          if (crossingCount(left, right, segments) < before) {
+            improved = true;
+            continue;
+          }
+          const swapped = left[slot];
+          left[slot] = left[slot + 1];
+          left[slot + 1] = swapped;
+        }
+      }
+    }
+  }
+};
+
+const placeLayers = (
+  layers: Map<number, RankSlot[]>
+): { positions: Map<string, LineagePoint>; waypoints: Map<string, LineagePoint> } => {
+  const positions = new Map<string, LineagePoint>();
+  const waypoints = new Map<string, LineagePoint>();
+  const ranks = [...layers.keys()].sort((a, b) => a - b);
+  const minRank = ranks[0] ?? 0;
+  for (const rank of ranks) {
+    const list = layers.get(rank) ?? [];
+    let stack = 0;
+    list.forEach((slot, index) => {
+      if (index > 0) {
+        const previous = list[index - 1];
+        stack += previous.dummy && slot.dummy ? WAYPOINT_GAP : ROW_GAP;
+      }
+      stack += slot.dummy ? WAYPOINT_SIZE : LINEAGE_NODE_HEIGHT;
+    });
+    let y = -stack / 2;
+    const x = (rank - minRank) * (LINEAGE_NODE_WIDTH + LAYER_GAP);
+    list.forEach((slot, index) => {
+      if (index > 0) {
+        const previous = list[index - 1];
+        y += previous.dummy && slot.dummy ? WAYPOINT_GAP : ROW_GAP;
+      }
+      if (slot.dummy) {
+        waypoints.set(slot.id, { x: x + LINEAGE_NODE_WIDTH / 2 - WAYPOINT_SIZE / 2, y });
+        y += WAYPOINT_SIZE;
+        return;
+      }
+      positions.set(slot.id, { x, y });
+      y += LINEAGE_NODE_HEIGHT;
+    });
+  }
+  return { positions, waypoints };
+};
+
+const placeGrid = (
+  nodes: Array<{ id: string; display_name: string }>
+): Map<string, LineagePoint> => {
+  const ordered = [...nodes].sort(
+    (a, b) => a.display_name.localeCompare(b.display_name) || a.id.localeCompare(b.id)
+  );
+  const columns = Math.max(1, Math.ceil(Math.sqrt(ordered.length)));
+  const positions = new Map<string, LineagePoint>();
+  ordered.forEach((node, index) => {
+    positions.set(node.id, {
+      x: (index % columns) * (LINEAGE_NODE_WIDTH + COLUMN_GAP),
+      y: Math.floor(index / columns) * (LINEAGE_NODE_HEIGHT + ROW_GAP),
     });
   });
   return positions;
 };
 
+export type LineageMapLayout = {
+  positions: Map<string, LineagePoint>;
+  waypoints: Map<string, LineagePoint>;
+  neighborhood: Set<string>;
+  /** Unit segments. A long edge is split so it never crosses another column. */
+  segments: MapSegment[];
+};
+
 /**
- * Stable columns by asset type and name. The focused asset keeps its coordinates;
- * its own upstream and downstream nodes pack beside it. Other nodes in those
- * columns shift only enough to avoid covering that pack.
+ * Left-to-right layers around the focused asset.
+ * Each edge steps one column at a time. Nodes in a column are ordered so those
+ * steps do not cross.
  */
 export const layoutLineageMap = (
   nodes: Array<{ id: string; asset_type: string; display_name: string }>,
   links: FlowLink[],
   focusId: string | null
-): { positions: Map<string, LineagePoint>; neighborhood: Set<string> } => {
-  const base = baseColumnPositions(nodes);
-  if (!focusId || !base.has(focusId)) {
-    return { positions: base, neighborhood: new Set() };
+): LineageMapLayout => {
+  const present = new Set(nodes.map((node) => node.id));
+  const center = focusId && present.has(focusId) ? focusId : null;
+  const neighborhood = center ? neighborhoodIds(center, links) : new Set(nodes.map((node) => node.id));
+  const visible = nodes.filter((node) => neighborhood.has(node.id));
+  const visibleLinks = links.filter((link) => neighborhood.has(link.from) && neighborhood.has(link.to));
+  if (!center || !visibleLinks.length) {
+    return { positions: placeGrid(visible), waypoints: new Map(), neighborhood, segments: [] };
   }
-  const neighborhood = dependencyIds(focusId, links);
-  const anchor = base.get(focusId);
-  if (!anchor) {
-    return { positions: base, neighborhood };
-  }
-  const byColumn = new Map<number, string[]>();
-  for (const node of nodes) {
-    const point = base.get(node.id);
-    if (!point) {
-      continue;
-    }
-    const list = byColumn.get(point.x);
-    if (list) {
-      list.push(node.id);
-    } else {
-      byColumn.set(point.x, [node.id]);
-    }
-  }
-  const positions = new Map(base);
-  for (const [x, ids] of byColumn) {
-    const inFocus = ids.filter((id) => neighborhood.has(id));
-    if (!inFocus.length) {
-      continue;
-    }
-    inFocus.sort((a, b) => {
-      if (a === focusId) {
-        return -1;
-      }
-      if (b === focusId) {
-        return 1;
-      }
-      return (base.get(a)?.y ?? 0) - (base.get(b)?.y ?? 0);
-    });
-    let cursor = anchor.y;
-    let stackTop = anchor.y;
-    let lastBottom = anchor.y;
-    for (const id of inFocus) {
-      if (id === focusId) {
-        positions.set(id, { x, y: anchor.y });
-        cursor = anchor.y + LINEAGE_NODE_HEIGHT + ROW_GAP;
-        stackTop = anchor.y;
-        lastBottom = anchor.y + LINEAGE_NODE_HEIGHT;
-        continue;
-      }
-      positions.set(id, { x, y: cursor });
-      stackTop = Math.min(stackTop, cursor);
-      lastBottom = cursor + LINEAGE_NODE_HEIGHT;
-      cursor += LINEAGE_NODE_HEIGHT + ROW_GAP;
-    }
-    const outFocus = ids
-      .filter((id) => !neighborhood.has(id))
-      .sort((a, b) => (base.get(a)?.y ?? 0) - (base.get(b)?.y ?? 0));
-    const occupied: number[] = [];
-    const displaced: string[] = [];
-    for (const id of outFocus) {
-      const baseY = base.get(id)?.y ?? 0;
-      const overlapsStack = baseY < lastBottom && baseY + LINEAGE_NODE_HEIGHT > stackTop;
-      if (!overlapsStack) {
-        positions.set(id, { x, y: baseY });
-        occupied.push(baseY);
-        continue;
-      }
-      displaced.push(id);
-    }
-    let below = lastBottom + ROW_GAP;
-    for (const id of displaced) {
-      const hitsKept = (y: number) =>
-        occupied.some(
-          (keptY) => y < keptY + LINEAGE_NODE_HEIGHT + ROW_GAP && y + LINEAGE_NODE_HEIGHT + ROW_GAP > keptY
-        );
-      while (hitsKept(below)) {
-        const blocker = occupied
-          .filter(
-            (keptY) =>
-              below < keptY + LINEAGE_NODE_HEIGHT + ROW_GAP &&
-              below + LINEAGE_NODE_HEIGHT + ROW_GAP > keptY
-          )
-          .sort((a, b) => a - b)[0];
-        below = blocker + LINEAGE_NODE_HEIGHT + ROW_GAP;
-      }
-      positions.set(id, { x, y: below });
-      occupied.push(below);
-      below += LINEAGE_NODE_HEIGHT + ROW_GAP;
-    }
-  }
-  return { positions, neighborhood };
+  const ranks = flowRanks(center, visibleLinks, neighborhood);
+  const nameOf = new Map(nodes.map((node) => [node.id, node.display_name]));
+  const { layers, segments } = expandSegments(visibleLinks, ranks, center);
+  orderLayers(layers, segments, (id) => nameOf.get(id) ?? id);
+  const placed = placeLayers(layers);
+  return { positions: placed.positions, waypoints: placed.waypoints, neighborhood, segments };
 };

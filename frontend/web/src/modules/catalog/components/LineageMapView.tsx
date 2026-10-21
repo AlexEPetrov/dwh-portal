@@ -3,7 +3,6 @@ import {
   Background,
   Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   type Edge,
   type Node,
@@ -48,6 +47,8 @@ type AssetNodeData = {
 };
 
 type AssetFlowNode = Node<AssetNodeData, 'asset'>;
+type WaypointNode = Node<{ kind: 'waypoint' }, 'waypoint'>;
+type MapNode = AssetFlowNode | WaypointNode;
 
 const AssetFlowNodeView = ({ data }: NodeProps<AssetFlowNode>) => (
   <>
@@ -67,52 +68,14 @@ const AssetFlowNodeView = ({ data }: NodeProps<AssetFlowNode>) => (
   </>
 );
 
-const nodeTypes = { asset: AssetFlowNodeView };
+const WaypointView = () => (
+  <>
+    <Handle type="target" position={Position.Left} style={{ opacity: 0, width: 1, height: 1, border: 'none' }} />
+    <Handle type="source" position={Position.Right} style={{ opacity: 0, width: 1, height: 1, border: 'none' }} />
+  </>
+);
 
-const frameNeighborhood = (
-  instance: ReactFlowInstance<AssetFlowNode, Edge>,
-  container: HTMLElement,
-  focusId: string,
-  neighborhood: AssetFlowNode[]
-) => {
-  const focusNode = neighborhood.find((node) => node.id === focusId);
-  if (!focusNode || container.clientWidth < 40 || container.clientHeight < 40 || !neighborhood.length) {
-    return;
-  }
-  const padding = 32;
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-  const minX = Math.min(...neighborhood.map((node) => node.position.x));
-  const minY = Math.min(...neighborhood.map((node) => node.position.y));
-  const maxX = Math.max(...neighborhood.map((node) => node.position.x + LINEAGE_NODE_WIDTH));
-  const maxY = Math.max(...neighborhood.map((node) => node.position.y + LINEAGE_NODE_HEIGHT));
-  const bounds = { x: minX, y: minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) };
-  const current = instance.getViewport();
-  const fitZoom = Math.min(
-    (width - padding * 2) / Math.max(bounds.width, 1),
-    (height - padding * 2) / Math.max(bounds.height, 1)
-  );
-  const zoom = Math.min(1, Math.max(0.2, fitZoom));
-  const screenX = focusNode.position.x * current.zoom + current.x;
-  const screenY = focusNode.position.y * current.zoom + current.y;
-  let x = screenX - focusNode.position.x * zoom;
-  let y = screenY - focusNode.position.y * zoom;
-  const left = bounds.x * zoom + x;
-  const top = bounds.y * zoom + y;
-  const right = left + bounds.width * zoom;
-  const bottom = top + bounds.height * zoom;
-  if (left < padding) {
-    x += padding - left;
-  } else if (right > width - padding) {
-    x -= right - (width - padding);
-  }
-  if (top < padding) {
-    y += padding - top;
-  } else if (bottom > height - padding) {
-    y -= bottom - (height - padding);
-  }
-  void instance.setViewport({ x, y, zoom }, { duration: 280 });
-};
+const nodeTypes = { asset: AssetFlowNodeView, waypoint: WaypointView };
 
 const LineageMapView = ({
   nodes,
@@ -125,34 +88,45 @@ const LineageMapView = ({
 }: Props) => {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [instance, setInstance] = useState<ReactFlowInstance<AssetFlowNode, Edge> | null>(null);
+  const [instance, setInstance] = useState<ReactFlowInstance<MapNode, Edge> | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const focusRef = useRef(onFocusNode);
   focusRef.current = onFocusNode;
   const clearRef = useRef(onClearFocus);
   clearRef.current = onClearFocus;
+  const centerId = rootsOverview ? null : (focusId ?? selectedAssetId ?? null);
 
   const flow = useMemo(() => {
     if (!nodes.length) {
       return {
-        nodes: [] as AssetFlowNode[],
-        edges: [] as Edge[],
-        neighborhoodIds: [] as string[],
+        nodes: [] as MapNode[],
+        edges: [] as Array<
+          Edge & { caption: string; incident: boolean; groupId: string; arrow: boolean }
+        >,
+        neighborhoodKey: '',
       };
     }
     const flowEdges = edges.length ? buildFlowEdges(nodes, edges) : [];
-    const links = flowEdges.map((edge) => ({ from: edge.source, to: edge.target }));
-    const layout = layoutLineageMap(nodes, links, focusId);
-    const rfNodes: AssetFlowNode[] = nodes.map((node) => {
-      const position = layout.positions.get(node.id) ?? { x: 0, y: 0 };
-      const inNeighborhood = !focusId || layout.neighborhood.has(node.id);
-      return {
+    const links = flowEdges.map((edge) => ({
+      from: edge.source,
+      to: edge.target,
+      id: edge.id,
+      label: edge.label,
+    }));
+    const layout = layoutLineageMap(nodes, links, centerId);
+    const rfNodes: MapNode[] = [];
+    for (const node of nodes) {
+      const position = layout.positions.get(node.id);
+      if (!position) {
+        continue;
+      }
+      rfNodes.push({
         id: node.id,
         type: 'asset',
         position,
         width: LINEAGE_NODE_WIDTH,
         height: LINEAGE_NODE_HEIGHT,
-        zIndex: node.id === focusId ? 3 : inNeighborhood ? 2 : 1,
-        style: { opacity: inNeighborhood ? 1 : 0.28 },
+        zIndex: node.id === centerId ? 3 : 2,
         data: {
           label: node.display_name,
           assetType: node.asset_type,
@@ -172,67 +146,107 @@ const LineageMapView = ({
                   focusRef.current?.(node.id);
                 },
         },
-      };
-    });
-    const rfEdges: Edge[] = flowEdges.map((edge) => {
-      const related =
-        !focusId || (layout.neighborhood.has(edge.source) && layout.neighborhood.has(edge.target));
-      return {
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.label,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-        style: {
-          stroke: related && focusId ? '#1677ff' : '#8c8c8c',
-          opacity: related ? 1 : 0.12,
-        },
-        labelStyle: { fontSize: 11, fill: '#595959' },
-        labelBgStyle: { fill: '#fafafa' },
-        labelBgPadding: [4, 6] as [number, number],
-        labelBgBorderRadius: 4,
-      };
-    });
-    return {
-      nodes: rfNodes,
-      edges: rfEdges,
-      neighborhoodIds: focusId ? [...layout.neighborhood] : [],
-    };
-  }, [nodes, edges, focusId, selectedAssetId, navigate]);
+      });
+    }
+    for (const [id, position] of layout.waypoints) {
+      rfNodes.push({
+        id,
+        type: 'waypoint',
+        position,
+        width: 8,
+        height: 8,
+        selectable: false,
+        draggable: false,
+        connectable: false,
+        focusable: false,
+        data: { kind: 'waypoint' },
+        style: { opacity: 0, pointerEvents: 'none', width: 8, height: 8 },
+      });
+    }
+    const routed = layout.segments.length
+      ? layout.segments.map((segment) => ({
+          id: segment.id,
+          source: segment.source,
+          target: segment.target,
+          caption: segment.label,
+          incident: segment.incident,
+          groupId: segment.groupId,
+          arrow: segment.arrow,
+        }))
+      : flowEdges.flatMap((edge) => {
+          if (!layout.neighborhood.has(edge.source) || !layout.neighborhood.has(edge.target)) {
+            return [];
+          }
+          return [
+            {
+              id: edge.id,
+              source: edge.source,
+              target: edge.target,
+              caption: edge.label,
+              incident: edge.source === centerId || edge.target === centerId,
+              groupId: edge.id,
+              arrow: true,
+            },
+          ];
+        });
+    const rfEdges = routed.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: 'smoothstep' as const,
+      pathOptions: { borderRadius: 4 },
+      caption: edge.caption,
+      incident: edge.incident,
+      groupId: edge.groupId,
+      arrow: edge.arrow,
+      data: { groupId: edge.groupId },
+      interactionWidth: 16,
+      markerEnd: edge.arrow ? { type: MarkerType.ArrowClosed, width: 16, height: 16 } : undefined,
+      labelStyle: { fontSize: 11, fill: '#595959' },
+      labelBgStyle: { fill: '#fafafa' },
+      labelBgPadding: [4, 6] as [number, number],
+      labelBgBorderRadius: 4,
+    }));
+    const neighborhoodKey = [...layout.neighborhood].sort().join('|');
+    return { nodes: rfNodes, edges: rfEdges, neighborhoodKey };
+  }, [nodes, edges, centerId, focusId, selectedAssetId, navigate]);
 
-  const graphKey = `${nodes.map((node) => node.id).join('|')}::${edges.map((edge) => edge.id).join('|')}`;
-  const neighborhoodKey = flow.neighborhoodIds.join('|');
-  const neighborhoodRef = useRef<AssetFlowNode[]>([]);
-  neighborhoodRef.current = flow.nodes.filter((node) => flow.neighborhoodIds.includes(node.id));
-  const graphKeyRef = useRef('');
+  const visibleEdges = useMemo(
+    () =>
+      flow.edges.map((edge) => {
+        const active = edge.incident || edge.groupId === hoveredEdgeId;
+        const stroke = active ? '#1677ff' : '#bfbfbf';
+        return {
+          ...edge,
+          label: edge.groupId === hoveredEdgeId && edge.caption ? edge.caption : undefined,
+          style: { stroke, strokeWidth: active ? 1.6 : 1 },
+          markerEnd: edge.arrow
+            ? { type: MarkerType.ArrowClosed, width: 16, height: 16, color: stroke }
+            : undefined,
+        };
+      }),
+    [flow.edges, hoveredEdgeId]
+  );
 
   useEffect(() => {
     const container = containerRef.current;
     if (!instance || !container) {
       return;
     }
-    const graphChanged = graphKeyRef.current !== graphKey;
-    graphKeyRef.current = graphKey;
     let lastWidth = container.clientWidth;
-    const apply = (allowFitAll: boolean) => {
-      if (container.clientWidth < 40 || container.clientHeight < 40) {
+    const apply = () => {
+      if (container.clientWidth < 40 || container.clientHeight < 40 || !flow.nodes.length) {
         return;
       }
-      if (focusId && neighborhoodRef.current.length) {
-        frameNeighborhood(instance, container, focusId, neighborhoodRef.current);
-        return;
-      }
-      if (!focusId && allowFitAll) {
-        void instance.fitView({ padding: 0.2, duration: 200 });
-      }
+      void instance.fitView({ padding: 0.22, duration: 520, maxZoom: 1 });
     };
-    const frame = requestAnimationFrame(() => apply(graphChanged));
+    const frame = requestAnimationFrame(apply);
     const observer = new ResizeObserver(() => {
       const width = container.clientWidth;
       const shown = lastWidth < 40 && width >= 40;
       lastWidth = width;
       if (shown) {
-        apply(true);
+        apply();
       }
     });
     observer.observe(container);
@@ -240,7 +254,7 @@ const LineageMapView = ({
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [instance, graphKey, focusId, neighborhoodKey]);
+  }, [instance, flow.neighborhoodKey, flow.nodes.length]);
 
   if (!nodes.length) {
     return (
@@ -270,10 +284,16 @@ const LineageMapView = ({
     >
       <ReactFlow
         nodes={flow.nodes}
-        edges={flow.edges}
+        edges={visibleEdges}
         nodeTypes={nodeTypes}
         onInit={setInstance}
         onPaneClick={() => clearRef.current?.()}
+        onEdgeMouseEnter={(_event, edge) => {
+          const data = edge.data as { groupId?: string } | undefined;
+          setHoveredEdgeId(data?.groupId ?? edge.id);
+        }}
+        onEdgeMouseLeave={() => setHoveredEdgeId(null)}
+        onlyRenderVisibleElements
         minZoom={0.2}
         maxZoom={1.5}
         nodesDraggable={false}
@@ -283,11 +303,6 @@ const LineageMapView = ({
       >
         <Background gap={16} color="#f0f0f0" />
         <Controls showInteractive={false} />
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(node) => (node.data as AssetNodeData).accent || '#8c8c8c'}
-        />
       </ReactFlow>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Empty, Space, Tag, Tooltip, Typography } from 'antd';
-import { useEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LineageAssetChip from './LineageAssetChip';
 import {
@@ -74,6 +74,7 @@ const Hop = ({
 }) => (
   <div
     className={dimmed ? 'lineage-list-hop is-dimmed' : 'lineage-list-hop'}
+    data-lineage-key={row.key}
     data-lineage-anchor={anchor ? 'true' : undefined}
   >
     <NodeCard
@@ -108,6 +109,7 @@ const Hop = ({
 
 const ListRows = ({
   rows,
+  rowsRef,
   clusterRef,
   anchorKey,
   dependencyKeys,
@@ -116,6 +118,7 @@ const ListRows = ({
   onFocusNode,
 }: {
   rows: FlowRow[];
+  rowsRef: { current: HTMLDivElement | null };
   clusterRef: { current: HTMLDivElement | null };
   anchorKey: string | null;
   dependencyKeys: Set<string>;
@@ -146,14 +149,18 @@ const ListRows = ({
   );
 
   if (anchorIndex < 0) {
-    return <div className="lineage-list-rows">{rows.map((row) => renderHop(row, false))}</div>;
+    return (
+      <div className="lineage-list-rows" ref={rowsRef}>
+        {rows.map((row) => renderHop(row, false))}
+      </div>
+    );
   }
 
   const before = rows.slice(0, clusterStart);
   const cluster = rows.slice(clusterStart, clusterEnd + 1);
   const after = rows.slice(clusterEnd + 1);
   return (
-    <div className="lineage-list-rows">
+    <div className="lineage-list-rows" ref={rowsRef}>
       {before.map((row) => renderHop(row, !dependencyKeys.has(row.key)))}
       <div className="lineage-list-focus" ref={clusterRef}>
         {cluster.map((row) => renderHop(row, false))}
@@ -175,13 +182,50 @@ const Arrow = ({ label }: { label: string }) => (
   </Tooltip>
 );
 
-const revealCluster = (cluster: HTMLElement) => {
-  const anchor = cluster.querySelector<HTMLElement>('[data-lineage-anchor="true"]') ?? cluster;
-  const scroller = cluster.closest('.lineage-list-scroll');
-  if (!(scroller instanceof HTMLElement)) {
-    anchor.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    return;
+const SCROLL_MS = 560;
+const SCROLL_EASING = 'cubic-bezier(0.45, 0, 0.25, 1)';
+
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
+
+const canScroll = (el: HTMLElement) => {
+  const overflow = getComputedStyle(el).overflowY;
+  return (overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+};
+
+const findScroller = (from: HTMLElement): HTMLElement | null => {
+  const marked = from.closest('.lineage-list-scroll');
+  if (marked instanceof HTMLElement && canScroll(marked)) {
+    return marked;
   }
+  let node: HTMLElement | null = from.parentElement;
+  while (node) {
+    if (canScroll(node)) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  if (document.scrollingElement instanceof HTMLElement && canScroll(document.scrollingElement)) {
+    return document.scrollingElement;
+  }
+  return marked instanceof HTMLElement ? marked : null;
+};
+
+const layoutTop = (el: HTMLElement, scroller: HTMLElement): number => {
+  let y = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== scroller) {
+    y += node.offsetTop;
+    const parent: Element | null = node.offsetParent;
+    if (!(parent instanceof HTMLElement) || (parent !== scroller && !scroller.contains(parent))) {
+      return el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    }
+    node = parent;
+  }
+  return y;
+};
+
+const clusterDelta = (scroller: HTMLElement, cluster: HTMLElement): number => {
+  const anchor = cluster.querySelector<HTMLElement>('[data-lineage-anchor="true"]') ?? cluster;
   const view = scroller.getBoundingClientRect();
   const box = cluster.getBoundingClientRect();
   const anchorBox = anchor.getBoundingClientRect();
@@ -196,9 +240,7 @@ const revealCluster = (cluster: HTMLElement) => {
     const roomAboveAnchor = anchorBox.top - (view.top + 8) - delta;
     delta += Math.min(overflowBottom, Math.max(0, roomAboveAnchor));
   }
-  if (Math.abs(delta) > 1) {
-    scroller.scrollBy({ top: delta, behavior: 'smooth' });
-  }
+  return delta;
 };
 
 const LineageListView = ({
@@ -211,6 +253,9 @@ const LineageListView = ({
   rootsOverview = false,
 }: Props) => {
   const clusterRef = useRef<HTMLDivElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const topsRef = useRef<Map<string, number>>(new Map());
+  const scrollFrame = useRef<number | null>(null);
   const stages = useMemo(() => {
     const present = new Set(nodes.map((node) => node.asset_type));
     return STAGE_ORDER.filter((type) => present.has(type));
@@ -223,12 +268,72 @@ const LineageListView = ({
   );
   const rows = focused.rows;
 
-  useEffect(() => {
-    if (!focusId || !clusterRef.current) {
+  useLayoutEffect(() => {
+    const root = rowsRef.current;
+    if (!root) {
       return;
     }
-    revealCluster(clusterRef.current);
-  }, [focusId, focused.anchorKey, rows]);
+    const scroller = findScroller(root);
+    const hops = root.querySelectorAll<HTMLElement>('[data-lineage-key]');
+    hops.forEach((el) => el.getAnimations().forEach((animation) => animation.cancel()));
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const delta =
+      focusId && clusterRef.current && scroller ? clusterDelta(scroller, clusterRef.current) : 0;
+    if (scrollFrame.current !== null) {
+      cancelAnimationFrame(scrollFrame.current);
+      scrollFrame.current = null;
+    }
+    hops.forEach((el) => {
+      const key = el.dataset.lineageKey;
+      if (!key || !scroller) {
+        return;
+      }
+      const next = layoutTop(el, scroller);
+      const prev = topsRef.current.get(key);
+      if (!reduceMotion && prev !== undefined && Math.abs(prev - next) > 1) {
+        el.getAnimations().forEach((animation) => animation.cancel());
+        el.animate(
+          [{ transform: `translateY(${prev - next}px)` }, { transform: 'translateY(0)' }],
+          { duration: SCROLL_MS, easing: SCROLL_EASING }
+        );
+      }
+      topsRef.current.set(key, next);
+    });
+    const live = new Set([...hops].map((el) => el.dataset.lineageKey));
+    for (const key of topsRef.current.keys()) {
+      if (!live.has(key)) {
+        topsRef.current.delete(key);
+      }
+    }
+    if (!scroller || Math.abs(delta) < 1) {
+      return;
+    }
+    if (reduceMotion) {
+      scroller.scrollTop += delta;
+      return;
+    }
+    const start = scroller.scrollTop;
+    const started = performance.now();
+    if (scrollFrame.current !== null) {
+      cancelAnimationFrame(scrollFrame.current);
+    }
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / SCROLL_MS);
+      scroller.scrollTop = start + delta * easeInOut(t);
+      if (t < 1) {
+        scrollFrame.current = requestAnimationFrame(step);
+        return;
+      }
+      scrollFrame.current = null;
+    };
+    scrollFrame.current = requestAnimationFrame(step);
+    return () => {
+      if (scrollFrame.current !== null) {
+        cancelAnimationFrame(scrollFrame.current);
+        scrollFrame.current = null;
+      }
+    };
+  }, [rows, focusId, focused.anchorKey]);
 
   if (!nodes.length) {
     return (
@@ -291,6 +396,7 @@ const LineageListView = ({
       </Typography.Paragraph>
       <ListRows
         rows={rows}
+        rowsRef={rowsRef}
         clusterRef={clusterRef}
         anchorKey={focused.anchorKey}
         dependencyKeys={focused.dependencyKeys}
