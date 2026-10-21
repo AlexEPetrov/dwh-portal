@@ -1,4 +1,4 @@
-import { AimOutlined, ExportOutlined } from '@ant-design/icons';
+import { AimOutlined, ExperimentOutlined, ExportOutlined } from '@ant-design/icons';
 import { Tag, Tooltip, Typography } from 'antd';
 import type { CSSProperties, KeyboardEvent, MouseEvent, MouseEventHandler, ReactNode } from 'react';
 import { TYPE_ACCENT, TYPE_COLOR, TYPE_WASH } from './lineageFlow';
@@ -18,6 +18,8 @@ type Props = {
   interactive?: boolean;
   /** Open object card (export icon). */
   onOpenObject?: MouseEventHandler<HTMLElement>;
+  /** Open immersive Universe for this asset. */
+  onOpenUniverse?: MouseEventHandler<HTMLElement>;
   /** Click on the chip body: focus this asset in place. */
   onActivate?: MouseEventHandler<HTMLElement>;
   /** Same as body click; kept for the aim icon. */
@@ -37,6 +39,7 @@ const LineageAssetChip = ({
   focused = false,
   interactive = false,
   onOpenObject,
+  onOpenUniverse,
   onActivate,
   onSelectInLineage,
   className = '',
@@ -107,6 +110,21 @@ const LineageAssetChip = ({
               }}
             >
               <AimOutlined />
+            </button>
+          </Tooltip>
+        ) : null}
+        {onOpenUniverse && !unresolved ? (
+          <Tooltip title="Открыть в Universe">
+            <button
+              type="button"
+              className="lineage-asset-chip__action lineage-asset-chip__action--universe"
+              aria-label="Открыть в Universe"
+              onClick={(event) => {
+                stop(event);
+                onOpenUniverse(event);
+              }}
+            >
+              <ExperimentOutlined />
             </button>
           </Tooltip>
         ) : null}

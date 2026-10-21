@@ -193,6 +193,11 @@ const LineageMapView = ({
                     onOpenObject={
                       interactive ? () => navigateRef.current(`/objects/${datum.id}`) : undefined
                     }
+                    onOpenUniverse={
+                      interactive
+                        ? () => navigateRef.current(`/lineage/universe/${datum.id}`)
+                        : undefined
+                    }
                     onActivate={interactive ? focus : undefined}
                     onSelectInLineage={interactive ? focus : undefined}
                   />

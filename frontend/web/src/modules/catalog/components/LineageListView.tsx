@@ -51,6 +51,7 @@ const NodeCard = ({
       focused={focused}
       interactive={interactive}
       onOpenObject={interactive ? () => navigate(`/objects/${node.id}`) : undefined}
+      onOpenUniverse={interactive ? () => navigate(`/lineage/universe/${node.id}`) : undefined}
       onActivate={activate}
       onSelectInLineage={activate}
     />

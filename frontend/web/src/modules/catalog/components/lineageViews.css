@@ -156,7 +156,7 @@
 .lineage-asset-chip__title {
   display: block;
   max-width: 230px;
-  padding-right: 44px;
+  padding-right: 72px;
   font-weight: 600;
   line-height: 1.3;
   color: #0f172a;
@@ -165,9 +165,19 @@
 .lineage-asset-chip__hint {
   display: block;
   max-width: 230px;
-  padding-right: 44px;
+  padding-right: 72px;
   font-size: 11px;
   line-height: 1.3;
+}
+
+.lineage-asset-chip__action--universe:hover {
+  color: #722ed1;
+  border-color: #722ed1;
+}
+
+[data-theme='dark'] .lineage-asset-chip__action--universe:hover {
+  color: #c084fc;
+  border-color: #c084fc;
 }
 
 .lineage-asset-chip__tag {
