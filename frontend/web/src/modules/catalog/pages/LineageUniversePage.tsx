@@ -85,8 +85,8 @@ const LineageUniversePage = () => {
         </div>
         <Typography.Paragraph className="lineage-universe-hint">
           {mode === 'roots'
-            ? 'Источники на прямоугольной сетке, дети вокруг каждого. Reset — подогнать под экран. Клик — цепочка.'
-            : 'Цепочка разложена вокруг источника. Move / Zoom на панели; Reset — весь граф на экран.'}
+            ? 'Поток слева направо: SOURCE → TABLE. Каждый источник — своя полоса. Клик — цепочка.'
+            : 'Слева источник, справа таблицы. Move / Zoom на панели; Reset — весь поток на экран.'}
         </Typography.Paragraph>
       </header>
       <main className="lineage-universe-stage">

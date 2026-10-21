@@ -61,50 +61,36 @@ type Star = { x: number; y: number; z: number; s: number };
 type ScreenHit = { id: string; x: number; y: number; r: number; z: number };
 
 const FOCAL = 820;
-const DRAG = 0.86;
-const HOME_PULL = 0.038;
-const CHARGE = 2200;
+const DRAG = 0.88;
+const HOME_PULL = 0.055;
+const CHARGE = 1400;
+
+/** World X columns: DATA_SOURCE → … → TABLE → VIEW → MAT_VIEW (left → right). */
+const FLOW_STAGE_X = [-720, -480, -240, 0, 280, 540, 800] as const;
+const FLOW_STAGE_LABELS = [
+  'SOURCE',
+  'EXTRACT',
+  'STORAGE',
+  'PROCESS',
+  'TABLE',
+  'VIEW',
+  'MAT_VIEW',
+] as const;
+const NODE_GAP_Z = 78;
+const LANE_PAD_Z = 120;
+const VIEW_LEFT_PAD = 88;
+const VIEW_RIGHT_PAD = 56;
+const LAST_STAGE = FLOW_STAGE_X.length - 1;
 
 const shellForType = (type: string): number => {
   if (type === 'DATA_SOURCE') return 0;
   if (type === 'EXTRACTION_SOURCE') return 1;
   if (type === 'STORAGE_LOCATION') return 2;
   if (type === 'PROCESS') return 3;
+  if (type === 'TABLE') return 4;
+  if (type === 'VIEW') return 5;
+  if (type === 'MATERIALIZED_VIEW') return 6;
   return 4;
-};
-
-/** Landscape-first grid so hubs fill a rectangular field instead of a tight ring. */
-const hubGridDims = (count: number, aspect = 1.6) => {
-  if (count <= 1) {
-    return { cols: 1, rows: 1 };
-  }
-  let cols = Math.max(1, Math.round(Math.sqrt(count * aspect)));
-  let rows = Math.max(1, Math.ceil(count / cols));
-  while (cols > 1 && (cols - 1) * rows >= count) {
-    cols -= 1;
-  }
-  while (rows > 1 && cols * (rows - 1) >= count) {
-    rows -= 1;
-  }
-  if (cols * rows < count) {
-    cols = Math.ceil(count / rows);
-  }
-  return { cols, rows };
-};
-
-const clusterRadiusFor = (memberCount: number, hubCount: number) => {
-  const local = 160 + Math.min(260, Math.sqrt(Math.max(1, memberCount)) * 52);
-  // Fewer hubs → let each constellation breathe across the viewport.
-  const hubBoost = hubCount <= 1 ? 1.35 : hubCount <= 4 ? 1.15 : 1;
-  return local * hubBoost;
-};
-
-const shellEllipse = (shell: number, shellCount: number, clusterR: number) => {
-  const t = shell / 4;
-  const grow = 1 + Math.min(0.5, Math.max(0, shellCount - 1) * 0.045);
-  const rx = clusterR * (0.3 + t * 0.7) * grow;
-  const rz = rx * 0.76;
-  return { rx, rz };
 };
 
 const seeded = (seed: number) => {
@@ -222,28 +208,32 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       }
     }
 
-    const maxMembers = Math.max(
-      1,
-      ...hubList.map((hub) => members.get(hub)?.length ?? 0),
-      orphanIds.length
-    );
-    const clusterR = clusterRadiusFor(maxMembers, Math.max(1, hubList.length));
-    const { cols, rows } = hubGridDims(Math.max(1, hubList.length));
-    const gapX = clusterR * 2.7;
-    const gapZ = clusterR * 2.15;
-    const originX = -((cols - 1) * gapX) / 2;
-    const originZ = -((rows - 1) * gapZ) / 2;
-    const hubPos = new Map<string, { x: number; z: number; clusterR: number }>();
-    hubList.forEach((id, index) => {
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      const localMembers = members.get(id)?.length ?? 0;
-      hubPos.set(id, {
-        x: originX + col * gapX,
-        z: originZ + row * gapZ,
-        clusterR: clusterRadiusFor(localMembers, hubList.length),
-      });
+    // Per-hub lanes stacked on Z; within a lane stages advance on X (left → right).
+    const hubLane = new Map<string, { z: number; half: number }>();
+    const laneHeights = hubList.map((hub) => {
+      const group = members.get(hub) ?? [];
+      const counts = new Map<number, number>();
+      for (const id of group) {
+        const node = byId.get(id);
+        if (!node) {
+          continue;
+        }
+        const shell = shellForType(node.asset_type);
+        counts.set(shell, (counts.get(shell) ?? 0) + 1);
+      }
+      const maxStack = Math.max(1, ...counts.values(), 1);
+      return Math.max(NODE_GAP_Z + LANE_PAD_Z, (maxStack - 1) * NODE_GAP_Z + LANE_PAD_Z);
     });
+    let zCursor = 0;
+    hubList.forEach((id, index) => {
+      const height = laneHeights[index] ?? LANE_PAD_Z;
+      hubLane.set(id, { z: zCursor + height / 2, half: height / 2 });
+      zCursor += height;
+    });
+    const zMid = zCursor / 2;
+    for (const lane of hubLane.values()) {
+      lane.z -= zMid;
+    }
 
     const bodies: Body[] = [];
     const placeAt = (
@@ -255,7 +245,15 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       z: number
     ) => {
       const size =
-        shell === 0 ? 22 : shell === 1 ? 16 : shell === 4 ? 14 : node.asset_type === 'PROCESS' ? 15 : 13;
+        shell === 0
+          ? 22
+          : shell === 1
+            ? 16
+            : shell >= 4
+              ? 14
+              : node.asset_type === 'PROCESS'
+                ? 15
+                : 13;
       bodies.push({
         id: node.id,
         label: node.display_name,
@@ -279,16 +277,16 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
 
     hubList.forEach((id) => {
       const node = byId.get(id);
-      const pos = hubPos.get(id);
-      if (!node || !pos) {
+      const lane = hubLane.get(id);
+      if (!node || !lane) {
         return;
       }
-      placeAt(node, 0, id, pos.x, 0, pos.z);
+      placeAt(node, 0, id, FLOW_STAGE_X[0], 0, lane.z);
     });
 
     for (const hub of hubList) {
-      const pos = hubPos.get(hub);
-      if (!pos) {
+      const lane = hubLane.get(hub);
+      if (!lane) {
         continue;
       }
       const group = (members.get(hub) ?? [])
@@ -309,45 +307,56 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         byShell.set(shell, list);
       }
       for (const [shell, list] of byShell) {
-        const { rx, rz } = shellEllipse(shell, list.length, pos.clusterR);
         list.forEach((node, index) => {
-          const angle =
-            (index / Math.max(list.length, 1)) * Math.PI * 2 + shell * 0.4 - Math.PI / 2;
-          const x = pos.x + Math.cos(angle) * rx;
-          const z = pos.z + Math.sin(angle) * rz;
-          const y = (shell - 2) * 22 + (index % 3) * 12 - 12;
-          placeAt(node, shell, hub, x, y, z);
+          const offset = (index - (list.length - 1) / 2) * NODE_GAP_Z;
+          // Tiny Y stagger keeps overlapping labels readable without breaking L→R.
+          const y = ((index % 3) - 1) * 8;
+          placeAt(
+            node,
+            shell,
+            hub,
+            FLOW_STAGE_X[shell] ?? FLOW_STAGE_X[LAST_STAGE],
+            y,
+            lane.z + offset
+          );
         });
       }
     }
 
     if (orphanIds.length) {
-      const orphanCols = Math.max(1, Math.ceil(Math.sqrt(orphanIds.length * 1.5)));
-      const orphanRows = Math.max(1, Math.ceil(orphanIds.length / orphanCols));
-      const orphanGap = clusterR * 0.85;
-      const fieldBottom =
-        hubList.length > 0 ? originZ + (rows - 1) * gapZ + clusterR * 1.35 : 0;
-      const orphanOriginX = -((orphanCols - 1) * orphanGap) / 2;
-      const orphanOriginZ = hubList.length > 0 ? fieldBottom : -((orphanRows - 1) * orphanGap) / 2;
-      orphanIds.forEach((id, index) => {
+      const byShell = new Map<number, string[]>();
+      for (const id of orphanIds) {
         const node = byId.get(id);
         if (!node) {
-          return;
+          continue;
         }
-        const col = index % orphanCols;
-        const row = Math.floor(index / orphanCols);
-        placeAt(
-          node,
-          shellForType(node.asset_type),
-          null,
-          orphanOriginX + col * orphanGap,
-          0,
-          orphanOriginZ + row * orphanGap
-        );
-      });
+        const shell = shellForType(node.asset_type);
+        const list = byShell.get(shell) ?? [];
+        list.push(id);
+        byShell.set(shell, list);
+      }
+      const orphanBaseZ =
+        (hubList.length ? Math.max(...[...hubLane.values()].map((lane) => lane.z + lane.half)) : 0) +
+        LANE_PAD_Z;
+      for (const [shell, ids] of byShell) {
+        ids.forEach((id, index) => {
+          const node = byId.get(id);
+          if (!node) {
+            return;
+          }
+          placeAt(
+            node,
+            shell,
+            null,
+            FLOW_STAGE_X[shell] ?? FLOW_STAGE_X[LAST_STAGE],
+            0,
+            orphanBaseZ + index * NODE_GAP_Z
+          );
+        });
+      }
     }
 
-    // Bridge hint: shared TABLE/VIEW sits between its hubs on the rectangular field.
+    // Shared leaf assets stay in their own stage column, midway between parent lanes.
     for (const body of bodies) {
       if (body.shell < 4 || !body.hubId) {
         continue;
@@ -362,25 +371,22 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       if (neighbours.size < 2) {
         continue;
       }
-      const hubsAround = [...neighbours];
-      let x = 0;
       let z = 0;
       let counted = 0;
-      for (const hub of hubsAround) {
-        const pos = hubPos.get(hub);
-        if (!pos) {
+      for (const hub of neighbours) {
+        const lane = hubLane.get(hub);
+        if (!lane) {
           continue;
         }
-        x += pos.x;
-        z += pos.z;
+        z += lane.z;
         counted += 1;
       }
       if (!counted) {
         continue;
       }
-      body.homeX = x / counted;
+      body.homeX = FLOW_STAGE_X[body.shell] ?? FLOW_STAGE_X[LAST_STAGE];
       body.homeZ = z / counted;
-      body.homeY = 40;
+      body.homeY = 16;
       body.x = body.homeX;
       body.y = body.homeY;
       body.z = body.homeZ;
@@ -432,9 +438,9 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     let width = 0;
     let height = 0;
     let dpr = 1;
-    // Flatter overview angle suits a rectangular field.
-    let yaw = -0.18;
-    let pitch = 0.58;
+    // Nearly orthographic overview: X = flow left→right, Z = hub lanes.
+    let yaw = 0.04;
+    let pitch = 0.78;
     let zoom = 0.85;
     let targetZoom = 0.85;
     let lookX = (fieldBounds.minX + fieldBounds.maxX) / 2;
@@ -449,7 +455,7 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     let moved = false;
     let lastX = 0;
     let lastY = 0;
-    let velYaw = 0.00018;
+    let velYaw = 0;
     let velPitch = 0;
     let hoverId: string | null = null;
     let focusId = selectedAssetId ?? hubList[0] ?? bodies[0]?.id ?? null;
@@ -460,28 +466,79 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     let followFocus = false;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    const recomputeFieldBounds = () => {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (const body of bodies) {
+        minX = Math.min(minX, body.homeX);
+        maxX = Math.max(maxX, body.homeX);
+        minY = Math.min(minY, body.homeY);
+        maxY = Math.max(maxY, body.homeY);
+        minZ = Math.min(minZ, body.homeZ);
+        maxZ = Math.max(maxZ, body.homeZ);
+      }
+      if (!Number.isFinite(minX)) {
+        return;
+      }
+      const padX = Math.max(120, (maxX - minX) * 0.08);
+      const padZ = Math.max(100, (maxZ - minZ) * 0.1);
+      fieldBounds.minX = minX - padX;
+      fieldBounds.maxX = maxX + padX;
+      fieldBounds.minY = minY - 40;
+      fieldBounds.maxY = maxY + 40;
+      fieldBounds.minZ = minZ - padZ;
+      fieldBounds.maxZ = maxZ + padZ;
+    };
+
     const fitScene = (snap = false) => {
       if (!width || !height || !bodies.length) {
         return;
       }
       followFocus = false;
-      const cx = (fieldBounds.minX + fieldBounds.maxX) / 2;
+      yaw = 0.02;
+      pitch = 0.82;
+      velYaw = 0;
+      velPitch = 0;
+
+      // Anchor DATA_SOURCE on the left; stretch later stages to fill the width.
+      const sourceX = Math.min(...bodies.map((body) => body.homeX));
+      let maxX = Math.max(...bodies.map((body) => body.homeX));
+      const spanZ = Math.max(
+        200,
+        Math.max(...bodies.map((body) => body.homeZ)) - Math.min(...bodies.map((body) => body.homeZ))
+      );
+      const zoomForZ = (height * 0.78) / (spanZ * 0.95 + 80);
+      targetZoom = Math.max(0.42, Math.min(2.35, zoomForZ));
+
+      const usableWidth = Math.max(320, width - VIEW_LEFT_PAD - VIEW_RIGHT_PAD);
+      const desiredSpanX = usableWidth / targetZoom;
+      const currentSpanX = Math.max(1, maxX - sourceX);
+      if (desiredSpanX > currentSpanX * 1.01) {
+        const scale = desiredSpanX / currentSpanX;
+        for (const body of bodies) {
+          const nextX = sourceX + (body.homeX - sourceX) * scale;
+          body.homeX = nextX;
+          body.x = nextX;
+        }
+        maxX = sourceX + desiredSpanX;
+      }
+      recomputeFieldBounds();
+
       const cy = (fieldBounds.minY + fieldBounds.maxY) / 2;
       const cz = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
-      targetLookX = cx;
+      // Place look-at so the leftmost source projects near the left padding.
+      const lookAtX = sourceX + (width / 2 - VIEW_LEFT_PAD) / targetZoom;
+      targetLookX = lookAtX;
       targetLookY = cy;
       targetLookZ = cz;
       panX = 0;
       panY = 0;
-      const spanX = Math.max(320, fieldBounds.maxX - fieldBounds.minX);
-      const spanZ = Math.max(260, fieldBounds.maxZ - fieldBounds.minZ);
-      const spanY = Math.max(80, fieldBounds.maxY - fieldBounds.minY);
-      // Perspective foreshortening: Z contributes less on screen at this pitch.
-      const worldSpan = Math.max(spanX * 0.58, spanZ * 0.5, spanY * 0.35);
-      const viewSpan = Math.min(width, height) * 0.78;
-      targetZoom = Math.max(0.42, Math.min(2.35, viewSpan / worldSpan));
       if (snap) {
-        lookX = cx;
+        lookX = lookAtX;
         lookY = cy;
         lookZ = cz;
         zoom = targetZoom;
@@ -614,8 +671,9 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       const boxH = 22;
       const left = x - boxW / 2;
       const top = y;
-      ctx.fillStyle = emphasis ? 'rgba(15, 23, 42, 0.92)' : 'rgba(8, 12, 24, 0.82)';
-      ctx.strokeStyle = emphasis ? 'rgba(125, 211, 252, 0.55)' : 'rgba(255,255,255,0.14)';
+      // Keep labels readable but translucent so edges stay visible underneath.
+      ctx.fillStyle = emphasis ? 'rgba(15, 23, 42, 0.42)' : 'rgba(8, 12, 24, 0.22)';
+      ctx.strokeStyle = emphasis ? 'rgba(125, 211, 252, 0.35)' : 'rgba(255,255,255,0.08)';
       ctx.lineWidth = 1;
       if (typeof ctx.roundRect === 'function') {
         ctx.beginPath();
@@ -626,9 +684,12 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
       }
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#f8fbff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(5, 7, 15, 0.55)';
+      ctx.strokeText(text, x, top + boxH / 2);
+      ctx.fillStyle = emphasis ? '#f8fbff' : 'rgba(248, 251, 255, 0.88)';
       ctx.fillText(text, x, top + boxH / 2);
     };
 
@@ -648,14 +709,17 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
           targetLookZ += (focused.z - targetLookZ) * 0.12;
         }
       }
-      // Idle spin stays slow; pause while hovering so a click is easy to land.
+      // No forced idle spin — keep left→right flow readable.
       if (!dragMode && !reduced && !hoverId) {
         yaw += velYaw;
         pitch += velPitch;
-        velYaw *= 0.985;
-        velPitch *= 0.985;
-        if (Math.abs(velYaw) < 0.00016) {
-          velYaw = 0.00016;
+        velYaw *= 0.96;
+        velPitch *= 0.96;
+        if (Math.abs(velYaw) < 0.00002) {
+          velYaw = 0;
+        }
+        if (Math.abs(velPitch) < 0.00002) {
+          velPitch = 0;
         }
       }
       if (!reduced) {
@@ -693,44 +757,54 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
         ctx.fill();
       }
 
-      // Rectangular field frame + local ellipses around each DATA_SOURCE.
+      // Flow guides: stage columns left→right + lane separators.
       ctx.save();
-      const frame = [
-        project(fieldBounds.minX, 0, fieldBounds.minZ),
-        project(fieldBounds.maxX, 0, fieldBounds.minZ),
-        project(fieldBounds.maxX, 0, fieldBounds.maxZ),
-        project(fieldBounds.minX, 0, fieldBounds.maxZ),
-      ];
-      ctx.beginPath();
-      frame.forEach((point, index) => {
-        if (index === 0) {
-          ctx.moveTo(point.x, point.y);
-        } else {
-          ctx.lineTo(point.x, point.y);
+      const zTop = fieldBounds.minZ;
+      const zBottom = fieldBounds.maxZ;
+      const stageXs = FLOW_STAGE_X.map((fallback, shell) => {
+        const xs = bodies.filter((body) => body.shell === shell).map((body) => body.homeX);
+        if (!xs.length) {
+          return fallback;
         }
+        return xs.reduce((sum, value) => sum + value, 0) / xs.length;
       });
-      ctx.closePath();
-      ctx.strokeStyle = 'rgba(125, 211, 252, 0.16)';
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([6, 10]);
-      ctx.stroke();
-
-      for (const [hubId, pos] of hubPos) {
-        const samples = 48;
-        const { rx, rz } = shellEllipse(4, members.get(hubId)?.length ?? 1, pos.clusterR);
+      stageXs.forEach((stageX, index) => {
+        const a = project(stageX, 0, zTop);
+        const b = project(stageX, 0, zBottom);
         ctx.beginPath();
-        for (let i = 0; i <= samples; i += 1) {
-          const angle = (i / samples) * Math.PI * 2;
-          const p = project(pos.x + Math.cos(angle) * rx, 18, pos.z + Math.sin(angle) * rz);
-          if (i === 0) {
-            ctx.moveTo(p.x, p.y);
-          } else {
-            ctx.lineTo(p.x, p.y);
-          }
-        }
-        ctx.strokeStyle = 'rgba(134, 239, 172, 0.12)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 10]);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle =
+          index === 0 ? 'rgba(125, 211, 252, 0.28)' : 'rgba(148, 163, 184, 0.14)';
+        ctx.lineWidth = index === 0 || index === stageXs.length - 1 ? 1.4 : 1;
+        ctx.setLineDash(index === 0 ? [] : [5, 10]);
+        ctx.stroke();
+        const labelAt = project(stageX, 0, zTop - 36);
+        ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(186, 210, 255, 0.7)';
+        ctx.textAlign = 'center';
+        ctx.fillText(FLOW_STAGE_LABELS[index] ?? '', labelAt.x, labelAt.y);
+      });
+      // Direction cue along the middle lane.
+      const midZ = (fieldBounds.minZ + fieldBounds.maxZ) / 2;
+      const flowFrom = project(stageXs[0] ?? FLOW_STAGE_X[0], 0, midZ);
+      const flowTo = project(stageXs[LAST_STAGE] ?? FLOW_STAGE_X[LAST_STAGE], 0, midZ);
+      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.22)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(flowFrom.x, flowFrom.y);
+      ctx.lineTo(flowTo.x, flowTo.y);
+      ctx.stroke();
+      drawArrow(flowFrom.x, flowFrom.y, flowTo.x, flowTo.y, 'rgba(125, 211, 252, 0.55)');
+      for (const lane of hubLane.values()) {
+        const left = project(fieldBounds.minX, 0, lane.z - lane.half + 8);
+        const right = project(fieldBounds.maxX, 0, lane.z - lane.half + 8);
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.strokeStyle = 'rgba(134, 239, 172, 0.1)';
+        ctx.setLineDash([3, 12]);
         ctx.stroke();
       }
       ctx.restore();
@@ -898,10 +972,6 @@ const LineageUniverseScene = ({ nodes, edges, selectedAssetId, mode, onSelect }:
     const resetView = () => {
       focusId = selectedAssetId ?? hubList[0] ?? bodies[0]?.id ?? null;
       userAdjustedView = false;
-      yaw = -0.18;
-      pitch = 0.58;
-      velYaw = 0.00016;
-      velPitch = 0;
       fitScene(true);
     };
 
