@@ -107,7 +107,8 @@ const LineageGraph = ({
     <Tabs
       activeKey={activeKey}
       onChange={(key) => setView(key === 'map' ? 'map' : 'list')}
-      destroyInactiveTabPane
+      // Keep both panes mounted — rebuilding G6 on every tab switch is what feels slow.
+      destroyInactiveTabPane={false}
       className={fillHeight ? 'lineage-views-tabs fill-height' : 'lineage-views-tabs'}
       style={
         fillHeight
@@ -145,11 +146,7 @@ const LineageGraph = ({
           label: 'Граф',
           children: (
             <div
-              style={
-                fillHeight
-                  ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%' }
-                  : { height: 'min(70vh, 720px)', display: 'flex', flexDirection: 'column' }
-              }
+              className={fillHeight ? 'lineage-map-pane is-fill' : 'lineage-map-pane'}
             >
               <LineageMapView
                 nodes={nodes}

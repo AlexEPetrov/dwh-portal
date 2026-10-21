@@ -27,12 +27,15 @@ type Props = {
 const NodeCard = ({
   node,
   actor = false,
+  showType = true,
   selected = false,
   focused = false,
   onFocusNode,
 }: {
   node: LineageNode;
   actor?: boolean;
+  /** False when the surrounding section already names the type (roots overview). */
+  showType?: boolean;
   selected?: boolean;
   focused?: boolean;
   onFocusNode?: (assetId: string) => void;
@@ -47,6 +50,7 @@ const NodeCard = ({
       hint={originCaption(node.qualified_name)}
       unresolved={node.unresolved}
       actor={actor}
+      showType={showType}
       selected={selected}
       focused={focused}
       interactive={interactive}
@@ -362,6 +366,7 @@ const LineageListView = ({
                   <NodeCard
                     key={node.id}
                     node={node}
+                    showType={false}
                     selected={node.id === selectedAssetId}
                     focused={node.id === focusId}
                     onFocusNode={onFocusNode}

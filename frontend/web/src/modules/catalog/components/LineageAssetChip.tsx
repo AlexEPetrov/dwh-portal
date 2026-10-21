@@ -11,6 +11,11 @@ type Props = {
   unresolved?: boolean;
   /** PROCESS as transition actor — same dashed treatment in list and graph. */
   actor?: boolean;
+  /**
+   * When false, omit the type Tag (e.g. roots overview already groups by type).
+   * Color accent on the chip border still reflects the type.
+   */
+  showType?: boolean;
   /** Lineage root from the page route. Shows the «текущий» badge. */
   selected?: boolean;
   /** Clicked asset whose dependencies are shown beside it. */
@@ -35,6 +40,7 @@ const LineageAssetChip = ({
   hint = null,
   unresolved = false,
   actor = false,
+  showType = true,
   selected = false,
   focused = false,
   interactive = false,
@@ -150,12 +156,14 @@ const LineageAssetChip = ({
       >
         <div className="lineage-asset-chip__main">
           {selected ? <span className="lineage-asset-chip__current">текущий</span> : null}
-          <Tag
-            className="lineage-asset-chip__tag"
-            color={unresolved ? 'red' : TYPE_COLOR[assetType]}
-          >
-            {actor ? 'PROCESS · actor' : assetType}
-          </Tag>
+          {showType ? (
+            <Tag
+              className="lineage-asset-chip__tag"
+              color={unresolved ? 'red' : TYPE_COLOR[assetType]}
+            >
+              {actor ? 'PROCESS · actor' : assetType}
+            </Tag>
+          ) : null}
           <Typography.Text className="lineage-asset-chip__title" ellipsis>
             {title}
           </Typography.Text>

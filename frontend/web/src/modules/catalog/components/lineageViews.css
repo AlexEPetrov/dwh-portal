@@ -2,6 +2,17 @@
   height: 100%;
 }
 
+.lineage-views-tabs .ant-tabs-tab {
+  transition: color 0.22s ease;
+}
+
+.lineage-views-tabs .ant-tabs-ink-bar {
+  transition:
+    width 0.28s cubic-bezier(0.33, 1, 0.32, 1),
+    left 0.28s cubic-bezier(0.33, 1, 0.32, 1),
+    transform 0.28s cubic-bezier(0.33, 1, 0.32, 1) !important;
+}
+
 .lineage-views-tabs.fill-height > .ant-tabs-nav {
   flex: 0 0 auto;
 }
@@ -188,6 +199,32 @@
   max-width: calc(100% - 48px);
 }
 
+.lineage-map-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lineage-map-pane.is-fill {
+  flex: 1;
+  height: 100%;
+}
+
+.lineage-map-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  /* Hide until the first snap-fit — avoids a flash of the oversized pre-fit canvas. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lineage-map-shell.is-ready {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .lineage-map {
   position: relative;
   flex: 1;
@@ -204,12 +241,25 @@
 
 .lineage-map-node .lineage-asset-chip {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transition:
+    box-shadow 0.28s ease,
+    border-color 0.28s ease,
+    background 0.28s ease,
+    transform 0.2s ease;
 }
 
 .lineage-map .g6-toolbar {
   opacity: 1;
   background: #fff;
   border: 1px solid #f0f0f0;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.lineage-map .g6-toolbar:hover {
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
 
 .lineage-list-scroll {
@@ -315,6 +365,10 @@
   background:
     radial-gradient(900px 420px at 12% -10%, rgba(37, 99, 235, 0.18), transparent 60%),
     linear-gradient(180deg, #0b1220 0%, #020617 48%);
+}
+
+[data-theme='dark'] .lineage-map .g6-toolbar:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 /* G6 grid-line paints via inline backgroundImage (#eee by default) — force mute in dark. */

@@ -3,7 +3,7 @@ import { ExtensionCategory, Graph, register, type GraphOptions } from '@antv/g6'
 import { ReactNode } from '@antv/g6-extension-react';
 import { useThemeMode } from '@asset-management/app-shell/theme';
 import { Empty } from 'antd';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LineageAssetChip from './LineageAssetChip';
 import {
@@ -45,7 +45,9 @@ type NodeDatum = {
   data?: NodePayload;
 };
 
-const MOTION = { duration: 560, easing: 'cubic-bezier(0.45, 0, 0.25, 1)' };
+/** Short camera ease for toolbar zoom / focus pan. Fit-to-page always snaps. */
+const FOCUS_MOTION = { duration: 240, easing: 'cubic-bezier(0.33, 1, 0.32, 1)' };
+const ZOOM_STEP = { duration: 220, easing: 'cubic-bezier(0.33, 1, 0.32, 1)' };
 const MIN_SURFACE = 40;
 
 const surfaceReady = (el: HTMLElement | null) =>
@@ -72,8 +74,16 @@ const LineageMapView = ({
   clearRef.current = onClearFocus;
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
-  /** Clicked asset, else the page route asset — only for highlight / camera. */
+  /** Clicked asset, else the page route asset — highlight only, not a second camera pass. */
   const centerId = rootsOverview ? null : (focusId ?? selectedAssetId ?? null);
+  const topologyKey = useMemo(
+    () =>
+      `${nodes.map((node) => node.id).join(',')}|${edges.map((edge) => edge.id).join(',')}`,
+    [nodes, edges]
+  );
+  const framedTopology = useRef<string | null>(null);
+  const lastSurfaceSize = useRef({ w: 0, h: 0 });
+  const [surfaceReadyToShow, setSurfaceReadyToShow] = useState(false);
 
   const model = useMemo(() => {
     // Same payload as the list: every node and data-flow edge from the API response.
@@ -125,16 +135,21 @@ const LineageMapView = ({
   const modelRef = useRef(model);
   modelRef.current = model;
 
-  const frameGraph = (graph: Graph, animate: boolean) => {
+  const frameGraph = async (graph: Graph) => {
     const container = containerRef.current;
     if (!surfaceReady(container) || graph.destroyed) {
-      return Promise.resolve();
+      return;
     }
     graph.resize();
-    return graph.fitView(
-      { when: 'always', direction: 'both' },
-      animate ? MOTION : false
-    );
+    // Snap — animated fit is what showed the oversized frame first.
+    await graph.fitView({ when: 'always', direction: 'both' }, false);
+  };
+
+  const easeToNode = async (graph: Graph, nodeId: string | null) => {
+    if (!nodeId || graph.destroyed || !graph.getNodeData(nodeId)) {
+      return;
+    }
+    await graph.focusElement(nodeId, FOCUS_MOTION);
   };
 
   useEffect(() => {
@@ -160,7 +175,8 @@ const LineageMapView = ({
         height: container.clientHeight,
         autoResize: true,
         padding: 36,
-        animation: MOTION,
+        // Layout/node tween from the origin reads as a drift to the corner.
+        animation: false,
         zoomRange: [0.2, 1.5],
         data: { nodes: initial.nodes, edges: initial.edges },
         layout: initial.layout,
@@ -241,6 +257,7 @@ const LineageMapView = ({
         },
         behaviors: [
           'drag-canvas',
+          // Instant wheel zoom — animated wheel stacks with fitView and feels floaty.
           'zoom-canvas',
           { type: 'hover-activate', degree: 0, state: 'active' },
         ],
@@ -268,11 +285,11 @@ const LineageMapView = ({
                 return;
               }
               if (value === 'zoom-in') {
-                void current.zoomBy(1.16, { duration: 220, easing: 'ease-out' });
+                void current.zoomBy(1.16, ZOOM_STEP);
               } else if (value === 'zoom-out') {
-                void current.zoomBy(0.86, { duration: 220, easing: 'ease-out' });
+                void current.zoomBy(0.86, ZOOM_STEP);
               } else if (value === 'auto-fit') {
-                void frameGraph(current, true);
+                void frameGraph(current);
               }
             },
           },
@@ -280,13 +297,23 @@ const LineageMapView = ({
       });
       created = instance;
       graphRef.current = instance;
+      lastSurfaceSize.current = {
+        w: container.clientWidth,
+        h: container.clientHeight,
+      };
       instance.on('canvas:click', () => clearRef.current?.());
       drawQueue.current = drawQueue.current.then(async () => {
         if (cancelled || graphRef.current !== instance) {
           return;
         }
         await instance.render();
-        await frameGraph(instance, false);
+        if (framedTopology.current !== topologyKey) {
+          framedTopology.current = topologyKey;
+          await frameGraph(instance);
+        }
+        if (!cancelled) {
+          setSurfaceReadyToShow(true);
+        }
       });
     };
 
@@ -297,11 +324,27 @@ const LineageMapView = ({
         return;
       }
       const current = graphRef.current;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const wasCollapsed =
+        lastSurfaceSize.current.w < MIN_SURFACE || lastSurfaceSize.current.h < MIN_SURFACE;
+      lastSurfaceSize.current = { w, h };
+      if (!surfaceReady(container)) {
+        return;
+      }
       drawQueue.current = drawQueue.current.then(async () => {
         if (cancelled || graphRef.current !== current) {
           return;
         }
-        await frameGraph(current, true);
+        // Tab panes go to 0×0 while inactive; hide until snap-fit so List→Graph
+        // does not flash the pre-fit canvas.
+        if (wasCollapsed) {
+          setSurfaceReadyToShow(false);
+        }
+        await frameGraph(current);
+        if (!cancelled && wasCollapsed) {
+          setSurfaceReadyToShow(true);
+        }
       });
     });
     observer.observe(container);
@@ -313,6 +356,9 @@ const LineageMapView = ({
       if (graphRef.current === created) {
         graphRef.current = null;
       }
+      framedTopology.current = null;
+      lastSurfaceSize.current = { w: 0, h: 0 };
+      setSurfaceReadyToShow(false);
     };
   }, [active, dark]);
 
@@ -326,18 +372,27 @@ const LineageMapView = ({
       if (cancelled || graphRef.current !== graph || !surfaceReady(containerRef.current)) {
         return;
       }
+      const topologyChanged = framedTopology.current !== topologyKey;
       graph.setLayout(model.layout);
       graph.setData({ nodes: model.nodes, edges: model.edges });
       await graph.render();
       if (cancelled || graphRef.current !== graph) {
         return;
       }
-      await frameGraph(graph, true);
+      if (topologyChanged) {
+        framedTopology.current = topologyKey;
+        await frameGraph(graph);
+        setSurfaceReadyToShow(true);
+        return;
+      }
+      if (focusId) {
+        await easeToNode(graph, focusId);
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [active, model]);
+  }, [active, model, topologyKey, focusId]);
 
   if (!nodes.length) {
     return (
@@ -352,7 +407,11 @@ const LineageMapView = ({
     return <Empty description="У объекта нет data-flow рёбер для карты зависимостей." />;
   }
 
-  return <div ref={containerRef} className="lineage-map" />;
+  return (
+    <div className={surfaceReadyToShow ? 'lineage-map-shell is-ready' : 'lineage-map-shell'}>
+      <div ref={containerRef} className="lineage-map" />
+    </div>
+  );
 };
 
 export default LineageMapView;
