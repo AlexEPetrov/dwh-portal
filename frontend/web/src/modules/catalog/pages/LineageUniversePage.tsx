@@ -69,6 +69,12 @@ const LineageUniversePage = () => {
   const filterQuery = deferredRaw.length > 1 ? deferredRaw.toLowerCase() : '';
   const [focusAssetId, setFocusAssetId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<string | null>(null);
+  /** Pointer/keyboard inside the right rail — freeze parade; after a beat → full catalog. */
+  const [listEngaged, setListEngaged] = useState(false);
+  const [catalogHold, setCatalogHold] = useState(false);
+  const listEngagedRef = useRef(false);
+  /** Stable front-of-camera ids from the scene (roots idle parade). */
+  const [paradeIds, setParadeIds] = useState<string[]>([]);
   const sceneApiRef = useRef<UniverseSceneControls | null>(null);
   const resultsListRef = useRef<HTMLUListElement>(null);
   const [enterOrigin, setEnterOrigin] = useState<UniverseOrigin | null>(() => {
@@ -158,14 +164,69 @@ const LineageUniversePage = () => {
     );
   }, [edges, filteredNodes, filterQuery, kindFilter]);
 
+  /**
+   * List modes (compatible, priority order):
+   * 1. search (2+ chars) — filtered hits
+   * 2. catalog — chain mode, or dwell on the rail (~350ms)
+   * 3. parade — idle roots spin: nuclei in front of the camera
+   * Hovering the rail freezes parade immediately so rows stay clickable.
+   */
+  const listMode: 'search' | 'catalog' | 'parade' = filterQuery
+    ? 'search'
+    : mode === 'chain' || catalogHold
+      ? 'catalog'
+      : 'parade';
+
+  useEffect(() => {
+    listEngagedRef.current = listEngaged;
+    if (!listEngaged || filterQuery || mode !== 'roots') {
+      setCatalogHold(mode === 'chain');
+      return;
+    }
+    const timer = window.setTimeout(() => setCatalogHold(true), 350);
+    return () => window.clearTimeout(timer);
+  }, [listEngaged, filterQuery, mode]);
+
+  const displayNodes = useMemo(() => {
+    if (listMode !== 'parade') {
+      return filteredNodes;
+    }
+    if (!paradeIds.length) {
+      return [];
+    }
+    const byId = new Map(filteredNodes.map((node) => [node.id, node]));
+    return paradeIds
+      .map((id) => byId.get(id))
+      .filter((node): node is LineageNode => Boolean(node));
+  }, [listMode, filteredNodes, paradeIds]);
+
+  const onFrontParade = useCallback(
+    (ids: string[]) => {
+      if (mode !== 'roots') {
+        return;
+      }
+      // Freeze while the pointer is on the rail (or search owns the list).
+      if (listEngagedRef.current || filterQuery) {
+        return;
+      }
+      setParadeIds(ids);
+    },
+    [mode, filterQuery]
+  );
+
   useEffect(() => {
     if (!focusAssetId) {
       return;
     }
-    if (!filteredNodes.some((node) => node.id === focusAssetId)) {
-      setFocusAssetId(filteredNodes[0]?.id ?? null);
+    const pool = listMode === 'parade' ? displayNodes : filteredNodes;
+    if (!pool.some((node) => node.id === focusAssetId)) {
+      // Parade churn must not yank focus; only search/catalog realign.
+      if (listMode === 'parade') {
+        return;
+      }
+      setFocusAssetId(pool[0]?.id ?? null);
     }
-  }, [filteredNodes, focusAssetId]);
+  }, [filteredNodes, displayNodes, focusAssetId, listMode]);
 
   // 2+ chars: focus first search hit.
   useEffect(() => {
@@ -216,22 +277,22 @@ const LineageUniversePage = () => {
   );
 
   const openFocused = useCallback(() => {
-    const id = focusAssetId ?? filteredNodes[0]?.id;
+    const id = focusAssetId ?? displayNodes[0]?.id ?? filteredNodes[0]?.id;
     if (id) {
       onSelect(id);
     }
-  }, [focusAssetId, filteredNodes, onSelect]);
+  }, [focusAssetId, displayNodes, filteredNodes, onSelect]);
 
   const flyToFocused = useCallback(
     (id?: string) => {
-      const target = id ?? focusAssetId ?? filteredNodes[0]?.id;
+      const target = id ?? focusAssetId ?? displayNodes[0]?.id ?? filteredNodes[0]?.id;
       if (!target) {
         return;
       }
       setFocusAssetId(target);
       sceneApiRef.current?.flyTo(target);
     },
-    [focusAssetId, filteredNodes]
+    [focusAssetId, displayNodes, filteredNodes]
   );
 
   useEffect(() => {
@@ -261,6 +322,9 @@ const LineageUniversePage = () => {
     setQuery('');
     setFocusAssetId(null);
     setKindFilter(null);
+    setListEngaged(false);
+    setCatalogHold(false);
+    setParadeIds([]);
   }, []);
 
   const onFilterKind = useCallback((kind: string) => {
@@ -322,15 +386,33 @@ const LineageUniversePage = () => {
                 aria-autocomplete="list"
                 aria-controls="lineage-universe-results"
               />
-              <div className="lineage-universe-dropdown">
+              <div
+                className="lineage-universe-dropdown"
+                onMouseEnter={() => setListEngaged(true)}
+                onMouseLeave={() => {
+                  setListEngaged(false);
+                  if (!filterQuery) {
+                    setFocusAssetId(null);
+                  }
+                }}
+              >
                 <div className="lineage-universe-dropdown__meta">
                   <Typography.Text className="lineage-universe-search-count">
-                    {isLetterJump
-                      ? `К букве «${deferredRaw.toLocaleUpperCase()}» · ${nodes.length} объектов`
-                      : filterQuery || kindFilter
-                        ? `${filteredNodes.length} из ${nodes.length}`
-                        : `${nodes.length} объектов`}
-                    {' · hover — подсветка · F — подлететь'}
+                    {listMode === 'parade'
+                      ? displayNodes.length
+                        ? `Перед камерой · ${displayNodes.length}`
+                        : 'Перед камерой · вращайте спираль'
+                      : isLetterJump
+                        ? `К букве «${deferredRaw.toLocaleUpperCase()}» · ${nodes.length} объектов`
+                        : filterQuery || kindFilter
+                          ? `${filteredNodes.length} из ${nodes.length}`
+                          : `${nodes.length} объектов`}
+                    {listMode === 'search'
+                      ? ' · поиск'
+                      : listMode === 'parade'
+                        ? ' · parade'
+                        : ' · каталог'}
+                    {' · F — подлететь'}
                     {mode === 'roots' ? ' · Enter — открыть' : null}
                   </Typography.Text>
                   {kindFilter ? (
@@ -344,15 +426,21 @@ const LineageUniversePage = () => {
                     </button>
                   ) : null}
                 </div>
-                {filteredNodes.length ? (
+                {displayNodes.length ? (
                   <ul
                     ref={resultsListRef}
                     id="lineage-universe-results"
                     className="lineage-universe-results"
                     role="listbox"
-                    aria-label={mode === 'roots' ? 'Источники' : 'Объекты потока'}
+                    aria-label={
+                      listMode === 'parade'
+                        ? 'Источники перед камерой'
+                        : mode === 'roots'
+                          ? 'Источники'
+                          : 'Объекты потока'
+                    }
                   >
-                    {filteredNodes.map((node) => {
+                    {displayNodes.map((node) => {
                       const active = node.id === focusAssetId;
                       return (
                         <li
@@ -370,7 +458,10 @@ const LineageUniversePage = () => {
                             type="button"
                             className="lineage-universe-result"
                             onMouseEnter={() => setFocusAssetId(node.id)}
-                            onFocus={() => setFocusAssetId(node.id)}
+                            onFocus={() => {
+                              setListEngaged(true);
+                              setFocusAssetId(node.id);
+                            }}
                             onClick={() => onSelect(node.id)}
                           >
                             <span className="lineage-universe-result__name">
@@ -393,7 +484,10 @@ const LineageUniversePage = () => {
                             title="Подлететь к ядру (F)"
                             aria-label={`Подлететь к ${node.display_name}`}
                             onMouseEnter={() => setFocusAssetId(node.id)}
-                            onFocus={() => setFocusAssetId(node.id)}
+                            onFocus={() => {
+                              setListEngaged(true);
+                              setFocusAssetId(node.id);
+                            }}
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
@@ -408,7 +502,9 @@ const LineageUniversePage = () => {
                   </ul>
                 ) : (
                   <div className="lineage-universe-dropdown__empty">
-                    Ничего не найдено
+                    {listMode === 'parade'
+                      ? 'Подождите — ядра перед камерой появятся при вращении'
+                      : 'Ничего не найдено'}
                   </div>
                 )}
               </div>
@@ -416,7 +512,7 @@ const LineageUniversePage = () => {
           ) : null}
           <Typography.Paragraph className="lineage-universe-hint">
             {mode === 'roots'
-              ? 'Список справа: hover — подсветка, прицел — подлёт, клик / Enter — открыть. KIND — фильтр. Orbit по умолчанию · Reset — сброс.'
+              ? 'Список: idle — ядра перед камерой; поиск — результаты; наведение на список — полный каталог. Прицел / F — подлёт. KIND — фильтр.'
               : 'Список: hover — подсветка, прицел — подлёт. Поток слева направо. Жёлтый bridge — VIEW/TABLE из нескольких DATA_SOURCE.'}
           </Typography.Paragraph>
         </div>
@@ -457,6 +553,7 @@ const LineageUniversePage = () => {
             onReset={onSceneReset}
             kindFilter={hasKinds ? kindFilter : null}
             onFilterKind={mode === 'roots' && hasKinds ? onFilterKind : undefined}
+            onFrontParade={mode === 'roots' ? onFrontParade : undefined}
           />
         )}
       </main>

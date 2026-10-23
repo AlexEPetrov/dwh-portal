@@ -42,6 +42,11 @@ type Props = {
   kindFilter?: string | null;
   /** Click kind badge → filter catalogue by that kind (toggle). */
   onFilterKind?: (kind: string) => void;
+  /**
+   * Roots idle: stable ids currently in the front observation cone
+   * (debounced / hysteresis — safe for a React list without flicker).
+   */
+  onFrontParade?: (assetIds: string[]) => void;
 };
 
 type DragTool = 'orbit' | 'pan';
@@ -301,6 +306,7 @@ const LineageUniverseScene = ({
   onReset,
   kindFilter = null,
   onFilterKind,
+  onFrontParade,
 }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -318,6 +324,8 @@ const LineageUniverseScene = ({
   highlightRef.current = focusAssetId ?? null;
   const kindFilterRef = useRef<string | null>(kindFilter);
   kindFilterRef.current = kindFilter;
+  const onFrontParadeRef = useRef(onFrontParade);
+  onFrontParadeRef.current = onFrontParade;
   const [tool, setTool] = useState<DragTool>('orbit');
   toolRef.current = tool;
 
@@ -839,7 +847,19 @@ const LineageUniverseScene = ({
     let hoverId: string | null = null;
     let hoverGuide: string | null = null;
     let spotlightKind: string | null = null;
-    let focusId = selectedAssetId ?? hubList[0] ?? bodies[0]?.id ?? null;
+    /** Front-cone parade → right rail (hysteresis + interval). */
+    const paradeHits = new Map<string, number>();
+    const paradeMisses = new Map<string, number>();
+    /** When an id first joined the stable parade — newest → top of the list. */
+    const paradeEnteredAt = new Map<string, number>();
+    let paradeStable: string[] = [];
+    let paradeKey = '';
+    let paradeLastEmit = 0;
+    const PARADE_INTERVAL_MS = 520;
+    const PARADE_ENTER = 2;
+    const PARADE_EXIT = 3;
+    const PARADE_MAX = 8;
+    let focusId: string | null = selectedAssetId ?? hubList[0] ?? bodies[0]?.id ?? null;
     let pulse = 0;
     let raf = 0;
     let hits: ScreenHit[] = [];
@@ -1744,7 +1764,7 @@ const LineageUniverseScene = ({
           isCurrentKind && (Boolean(kindFilterRef.current) || front >= 0.35);
         // Keep asset-type color on the nucleus; cyan is only a kind marker ring.
         const nearPop =
-          mode === 'roots' ? 1 + front * front * 0.72 + (inKindCohort ? 0.18 : 0) : 1;
+          mode === 'roots' ? 1 + front * front * 0.72 + (inKindCohort ? 0.08 : 0) : 1;
         const radius = Math.max(
           10,
           body.r * p.depth * (active ? 1.35 : 1.15) * nearPop
@@ -1769,14 +1789,14 @@ const LineageUniverseScene = ({
           0,
           p.x,
           p.y,
-          radius * (inKindCohort ? 3.2 : 2.8)
+          radius * 2.4
         );
-        glow.addColorStop(0, `${body.color}bb`);
-        glow.addColorStop(0.4, `${body.color}44`);
+        glow.addColorStop(0, `${body.color}88`);
+        glow.addColorStop(0.4, `${body.color}28`);
         glow.addColorStop(1, `${body.color}00`);
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, radius * (inKindCohort ? 2.9 : 2.8), 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, radius * 2.4, 0, Math.PI * 2);
         ctx.fill();
 
         const core = ctx.createRadialGradient(
@@ -1799,17 +1819,17 @@ const LineageUniverseScene = ({
         ctx.stroke();
 
         if (isCurrentKind) {
-          // Kind filter/spotlight: thin cyan halo, not a recolor of DATA_SOURCE.
-          ctx.strokeStyle = `rgba(34, 211, 238,${0.22 + Math.sin(pulse * 2) * 0.1})`;
-          ctx.lineWidth = 1.4;
+          // Kind marker: hairline only — no cyan smoke cloud.
+          ctx.strokeStyle = 'rgba(186, 210, 255, 0.22)';
+          ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, radius + 8, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, radius + 6, 0, Math.PI * 2);
           ctx.stroke();
         } else if (body.shell === 0) {
-          ctx.strokeStyle = `rgba(125, 211, 252,${0.35 + Math.sin(pulse * 2) * 0.15})`;
-          ctx.lineWidth = 1.4;
+          ctx.strokeStyle = `rgba(148, 163, 184,${0.16 + Math.sin(pulse * 2) * 0.05})`;
+          ctx.lineWidth = 1.1;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, radius + 8, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, radius + 7, 0, Math.PI * 2);
           ctx.stroke();
         }
         if (body.bridgeHubIds?.length) {
@@ -1867,7 +1887,7 @@ const LineageUniverseScene = ({
         ctx.globalAlpha = 1;
       }
 
-      // Near-camera labels only — few closest sources in the observation cone.
+      // Near-camera labels + stable parade ids for the right rail.
       if (mode === 'roots' && projectedBodies.length) {
         const opticalX = width / 2 + panX;
         const MAX_NEAR_LABELS = 8;
@@ -1878,20 +1898,13 @@ const LineageUniverseScene = ({
           front: number;
           occluded: boolean;
           inCohort: boolean;
+          alreadyLabeled: boolean;
         };
         const cohortKind = kindFilterRef.current || spotlightKind;
         const candidates: ObsItem[] = [];
         for (const { body, p } of projectedBodies) {
           if (p.depth <= 0.04) {
             continue;
-          }
-          if (
-            body.id === focusId ||
-            body.id === hoverId ||
-            body.id === selectedAssetId ||
-            body.id === listHighlight
-          ) {
-            continue; // already labeled in the body pass
           }
           const front = frontnessOf(p.z);
           // Only the nearest slice toward the camera.
@@ -1901,6 +1914,11 @@ const LineageUniverseScene = ({
           if (Math.abs(p.x - opticalX) / Math.max(width, 1) > 0.22) {
             continue;
           }
+          const alreadyLabeled =
+            body.id === focusId ||
+            body.id === hoverId ||
+            body.id === selectedAssetId ||
+            body.id === listHighlight;
           const nodeKind = byId.get(body.id)?.kind?.trim() || 'Прочее';
           const inCohort = Boolean(cohortKind) && nodeKind === cohortKind;
           const radius = Math.max(
@@ -1914,6 +1932,7 @@ const LineageUniverseScene = ({
             front,
             occluded: false,
             inCohort,
+            alreadyLabeled,
           });
         }
         // Prefer cohort + closer to camera, hard cap count.
@@ -1924,7 +1943,73 @@ const LineageUniverseScene = ({
           return a.p.z - b.p.z;
         });
         const obs = candidates.slice(0, MAX_NEAR_LABELS);
+
+        // Publish front-cone ids to the page list (hysteresis + interval).
+        {
+          const frameIds = obs.map((item) => item.body.id);
+          const frameSet = new Set(frameIds);
+          for (const id of frameIds) {
+            paradeHits.set(id, (paradeHits.get(id) ?? 0) + 1);
+            paradeMisses.set(id, 0);
+          }
+          for (const id of new Set([...paradeStable, ...paradeHits.keys()])) {
+            if (!frameSet.has(id)) {
+              paradeMisses.set(id, (paradeMisses.get(id) ?? 0) + 1);
+              paradeHits.set(id, 0);
+            }
+          }
+          const nowParade = performance.now();
+          if (nowParade - paradeLastEmit >= PARADE_INTERVAL_MS) {
+            paradeLastEmit = nowParade;
+            const next = new Set(paradeStable);
+            for (const [id, hits] of paradeHits) {
+              if (hits >= PARADE_ENTER) {
+                next.add(id);
+              }
+            }
+            for (const id of [...next]) {
+              if ((paradeMisses.get(id) ?? 0) >= PARADE_EXIT) {
+                next.delete(id);
+                paradeHits.delete(id);
+                paradeMisses.delete(id);
+                paradeEnteredAt.delete(id);
+              }
+            }
+            for (const id of next) {
+              if (!paradeEnteredAt.has(id)) {
+                paradeEnteredAt.set(id, nowParade);
+              }
+            }
+            // Newest on-screen labels first; then by front-cone order.
+            const frameRank = new Map(frameIds.map((id, index) => [id, index]));
+            const ordered = [...next]
+              .sort((a, b) => {
+                const enteredDiff =
+                  (paradeEnteredAt.get(b) ?? 0) - (paradeEnteredAt.get(a) ?? 0);
+                if (enteredDiff !== 0) {
+                  return enteredDiff;
+                }
+                return (frameRank.get(a) ?? 999) - (frameRank.get(b) ?? 999);
+              })
+              .slice(0, PARADE_MAX);
+            for (const id of [...paradeEnteredAt.keys()]) {
+              if (!next.has(id)) {
+                paradeEnteredAt.delete(id);
+              }
+            }
+            const key = ordered.join('|');
+            if (key !== paradeKey) {
+              paradeKey = key;
+              paradeStable = ordered;
+              onFrontParadeRef.current?.(ordered);
+            }
+          }
+        }
+
         for (const item of obs) {
+          if (item.alreadyLabeled) {
+            continue; // labeled in the body pass
+          }
           for (const other of projectedBodies) {
             if (other.body.id === item.body.id || other.p.depth <= 0.04) {
               continue;
@@ -1944,8 +2029,9 @@ const LineageUniverseScene = ({
             }
           }
         }
-        obs.sort((a, b) => b.p.z - a.p.z);
-        for (const item of obs) {
+        const labelObs = obs.filter((item) => !item.alreadyLabeled);
+        labelObs.sort((a, b) => b.p.z - a.p.z);
+        for (const item of labelObs) {
           const fontSize = item.inCohort
             ? item.occluded
               ? 15
@@ -1956,8 +2042,8 @@ const LineageUniverseScene = ({
           drawLabel(item.body.label, item.p.x, item.p.y + item.radius + 8, true, {
             alpha: item.inCohort
               ? item.occluded
-                ? 0.96
-                : 0.85
+                ? 0.9
+                : 0.8
               : item.occluded
                 ? 0.8
                 : 0.65,
@@ -1965,14 +2051,14 @@ const LineageUniverseScene = ({
           });
           if (item.occluded || item.inCohort) {
             ctx.save();
-            ctx.globalAlpha = item.inCohort ? 0.85 : 0.65;
+            ctx.globalAlpha = item.inCohort ? 0.28 : 0.4;
             ctx.strokeStyle = item.inCohort
-              ? 'rgba(34, 211, 238, 0.65)'
-              : 'rgba(125, 211, 252, 0.4)';
-            ctx.lineWidth = item.inCohort ? 1.6 : 1.2;
+              ? 'rgba(186, 210, 255, 0.28)'
+              : 'rgba(148, 163, 184, 0.35)';
+            ctx.lineWidth = 1;
             ctx.setLineDash(item.inCohort ? [] : [3, 4]);
             ctx.beginPath();
-            ctx.arc(item.p.x, item.p.y, item.radius + 6, 0, Math.PI * 2);
+            ctx.arc(item.p.x, item.p.y, item.radius + 5, 0, Math.PI * 2);
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.restore();
@@ -2020,18 +2106,18 @@ const LineageUniverseScene = ({
             (filtered ? 0.88 : lit ? 0.7 : 0.42) * (hovered ? 1.1 : 1)
           );
           ctx.fillStyle = filtered
-            ? 'rgba(14, 116, 144, 0.72)'
+            ? 'rgba(30, 64, 90, 0.78)'
             : lit
               ? 'rgba(30, 58, 95, 0.68)'
               : 'rgba(15, 23, 42, 0.55)';
           ctx.strokeStyle = filtered
-            ? 'rgba(34, 211, 238, 0.95)'
+            ? 'rgba(148, 163, 184, 0.45)'
             : lit
-              ? 'rgba(125, 211, 252, 0.85)'
+              ? 'rgba(148, 163, 184, 0.4)'
               : hovered
-                ? 'rgba(186, 230, 253, 0.7)'
-                : 'rgba(94, 234, 212, 0.45)';
-          ctx.lineWidth = filtered ? 2.4 : lit ? 1.8 : 1.3;
+                ? 'rgba(186, 210, 255, 0.45)'
+                : 'rgba(100, 116, 139, 0.35)';
+          ctx.lineWidth = filtered ? 1.5 : lit ? 1.4 : 1.2;
           if (typeof ctx.roundRect === 'function') {
             ctx.beginPath();
             ctx.roundRect(left, top, boxW, boxH, 9);
@@ -2043,14 +2129,14 @@ const LineageUniverseScene = ({
           }
           // Accent bar — visually separate from source name pills.
           ctx.fillStyle = filtered
-            ? 'rgba(34, 211, 238, 0.95)'
-            : 'rgba(45, 212, 191, 0.75)';
+            ? 'rgba(148, 163, 184, 0.45)'
+            : 'rgba(100, 116, 139, 0.45)';
           ctx.fillRect(left + 3, top + 4, 3, boxH - 8);
           const textX = left + padX + 6;
           ctx.textAlign = 'left';
           ctx.textBaseline = 'middle';
           ctx.font = `700 ${Math.max(9, size - 3)}px "Segoe UI", system-ui, sans-serif`;
-          ctx.fillStyle = 'rgba(165, 243, 252, 0.9)';
+          ctx.fillStyle = 'rgba(186, 210, 255, 0.85)';
           ctx.fillText(tag, textX, p.y);
           ctx.font = `700 ${size}px "Segoe UI", system-ui, sans-serif`;
           ctx.fillStyle = filtered
