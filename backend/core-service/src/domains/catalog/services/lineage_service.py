@@ -34,11 +34,40 @@ class LineageService:
         ]
         nodes = sources + extractions
         nodes.sort(key=lambda asset: (asset.asset_type.value, asset.name.lower(), asset.qualified_name))
+        # Bounded downstream tallies for Universe sizing / HUD (edges stay empty).
+        counts = {asset.id: self._downstream_type_counts(asset.id) for asset in nodes}
         return {
             "nodes": nodes,
             "edges": [],
             "unresolved_targets": [],
+            "counts": counts,
         }
+
+    def _downstream_type_counts(self, start_id: uuid.UUID, *, max_depth: int = 4) -> dict[str, int]:
+        """Count reachable assets by type, excluding the start node itself."""
+        counts: dict[str, int] = {}
+        queue: deque[tuple[uuid.UUID, int]] = deque([(start_id, 0)])
+        seen = {start_id}
+        while queue:
+            current_id, depth = queue.popleft()
+            if depth >= max_depth:
+                continue
+            for edge in self._store.list_relationships(
+                asset_id=current_id, types=set(LINEAGE_RELATIONSHIP_TYPES)
+            ):
+                neighbour = (
+                    edge.to_asset_id if edge.from_asset_id == current_id else edge.from_asset_id
+                )
+                if neighbour in seen:
+                    continue
+                seen.add(neighbour)
+                asset = self._store.get_asset(neighbour)
+                if asset is None or asset.deleted_at is not None:
+                    continue
+                key = asset.asset_type.value
+                counts[key] = counts.get(key, 0) + 1
+                queue.append((neighbour, depth + 1))
+        return counts
 
     def get_lineage(self, asset_id: uuid.UUID) -> dict:
         origin = self._store.get_asset(asset_id)

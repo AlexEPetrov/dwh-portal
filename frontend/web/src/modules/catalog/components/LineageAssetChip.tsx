@@ -67,6 +67,7 @@ const LineageAssetChip = ({
     .join(' ');
 
   const stop = (event: MouseEvent | KeyboardEvent) => {
+    event.preventDefault();
     event.stopPropagation();
   };
 

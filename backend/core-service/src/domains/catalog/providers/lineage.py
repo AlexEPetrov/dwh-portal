@@ -51,6 +51,8 @@ class ExtractionSourceRecord:
     tags: str | None
     parent_id: str | None
     comment: str | None
+    # Optional sys.data_source_items.kind when the column exists; else None.
+    data_source_kind: str | None = None
 
 
 class LineageProvider(Protocol):

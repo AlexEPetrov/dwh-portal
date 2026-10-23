@@ -1,6 +1,6 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Empty, Space, Tag, Tooltip, Typography } from 'antd';
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LineageAssetChip from './LineageAssetChip';
 import {
@@ -66,6 +66,7 @@ const Hop = ({
   row,
   dimmed,
   anchor = false,
+  index = 0,
   selectedAssetId,
   focusId,
   onFocusNode,
@@ -73,6 +74,7 @@ const Hop = ({
   row: FlowRow;
   dimmed: boolean;
   anchor?: boolean;
+  index?: number;
   selectedAssetId?: string;
   focusId?: string | null;
   onFocusNode?: (assetId: string, anchorKey?: string) => void;
@@ -81,6 +83,7 @@ const Hop = ({
     className={dimmed ? 'lineage-list-hop is-dimmed' : 'lineage-list-hop'}
     data-lineage-key={row.key}
     data-lineage-anchor={anchor ? 'true' : undefined}
+    style={{ '--lineage-hop-i': index } as CSSProperties}
   >
     <NodeCard
       node={row.left}
@@ -143,11 +146,12 @@ const ListRows = ({
     }
   }
   const hopProps = { selectedAssetId, focusId, onFocusNode };
-  const renderHop = (row: FlowRow, dimmed: boolean) => (
+  const renderHop = (row: FlowRow, dimmed: boolean, index: number) => (
     <Hop
       key={row.key}
       row={row}
       dimmed={dimmed}
+      index={index}
       anchor={row.key === anchorKey}
       {...hopProps}
     />
@@ -156,7 +160,7 @@ const ListRows = ({
   if (anchorIndex < 0) {
     return (
       <div className="lineage-list-rows" ref={rowsRef}>
-        {rows.map((row) => renderHop(row, false))}
+        {rows.map((row, index) => renderHop(row, false, index))}
       </div>
     );
   }
@@ -166,24 +170,34 @@ const ListRows = ({
   const after = rows.slice(clusterEnd + 1);
   return (
     <div className="lineage-list-rows" ref={rowsRef}>
-      {before.map((row) => renderHop(row, !dependencyKeys.has(row.key)))}
+      {before.map((row, index) => renderHop(row, !dependencyKeys.has(row.key), index))}
       <div className="lineage-list-focus" ref={clusterRef}>
-        {cluster.map((row) => renderHop(row, false))}
+        {cluster.map((row, index) =>
+          renderHop(row, false, before.length + index)
+        )}
       </div>
-      {after.map((row) => renderHop(row, !dependencyKeys.has(row.key)))}
+      {after.map((row, index) =>
+        renderHop(row, !dependencyKeys.has(row.key), before.length + cluster.length + index)
+      )}
     </div>
   );
 };
 
 const Arrow = ({ label }: { label: string }) => (
   <Tooltip title={label}>
-    <Typography.Text
-      type="secondary"
-      ellipsis
-      style={{ maxWidth: 280, flex: '0 1 auto', whiteSpace: 'nowrap' }}
-    >
-      — {label} →
-    </Typography.Text>
+    <span className="lineage-list-arrow">
+      <span className="lineage-list-arrow__line" aria-hidden />
+      <Typography.Text
+        type="secondary"
+        ellipsis
+        className="lineage-list-arrow__label"
+      >
+        {label}
+      </Typography.Text>
+      <span className="lineage-list-arrow__head" aria-hidden>
+        →
+      </span>
+    </span>
   </Tooltip>
 );
 
@@ -351,31 +365,44 @@ const LineageListView = ({
   }
   if (rootsOverview) {
     return (
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          Корневые объекты: DATA_SOURCE и EXTRACTION_SOURCE без родительского источника. Нажмите
-          объект, чтобы открыть цепочку. Стрелка — карточка объекта.
-        </Typography.Paragraph>
-        {stages.map((type) => (
-          <Space key={type} direction="vertical" size={8} style={{ width: '100%' }}>
-            <Tag color={TYPE_COLOR[type]}>{type}</Tag>
-            <Space wrap size={8}>
-              {nodes
-                .filter((node) => node.asset_type === type)
-                .map((node) => (
-                  <NodeCard
-                    key={node.id}
-                    node={node}
-                    showType={false}
-                    selected={node.id === selectedAssetId}
-                    focused={node.id === focusId}
-                    onFocusNode={onFocusNode}
-                  />
-                ))}
-            </Space>
-          </Space>
-        ))}
-      </Space>
+      <div className="lineage-list-view">
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            Корневые объекты: DATA_SOURCE и EXTRACTION_SOURCE без родительского источника. Нажмите
+            объект, чтобы открыть цепочку. Стрелка — карточка объекта.
+          </Typography.Paragraph>
+          {stages.map((type, stageIndex) => (
+            <div
+              key={type}
+              className="lineage-list-stage"
+              style={{ '--lineage-stage-i': stageIndex } as CSSProperties}
+            >
+              <Tag color={TYPE_COLOR[type]} className="lineage-list-stage__tag">
+                {type}
+              </Tag>
+              <div className="lineage-list-stage__chips">
+                {nodes
+                  .filter((node) => node.asset_type === type)
+                  .map((node, chipIndex) => (
+                    <div
+                      key={node.id}
+                      className="lineage-list-chip-enter"
+                      style={{ '--lineage-chip-i': chipIndex } as CSSProperties}
+                    >
+                      <NodeCard
+                        node={node}
+                        showType={false}
+                        selected={node.id === selectedAssetId}
+                        focused={node.id === focusId}
+                        onFocusNode={onFocusNode}
+                      />
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </Space>
+      </div>
     );
   }
   if (!edges.length || !rows.length) {
@@ -385,32 +412,36 @@ const LineageListView = ({
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Space wrap size={4}>
-        <Typography.Text type="secondary">Поток слева направо:</Typography.Text>
-        {stages.map((type, index) => (
-          <span key={type}>
-            <Tag color={TYPE_COLOR[type]}>{type}</Tag>
-            {index < stages.length - 1 ? <Typography.Text type="secondary"> → </Typography.Text> : null}
-          </span>
-        ))}
+    <div className="lineage-list-view">
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Space wrap size={4} className="lineage-list-legend">
+          <Typography.Text type="secondary">Поток слева направо:</Typography.Text>
+          {stages.map((type, index) => (
+            <span key={type}>
+              <Tag color={TYPE_COLOR[type]}>{type}</Tag>
+              {index < stages.length - 1 ? (
+                <Typography.Text type="secondary"> → </Typography.Text>
+              ) : null}
+            </span>
+          ))}
+        </Space>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Клик по объекту показывает его зависимости рядом и не сдвигает сам объект. Наведение
+          показывает полное имя. Стрелка наружу — карточка объекта. Повторный клик возвращает общий
+          список. VIEW может порождаться несколькими TABLE.
+        </Typography.Paragraph>
+        <ListRows
+          rows={rows}
+          rowsRef={rowsRef}
+          clusterRef={clusterRef}
+          anchorKey={focused.anchorKey}
+          dependencyKeys={focused.dependencyKeys}
+          selectedAssetId={selectedAssetId}
+          focusId={focusId}
+          onFocusNode={onFocusNode}
+        />
       </Space>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        Клик по объекту показывает его зависимости рядом и не сдвигает сам объект. Наведение
-        показывает полное имя. Стрелка наружу — карточка объекта. Повторный клик возвращает общий
-        список. VIEW может порождаться несколькими TABLE.
-      </Typography.Paragraph>
-      <ListRows
-        rows={rows}
-        rowsRef={rowsRef}
-        clusterRef={clusterRef}
-        anchorKey={focused.anchorKey}
-        dependencyKeys={focused.dependencyKeys}
-        selectedAssetId={selectedAssetId}
-        focusId={focusId}
-        onFocusNode={onFocusNode}
-      />
-    </Space>
+    </div>
   );
 };
 

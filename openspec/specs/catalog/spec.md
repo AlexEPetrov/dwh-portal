@@ -148,6 +148,11 @@ MUST всё равно показывать SQL-зависимости `DERIVED_
 lineage: все `DATA_SOURCE` и те `EXTRACTION_SOURCE`, у которых нет
 родительского `DATA_SOURCE` по ребру `EXTRACTS_TO`.
 
+Каждый узел корня MUST включать ограниченные счётчики достижимых
+downstream-объектов (глубина обхода ограничена): `extraction_source_count`,
+`process_count`, `table_count`, `view_count`. Рёбра в ответе корней
+MUST оставаться пустыми.
+
 Страница `/lineage` без выбранного объекта MUST показывать этот набор.
 Выбор объекта MUST открывать его обычный ограниченный обход.
 
@@ -159,6 +164,7 @@ lineage: все `DATA_SOURCE` и те `EXTRACTION_SOURCE`, у которых н�
 - THEN в узлах есть ICE и Airflow extraction source
 - AND extraction source из реестра отсутствует
 - AND рёбер нет
+- AND у ICE `extraction_source_count` ≥ 1
 
 ### Requirement: Обзор, хранение и изменения
 

@@ -160,6 +160,14 @@ class LineageNode(BaseModel):
     name: str
     display_name: str
     unresolved: bool = False
+    # Optional business category (prototype of sys.data_source_items.kind).
+    # Missing when the DWH column is absent and attributes have no kind.
+    kind: str | None = None
+    # Downstream type tallies (populated for lineage/roots; omitted elsewhere).
+    extraction_source_count: int | None = None
+    process_count: int | None = None
+    table_count: int | None = None
+    view_count: int | None = None
 
 
 class LineageEdge(BaseModel):
@@ -353,7 +361,23 @@ def change_item(event: ChangeEvent, asset: Asset | None = None) -> ChangeSummary
     )
 
 
-def lineage_node(asset: Asset) -> LineageNode:
+def lineage_node(
+    asset: Asset,
+    *,
+    counts: dict[str, int] | None = None,
+) -> LineageNode:
+    raw_kind = asset.attributes.get("kind")
+    kind = raw_kind.strip() if isinstance(raw_kind, str) and raw_kind.strip() else None
+    if counts is None:
+        return LineageNode(
+            id=asset.id,
+            asset_type=asset.asset_type.value,
+            qualified_name=asset.qualified_name,
+            name=asset.name,
+            display_name=display_name_for(asset),
+            unresolved=bool(asset.attributes.get("unresolved")),
+            kind=kind,
+        )
     return LineageNode(
         id=asset.id,
         asset_type=asset.asset_type.value,
@@ -361,6 +385,11 @@ def lineage_node(asset: Asset) -> LineageNode:
         name=asset.name,
         display_name=display_name_for(asset),
         unresolved=bool(asset.attributes.get("unresolved")),
+        kind=kind,
+        extraction_source_count=int(counts.get("EXTRACTION_SOURCE", 0)),
+        process_count=int(counts.get("PROCESS", 0)),
+        table_count=int(counts.get("TABLE", 0)),
+        view_count=int(counts.get("VIEW", 0)),
     )
 
 

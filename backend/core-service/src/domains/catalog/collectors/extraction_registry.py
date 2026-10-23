@@ -386,6 +386,11 @@ class ExtractionRegistryCollector:
     def _upsert_data_source(self, record: ExtractionSourceRecord, now: datetime.datetime) -> Asset:
         native_id = record.data_source_id or record.name or "source"
         qualified_name, identity_key = data_source_identity(native_id)
+        existing = self._store.find_by_identity(PROVIDER, identity_key)
+        attributes = dict(existing.attributes) if existing else {}
+        # Only set when registry exposes kind; never require the DB column.
+        if record.data_source_kind:
+            attributes["kind"] = record.data_source_kind
         return self._store.upsert_asset(
             Asset(
                 asset_type=AssetType.DATA_SOURCE,
@@ -394,8 +399,9 @@ class ExtractionRegistryCollector:
                 source_provider=PROVIDER,
                 native_id=native_id,
                 identity_key=identity_key,
-                first_seen_at=now,
+                first_seen_at=existing.first_seen_at if existing else now,
                 last_seen_at=now,
+                attributes=attributes,
             )
         )
 

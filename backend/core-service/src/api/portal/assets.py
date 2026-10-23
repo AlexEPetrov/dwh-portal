@@ -58,8 +58,12 @@ def list_lineage_roots(
     status_service: Annotated[CollectionStatusService, Depends(get_collection_status_service)],
 ) -> LineageRootsResponse:
     payload = service.list_roots()
+    counts = payload.get("counts") or {}
     return LineageRootsResponse(
-        nodes=[lineage_node(node) for node in payload["nodes"]],
+        nodes=[
+            lineage_node(node, counts=counts.get(node.id))
+            for node in payload["nodes"]
+        ],
         edges=[lineage_edge(edge) for edge in payload["edges"]],
         unresolved_targets=[
             UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]

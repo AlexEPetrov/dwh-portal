@@ -105,9 +105,12 @@ class ExtractionRegistryProvider:
             ds_name_expr = self._coalesce_existing(
                 ds_columns, "name", "slug", table_alias="d"
             )
+            # kind is optional — many DWH schemas do not have it yet.
+            ds_kind_expr = "d.kind" if "kind" in ds_columns else "NULL"
         else:
             ds_join = ""
             ds_name_expr = "NULL"
+            ds_kind_expr = "NULL"
         with connection.cursor() as cursor:
             cursor.execute(
                 f"""
@@ -126,7 +129,8 @@ class ExtractionRegistryProvider:
                     {ds_name_expr},
                     {tags_expr},
                     s.parent_id,
-                    {comment_expr}
+                    {comment_expr},
+                    {ds_kind_expr}
                 FROM sys.data_extraction_sources s
                 {ds_join}
                 """
@@ -134,6 +138,12 @@ class ExtractionRegistryProvider:
             rows = cursor.fetchall()
         records = []
         for row in rows:
+            raw_kind = row[15]
+            kind = (
+                raw_kind.strip()
+                if isinstance(raw_kind, str) and raw_kind.strip()
+                else None
+            )
             records.append(
                 ExtractionSourceRecord(
                     id=str(row[0]),
@@ -151,6 +161,7 @@ class ExtractionRegistryProvider:
                     tags=row[12],
                     parent_id=str(row[13]) if row[13] else None,
                     comment=row[14],
+                    data_source_kind=kind,
                 )
             )
         return records

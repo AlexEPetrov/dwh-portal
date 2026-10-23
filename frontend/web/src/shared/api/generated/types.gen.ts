@@ -190,6 +190,11 @@ export type LineageNode = {
     name: string;
     display_name: string;
     unresolved?: boolean;
+    kind?: string | null;
+    extraction_source_count?: number | null;
+    process_count?: number | null;
+    table_count?: number | null;
+    view_count?: number | null;
 };
 
 export type LineageResponse = {

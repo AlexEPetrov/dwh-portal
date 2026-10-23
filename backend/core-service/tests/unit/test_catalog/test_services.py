@@ -66,6 +66,9 @@ def test_lineage_roots_are_data_sources_and_orphan_extractions(seeded_store):
     assert "ICE" in names
     assert "platts_egd" in names
     assert "Brent Settlement" not in names
+    ice = next(node for node in payload["nodes"] if node.name == "ICE")
+    ice_counts = payload["counts"][ice.id]
+    assert ice_counts.get("EXTRACTION_SOURCE", 0) >= 1
 
 
 def test_overview_and_storage_read_snapshots_only(seeded_store):
