@@ -132,6 +132,16 @@ class SqlPortalStore:
                 return None
             return self._asset_from_row(row)
 
+    def get_assets(self, asset_ids: set[uuid.UUID]) -> list[Asset]:
+        """Load many assets, including soft-deleted rows, in one query."""
+        if not asset_ids:
+            return []
+        with self._session() as session:
+            rows = session.scalars(
+                select(PortalAssetDbModel).where(PortalAssetDbModel.id.in_(list(asset_ids)))
+            ).all()
+            return [self._asset_from_row(row) for row in rows]
+
     def find_by_identity(self, source_provider: str, identity_key: str) -> Asset | None:
         with self._session() as session:
             row = session.scalar(
@@ -440,6 +450,83 @@ class SqlPortalStore:
             .limit(query.page_size)
         )
 
+    @staticmethod
+    def _change_filters(query: ChangeQuery) -> list:
+        filters = []
+        if query.change_type is not None:
+            filters.append(PortalChangeEventDbModel.change_type == query.change_type.value)
+        if query.since is not None:
+            filters.append(PortalChangeEventDbModel.detected_at >= query.since)
+        if query.until is not None:
+            filters.append(PortalChangeEventDbModel.detected_at <= query.until)
+        if query.asset_id is not None:
+            filters.append(PortalChangeEventDbModel.asset_id == query.asset_id)
+        return filters
+
+    @staticmethod
+    def _changes_count_stmt(query: ChangeQuery):
+        stmt = select(func.count()).select_from(PortalChangeEventDbModel)
+        filters = SqlPortalStore._change_filters(query)
+        if filters:
+            stmt = stmt.where(*filters)
+        return stmt
+
+    @staticmethod
+    def _changes_page_stmt(query: ChangeQuery):
+        offset = max(query.page - 1, 0) * query.page_size
+        stmt = select(PortalChangeEventDbModel)
+        filters = SqlPortalStore._change_filters(query)
+        if filters:
+            stmt = stmt.where(*filters)
+        return (
+            stmt.order_by(PortalChangeEventDbModel.detected_at.desc())
+            .offset(offset)
+            .limit(query.page_size)
+        )
+
+    @staticmethod
+    def _latest_runs_stmt():
+        return (
+            select(PortalCollectionRunDbModel)
+            .distinct(PortalCollectionRunDbModel.collector_name)
+            .order_by(
+                PortalCollectionRunDbModel.collector_name,
+                PortalCollectionRunDbModel.started_at.desc(),
+                PortalCollectionRunDbModel.id.desc(),
+            )
+        )
+
+    @staticmethod
+    def _storage_history_stmt(
+        *,
+        since: datetime.datetime | None = None,
+        until: datetime.datetime | None = None,
+    ):
+        """Group size snapshots by time. ``NULLIF(..., 0)`` matches ``value or fallback``."""
+        table_expr = func.coalesce(func.nullif(PortalAssetSnapshotDbModel.table_bytes, 0), 0)
+        index_expr = func.coalesce(func.nullif(PortalAssetSnapshotDbModel.index_bytes, 0), 0)
+        total_expr = case(
+            (
+                and_(
+                    PortalAssetSnapshotDbModel.total_bytes.is_not(None),
+                    PortalAssetSnapshotDbModel.total_bytes != 0,
+                ),
+                PortalAssetSnapshotDbModel.total_bytes,
+            ),
+            else_=table_expr + index_expr,
+        )
+        stmt = select(
+            PortalAssetSnapshotDbModel.snapshot_at,
+            func.sum(table_expr).label("table_bytes"),
+            func.sum(index_expr).label("index_bytes"),
+            func.sum(total_expr).label("total_bytes"),
+        ).group_by(PortalAssetSnapshotDbModel.snapshot_at)
+        if since is not None:
+            stmt = stmt.where(PortalAssetSnapshotDbModel.snapshot_at >= since)
+        if until is not None:
+            stmt = stmt.where(PortalAssetSnapshotDbModel.snapshot_at <= until)
+        return stmt.order_by(PortalAssetSnapshotDbModel.snapshot_at)
+
     def replace_columns(self, asset_id: uuid.UUID, columns: list[AssetColumn]) -> None:
         with self._session(commit=True) as session:
             session.execute(
@@ -510,6 +597,25 @@ class SqlPortalStore:
                 stmt = stmt.where(PortalAssetSnapshotDbModel.snapshot_at <= until)
             stmt = stmt.order_by(PortalAssetSnapshotDbModel.snapshot_at)
             return [self._snapshot_from_row(row) for row in session.scalars(stmt).all()]
+
+    def aggregate_storage_history(
+        self,
+        *,
+        since: datetime.datetime | None = None,
+        until: datetime.datetime | None = None,
+    ) -> list[dict]:
+        """Sum snapshot bytes by time in SQL. Zero bytes count as missing."""
+        with self._session() as session:
+            rows = session.execute(self._storage_history_stmt(since=since, until=until)).all()
+        return [
+            {
+                "snapshot_at": row.snapshot_at,
+                "table_bytes": int(row.table_bytes or 0),
+                "index_bytes": int(row.index_bytes or 0),
+                "total_bytes": int(row.total_bytes or 0),
+            }
+            for row in rows
+        ]
 
     def upsert_relationship(self, relationship: Relationship) -> Relationship:
         with self._session(commit=True) as session:
@@ -582,21 +688,9 @@ class SqlPortalStore:
 
     def list_changes(self, query: ChangeQuery) -> tuple[list[ChangeEvent], int]:
         with self._session() as session:
-            stmt = select(PortalChangeEventDbModel)
-            if query.change_type is not None:
-                stmt = stmt.where(PortalChangeEventDbModel.change_type == query.change_type.value)
-            if query.since is not None:
-                stmt = stmt.where(PortalChangeEventDbModel.detected_at >= query.since)
-            if query.until is not None:
-                stmt = stmt.where(PortalChangeEventDbModel.detected_at <= query.until)
-            if query.asset_id is not None:
-                stmt = stmt.where(PortalChangeEventDbModel.asset_id == query.asset_id)
-            stmt = stmt.order_by(PortalChangeEventDbModel.detected_at.desc())
-            rows = list(session.scalars(stmt).all())
-            total = len(rows)
-            start = max(query.page - 1, 0) * query.page_size
-            page = rows[start : start + query.page_size]
-            return [self._change_from_row(row) for row in page], total
+            total = int(session.scalar(self._changes_count_stmt(query)) or 0)
+            rows = session.scalars(self._changes_page_stmt(query)).all()
+            return [self._change_from_row(row) for row in rows], total
 
     def add_diagnostic(self, diagnostic: DiscoveryDiagnostic) -> DiscoveryDiagnostic:
         with self._session(commit=True) as session:
@@ -636,14 +730,10 @@ class SqlPortalStore:
             return self._run_from_row(row)
 
     def latest_runs(self) -> list[CollectionRun]:
+        """Return the newest run of each collector without reading older runs."""
         with self._session() as session:
-            rows = session.scalars(
-                select(PortalCollectionRunDbModel).order_by(PortalCollectionRunDbModel.started_at)
-            ).all()
-            latest: dict[str, CollectionRun] = {}
-            for row in rows:
-                latest[row.collector_name] = self._run_from_row(row)
-            return list(latest.values())
+            rows = session.scalars(self._latest_runs_stmt()).all()
+            return [self._run_from_row(row) for row in rows]
 
     def purge(self) -> None:
         """Delete all portal snapshot rows. Does not touch DWH or other app schemas."""

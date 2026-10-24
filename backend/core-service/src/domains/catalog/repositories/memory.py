@@ -70,6 +70,16 @@ class InMemoryPortalStore:
             return None
         return asset.model_copy(deep=True)
 
+    def get_assets(self, asset_ids: set[uuid.UUID]) -> list[Asset]:
+        """Return the requested assets, including soft-deleted rows, in one pass."""
+        if not asset_ids:
+            return []
+        return [
+            asset.model_copy(deep=True)
+            for asset_id, asset in self.assets.items()
+            if asset_id in asset_ids
+        ]
+
     def find_by_identity(self, source_provider: str, identity_key: str) -> Asset | None:
         asset_id = self._identity_index.get((source_provider, identity_key))
         if asset_id is None:
@@ -281,6 +291,27 @@ class InMemoryPortalStore:
             items = [item for item in items if item.snapshot_at <= until]
         items = sorted(items, key=lambda item: item.snapshot_at)
         return [item.model_copy(deep=True) for item in items]
+
+    def aggregate_storage_history(
+        self,
+        *,
+        since: datetime.datetime | None = None,
+        until: datetime.datetime | None = None,
+    ) -> list[dict]:
+        """Sum snapshot bytes by ``snapshot_at`` using the same zero-as-missing rule as SQL."""
+        buckets: dict[datetime.datetime, dict[str, int]] = {}
+        for snapshot in self.list_snapshots(since=since, until=until):
+            table_bytes, index_bytes, total_bytes = snapshot.contributed_storage_bytes()
+            bucket = buckets.setdefault(
+                snapshot.snapshot_at, {"table_bytes": 0, "index_bytes": 0, "total_bytes": 0}
+            )
+            bucket["table_bytes"] += table_bytes
+            bucket["index_bytes"] += index_bytes
+            bucket["total_bytes"] += total_bytes
+        return [
+            {"snapshot_at": moment, **values}
+            for moment, values in sorted(buckets.items(), key=lambda item: item[0])
+        ]
 
     def upsert_relationship(self, relationship: Relationship) -> Relationship:
         with self._lock:

@@ -191,6 +191,89 @@ def test_airflow_extraction_does_not_query_log_files(store):
     assert page.items == []
 
 
+def test_owned_connection_reuses_nonempty_column_cache(monkeypatch):
+    from domains.catalog.providers import log_files as module
+    from settings.portal import DwhCollectorSettings
+
+    module._COLUMN_CACHE.clear()
+    connection = FakeConnection(set(LOG_COLUMNS), [])
+    calls = {"schema": 0}
+    original = FakeCursor.execute
+
+    def execute(self, sql, params=None):
+        if "information_schema.columns" in " ".join(sql.lower().split()):
+            calls["schema"] += 1
+        return original(self, sql, params)
+
+    monkeypatch.setattr(FakeCursor, "execute", execute)
+    settings = DwhCollectorSettings.model_construct(
+        psg_host="cache-host", psg_port=5432, psg_db="cache-db"
+    )
+    provider = LogFilesProvider(settings=settings)
+    monkeypatch.setattr(provider, "_connect", lambda: connection)
+    try:
+        provider.list_files(SOURCE_ID, page=1, page_size=10)
+        provider.list_files(SOURCE_ID, page=1, page_size=10)
+        assert calls["schema"] == 1
+    finally:
+        module._COLUMN_CACHE.clear()
+
+
+def test_empty_column_probe_is_not_cached(monkeypatch):
+    from domains.catalog.providers import log_files as module
+    from settings.portal import DwhCollectorSettings
+
+    module._COLUMN_CACHE.clear()
+    connection = FakeConnection(set(), [])
+    calls = {"schema": 0}
+    original = FakeCursor.execute
+
+    def execute(self, sql, params=None):
+        if "information_schema.columns" in " ".join(sql.lower().split()):
+            calls["schema"] += 1
+        return original(self, sql, params)
+
+    monkeypatch.setattr(FakeCursor, "execute", execute)
+    settings = DwhCollectorSettings.model_construct(
+        psg_host="empty-host", psg_port=5432, psg_db="empty-db"
+    )
+    provider = LogFilesProvider(settings=settings)
+    monkeypatch.setattr(provider, "_connect", lambda: connection)
+    try:
+        assert provider.list_files(SOURCE_ID, page=1, page_size=10).available is False
+        connection.columns = set(LOG_COLUMNS)
+        connection.rows = [
+            _file_row("later.xlsx", TS_NEW, "c2000000-0000-0000-0000-000000000004")
+        ]
+        page = provider.list_files(SOURCE_ID, page=1, page_size=10)
+        assert calls["schema"] == 2
+        assert page.available is True
+        assert page.items[0].file_name == "later.xlsx"
+    finally:
+        module._COLUMN_CACHE.clear()
+
+
+def test_injected_connection_ignores_column_cache():
+    from domains.catalog.providers import log_files as module
+    from settings.portal import DwhCollectorSettings
+
+    module._COLUMN_CACHE[("h", 5432, "d", "sys", "log_files")] = frozenset({"rid"})
+    try:
+        connection = FakeConnection(
+            LOG_COLUMNS,
+            [_file_row("kept.xlsx", TS_NEW, "c2000000-0000-0000-0000-000000000005")],
+        )
+        provider = LogFilesProvider(
+            settings=DwhCollectorSettings.model_construct(psg_host="h", psg_port=5432, psg_db="d"),
+            connection=connection,
+        )
+        page = provider.list_files(SOURCE_ID, page=1, page_size=10)
+        assert page.available is True
+        assert page.items[0].file_name == "kept.xlsx"
+    finally:
+        module._COLUMN_CACHE.clear()
+
+
 def test_unknown_asset_returns_none(store):
     service = ExtractionLoadService(store, ExplodingProvider())  # type: ignore[arg-type]
     assert service.list_loads(uuid.uuid4(), 1, 50) is None

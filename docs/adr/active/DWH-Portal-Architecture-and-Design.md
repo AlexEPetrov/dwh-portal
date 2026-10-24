@@ -1,19 +1,24 @@
 # DWH Portal - Architecture and Design
 
-- **Version:** MVP / Phase 1
+- **Version:** MVP / architecture direction
 - **Date:** 2026-09-06
-- **Status:** Initial design
+- **Updated:** 2026-10-24
+- **Status:** Architecture overview; planned additions are not implementation claims
 
 ## 1. Purpose
 
-DWH Portal — пользовательское приложение каталога и operational metadata для
-обнаружения активов DWH, понимания их происхождения и зависимостей, мониторинга
-объёма хранилища и просмотра структурных изменений во времени.
+DWH Portal — единая точка входа к каталогу данных, администрированию ingestion,
+части мониторинга и деталям конкретных загрузок. Общие UI и FastAPI сохраняются
+при возможном переходе на OpenMetadata или аналог.
 
-Портал намеренно отделён от OpenMetadata.
+Существующий metadata-driven ingestion registry остаётся рабочим механизмом.
+Минимальный стабильный каталог нужен сейчас; полноценная платформа данных
+может появиться существенно позже. Миграция не является условием MVP.
 
-OpenMetadata позже может стать system of record для метаданных, но backend и
-frontend DWH Portal — долгоживущие продуктовые компоненты.
+Согласованные решения изложены в ADR-002 и ADR бизнес-доменов. Текущее
+поведение задают `openspec/specs/catalog/spec.md` и `ingestion/spec.md`.
+OpenLineage receiver, модель выполнений и включение Python metadata-контракта
+в основной pipeline — планируемые дополнения, не функции текущего архива.
 
 ## 2. Объём MVP
 
@@ -25,30 +30,36 @@ frontend DWH Portal — долгоживущие продуктовые комп
 - описания таблиц/колонок из метаданных/комментариев PostgreSQL;
 - размер хранилища и распределение storage;
 - исторические снимки хранилища;
-- lineage source-to-DWH;
+- логическая схема source → handler → TABLE/VIEW;
+- проваливание в конкретные загрузки и постраничный `sys.log_files`;
 - отслеживание структурных изменений объектов;
 - здоровье collector / freshness status.
 
-### Phase 2
+### Независимые направления и последующие этапы
 
-- AI-диалог;
-- аналитика использования/активности БД из query/audit logs;
-- OpenMetadata provider и интеграция governance;
-- более богатый semantic search;
-- опциональный column-level lineage.
+- анализ пользовательской активности на основе `g_audit` — независимо от
+  OpenLineage и выбора платформы метаданных;
+- OpenLineage receiver и отдельная модель выполнений — поэтапное развитие
+  мониторинга; графическая визуализация каждого запуска не обязательна для MVP;
+- подключение явного `get_metadata(config)` наряду с AST;
+- OM или аналог — при появлении обоснованной потребности, без фиксированного срока;
+- AI, semantic search, column-level lineage и governance — вне текущего минимума.
 
 ## 3. Архитектурные принципы
 
 1. **Браузер общается только с Portal API.**
 2. **Страницы UI не запускают сканирование метаданных против DWH.**
-3. **Operational metadata собирается периодически и хранится как снимки.**
+3. **Каталог и размеры собираются снимками; события выполнений и live-журнал
+   загрузок имеют отдельные пути получения.**
 4. **Контракты Portal API используют каноническую продуктовую модель, а не
    provider-native DTO.**
-5. **OpenMetadata — заменяемый metadata provider, а не контракт backend для
-   frontend.**
+5. **OM или аналог может стать источником каталога за Portal API;
+   конкретная платформа не является контрактом frontend.**
 6. **Прямой доступ к DWH/S3 зарезервирован для операций, которым реально нужны
    live-данные.**
 7. **Сбои сбора локализуются и наблюдаемы.**
+8. **Логическая схема и конкретные выполнения разделены; AST и явные
+   metadata-контракты — дополняющие способы получения схемы до первого запуска.**
 
 ## 4. System context
 
@@ -66,7 +77,7 @@ flowchart TB
     COL --> PDB
 
     OM[OpenMetadata - future] -. metadata provider .-> API
-    LOGS[Usage / query logs - Phase 2] -.-> AIR
+    LOGS[g_audit - independent activity analysis] -.-> API
     AI[AI agent - Phase 2] -.-> API
 ```
 
@@ -89,7 +100,9 @@ sequenceDiagram
     W-->>U: render page
 ```
 
-Запрос страницы не запускает DWH-wide scan.
+Запрос страницы не запускает DWH-wide scan. Исключение из снимочного пути —
+постраничное live-чтение `sys.log_files` для registry extraction source.
+Планируемый приём OpenLineage-событий не запускается пользовательским чтением.
 
 ## 6. Deployment view
 
@@ -128,92 +141,39 @@ collector jobs    launched/orchestrated by existing Airflow
 
 ## 7. Дизайн компонентов backend
 
-```mermaid
-flowchart TB
-    API[FastAPI routes] --> AS[AssetService]
-    API --> SS[StorageService]
-    API --> LS[LineageService]
-    API --> CS[ChangeService]
-    API --> OS[OverviewService]
+Текущий read-path: Portal API → services → PortalStore → Portal DB.
+Collectors и adapters отдельно читают providers PostgreSQL, registry и
+исходников, затем обновляют каноническую модель. Открытие каталожной страницы
+не запускает discovery и не вызывает loader metadata endpoint.
 
-    AS --> META[MetadataProvider]
-    LS --> LINEAGE[LineageProvider]
-    SS --> REPO[Portal repositories]
-    CS --> REPO
-    OS --> REPO
+`MetadataProvider` текущего кода предоставляет `list_assets()` / `get_asset()`;
+`LineageProvider` — `list_extraction_sources()` / `resolve_process_metadata()`.
+Это внутренние порты, а не универсальное API будущей платформы.
 
-    META --> PGM[DirectPostgresMetadataProvider]
-    META -. future .-> OMM[OpenMetadataProvider]
-    LINEAGE --> REG[ExtractionRegistryProvider]
-    LINEAGE -. future .-> OML[OpenMetadataProvider]
-    REPO --> PDB[(Portal DB)]
-```
+AST-адаптеры не исполняют loaders. Планируемый resolver
+`get_metadata(config)` также обслуживает сбор схемы, а не страницу UI.
+Наблюдения OpenLineage в дальнейшем поступают через отдельный receiver,
+сохраняются исходными событиями и наполняют проекцию выполнений.
 
-### Ответственность providers
+## 8. Структура репозитория
 
-`MetadataProvider`
+Используются существующие каталоги:
 
 ```text
-list_assets()
-get_asset()
-get_columns()
-search_assets()
+backend/core-service/src/
+  api/portal/                 # product API каталога
+  domains/catalog/            # модели, services, repositories, providers, collectors
+    lineage_adapters/         # независимые источники логической схемы
+  domains/admin/              # управление registry
+  domains/documents/          # приём документов
+  infrastructure/db/          # SQL persistence и миграции
+frontend/web/src/modules/     # catalog, admin, documents и другие UI-модули
 ```
 
-`LineageProvider`
-
-```text
-get_relationships()
-resolve_process_targets()
-```
-
-Collectors отделены от request-time providers, потому что создают персистентные
-снимки.
-
-## 8. Предлагаемая структура репозитория
-
-```text
-dwh-portal/
-├── backend/
-│   └── app/
-│       ├── api/
-│       │   ├── overview.py
-│       │   ├── assets.py
-│       │   ├── storage.py
-│       │   ├── lineage.py
-│       │   ├── changes.py
-│       │   └── collection_status.py
-│       ├── domain/
-│       │   ├── asset.py
-│       │   ├── relationship.py
-│       │   ├── snapshot.py
-│       │   ├── change.py
-│       │   └── diagnostic.py
-│       ├── services/
-│       │   ├── asset_service.py
-│       │   ├── storage_service.py
-│       │   ├── lineage_service.py
-│       │   ├── change_service.py
-│       │   └── overview_service.py
-│       ├── providers/
-│       │   ├── metadata/
-│       │   │   ├── postgres.py
-│       │   │   └── openmetadata.py       # later
-│       │   ├── lineage/
-│       │   │   ├── extraction_registry.py
-│       │   │   └── openmetadata.py       # later
-│       │   └── storage/
-│       │       ├── postgres.py
-│       │       └── s3.py
-│       └── repositories/
-│           └── portal_db/
-├── collectors/
-│   ├── catalog/
-│   ├── storage/
-│   ├── extraction_registry/
-│   └── changes/
-└── frontend/
-```
+Ответственность будущих модулей выполнений и активности определена в
+`core-service/portal-business-domains.md`; физическая раскладка уточняется
+при реализации. Отдельные приложения, микросервисы и графовая БД не требуются
+этим решением.
 
 ## 9. Каноническая модель метаданных
 
@@ -372,36 +332,42 @@ load_options            = ExtractLoadOptions
 
 ### Python loaders
 
-```text
-LoadPythonHandlerOption.module
-LoadPythonExtendedHandlerOption.module
-```
+`LoadPythonHandlerOption.module` и `LoadPythonExtendedHandlerOption.module`
+идентифицируют loader-модуль. Схема может извлекаться двумя способами:
 
-трактуются как полные пути Python-модулей.
+| Способ | Свойства |
+|---|---|
+| AST | Поддерживаемые конструкции исходников; без импорта и исполнения; не требует metadata-метода |
+| `get_metadata()` / `get_metadata(config)` | Явные зависимости handler для конфигурации; отдельный безопасный вызов без `load_file()` |
 
-Модуль реализует:
+Оба работают до первого запуска. AST не объявляется только временным fallback;
+покрытие и стоимость поддержки определяют его применение. В текущем pipeline
+Python discovery использует AST; подключение явного контракта планируется.
 
-```python
-def get_metadata() -> dict:
-    ...
-```
+Metadata payload содержит `schema_version`, имя handler, `reads_from` /
+`writes_to` с квалифицированными ссылками на datasets. Пример и требования
+к безопасному вызову — ADR-002, разделы 7–8.
 
-Минимальный результат:
+У связей сохраняются происхождение и свидетельства. Неоднозначности и
+расхождения способов обнаружения диагностируются; они не перезаписываются
+молча. Воспроизводимый AST-разбор не гарантирует полноту зависимостей, как и
+наличие явного metadata-метода не гарантирует совпадение с runtime-поведением.
 
-```json
-{
-  "schema_version": "1.0",
-  "name": "ice_brent_loader",
-  "writes_to": [
-    {
-      "type": "table",
-      "database": "dwh",
-      "schema": "raw",
-      "name": "ice_brent"
-    }
-  ]
-}
-```
+### Два представления потока
+
+Логический граф описывает datasets и процессы без привязки к дню. Граф
+выполнения описывает конкретный запуск, статусы, время, сообщённые входы и
+выходы, связанные файлы. Он ссылается на логические объекты; runId и дата не
+создают новые логические таблицы или handlers.
+
+Схема не строится простым объединением всей истории. Одно выполнение не
+подтверждает все условные ветки; отсутствие связи в запуске не удаляет её из
+схемы. Достоверность наблюдения определяется тем, что фактически сообщил
+producer: повторение объявленной конфигурации не доказывает реальный I/O.
+
+Планируемые OpenLineage RunEvent хранятся исходными JSON с отдельными атрибутами
+приёма; проекция запусков пересоздаётся из событий. На первом этапе UI может
+показывать списки и детали выполнений без отдельной графической сцены.
 
 ### REST loaders
 
@@ -726,7 +692,8 @@ STALE
 
 - парсер `sys.data_extraction_sources`;
 - маппинг `ExtractEmailOptions`, `ExtractStorageOptions`, `ExtractLoadOptions`;
-- resolver Python `get_metadata()`;
+- AST discovery поддерживаемых Python-конструкций;
+- явный Python `get_metadata(config)` — дополнительный способ в последующем change;
 - resolver REST `/metadata`;
 - persistence связей;
 - API/UI lineage.
@@ -753,7 +720,8 @@ STALE
 
 ### Usage/activity
 
-Отдельный usage pipeline будет наполнять агрегаты использования.
+Отдельный pipeline на основе `g_audit` будет наполнять агрегаты пользовательской
+активности. Его реализация независима от OpenLineage и OM.
 
 Планируемая граница backend:
 
@@ -782,24 +750,27 @@ flowchart LR
 Это позволяет вопросы, комбинирующие метаданные, lineage, storage, changes и
 позже usage.
 
-## 28. Путь миграции на OpenMetadata
+## 28. Возможный переход на OpenMetadata или аналог
 
-Phase 1:
+Сейчас Portal DB и существующие providers обслуживают каталог, схема потока
+собирается registry/SQL/AST-адаптерами. Позднее платформа может стать источником
+каталога, описаний, lineage и других поддерживаемых метаданных за Portal API.
+Распределение истории и размеров определяется проверкой покрытия; постоянное
+дублирование авторитетного каталога не является целью.
 
-```text
-Portal Backend -> Direct PostgreSQL metadata provider
-Portal Backend -> Portal DB snapshots
-```
+Собственные UI и backend сохраняют функции единой точки входа и специфичного
+администрирования. Цель — минимизировать изменения UI, а не обещать их отсутствие.
 
-Позже:
+При реализации OpenLineage выбираются стабильные namespace/name и сохраняются
+неизменённые payload. Совместимость с выбранной версией OM проверяется одним
+и тем же реальным событием у собственного receiver и OM. Сохранённые события
+должны допускать replay без штатной конвертации JSON; настройка mapping,
+каталога и авторизации получателя выполняется отдельно.
 
-```text
-Portal Backend -> OpenMetadata provider
-Portal Backend -> Portal DB snapshots/history
-Portal Backend -> DWH/S3 for selected live/source-specific operations
-```
-
-OpenMetadata не заменяет Portal backend.
+Приём RunEvent платформой не гарантирует сохранение всех custom facets и
+отдельного графа каждого запуска. История выполнений и исходный архив
+сохраняются независимо, пока их полное покрытие не подтверждено.
+Подробное решение — ADR-002, раздел 17.1. Срок миграции не установлен.
 
 ## 29. Ключевое архитектурное решение
 
@@ -820,5 +791,6 @@ User ---------->| UI                  |
       snapshots           providers        later
 ```
 
-Это позволяет стартовать сразу и сохранить чистый путь миграции к полноценной
-платформе метаданных.
+Это позволяет поддерживать минимальный каталог сейчас, постепенно добавлять
+мониторинг выполнений и сохранять возможность перехода на платформу метаданных
+без зависимости текущего продукта от сроков её внедрения.

@@ -24,12 +24,23 @@ type Props = {
   rootsOverview?: boolean;
 };
 
+const extractionSourcesLabel = (count: number): string => {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  const word =
+    mod10 === 1 && mod100 !== 11
+      ? 'extraction source'
+      : 'extraction sources';
+  return `${count} ${word}`;
+};
+
 const NodeCard = ({
   node,
   actor = false,
   showType = true,
   selected = false,
   focused = false,
+  detail = null,
   onFocusNode,
 }: {
   node: LineageNode;
@@ -38,6 +49,8 @@ const NodeCard = ({
   showType?: boolean;
   selected?: boolean;
   focused?: boolean;
+  /** Secondary line already loaded with the node. No extra request. */
+  detail?: string | null;
   onFocusNode?: (assetId: string) => void;
 }) => {
   const navigate = useNavigate();
@@ -58,7 +71,13 @@ const NodeCard = ({
       onOpenUniverse={interactive ? () => navigate(`/lineage/universe/${node.id}`) : undefined}
       onActivate={activate}
       onSelectInLineage={activate}
-    />
+    >
+      {detail ? (
+        <Typography.Text type="secondary" className="lineage-asset-chip__hint" ellipsis>
+          {detail}
+        </Typography.Text>
+      ) : null}
+    </LineageAssetChip>
   );
 };
 
@@ -394,6 +413,12 @@ const LineageListView = ({
                         showType={false}
                         selected={node.id === selectedAssetId}
                         focused={node.id === focusId}
+                        detail={
+                          node.asset_type === 'DATA_SOURCE' &&
+                          node.extraction_source_count != null
+                            ? extractionSourcesLabel(node.extraction_source_count)
+                            : null
+                        }
                         onFocusNode={onFocusNode}
                       />
                     </div>

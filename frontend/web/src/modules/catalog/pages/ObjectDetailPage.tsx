@@ -39,8 +39,10 @@ const ObjectDetailPage = () => {
   const { assetId } = useParams<{ assetId: string }>();
   const navigate = useNavigate();
   const [asset, setAsset] = useState<AssetDetailResponse | null>(null);
+  const [missing, setMissing] = useState(false);
   const [columns, setColumns] = useState<ColumnItem[]>([]);
   const [lineage, setLineage] = useState<LineageResponse | null>(null);
+  const [lineageFailed, setLineageFailed] = useState(false);
   const [changes, setChanges] = useState<ChangeSummaryItem[]>([]);
 
   useEffect(() => {
@@ -48,27 +50,61 @@ const ObjectDetailPage = () => {
       return undefined;
     }
     let cancelled = false;
-    Promise.all([
-      getAsset({ assetId }),
-      getAssetColumns({ assetId }),
-      getAssetLineage({ assetId }),
-      listChanges({ assetId, pageSize: 20 }),
-    ]).then(([detail, columnList, lineagePayload, changeList]) => {
-      if (cancelled) {
-        return;
-      }
-      setAsset(detail);
-      setColumns(columnList.items);
-      setLineage(lineagePayload);
-      setChanges(changeList.items);
-    });
+    setAsset(null);
+    setMissing(false);
+    setColumns([]);
+    setLineage(null);
+    setLineageFailed(false);
+    setChanges([]);
+    getAsset({ assetId }).then(
+      (detail) => {
+        if (!cancelled) {
+          setAsset(detail);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setMissing(true);
+        }
+      },
+    );
+    getAssetColumns({ assetId }).then(
+      (columnList) => {
+        if (!cancelled) {
+          setColumns(columnList.items);
+        }
+      },
+      () => undefined,
+    );
+    getAssetLineage({ assetId }).then(
+      (lineagePayload) => {
+        if (!cancelled) {
+          setLineage(lineagePayload);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setLineageFailed(true);
+        }
+      },
+    );
+    listChanges({ assetId, pageSize: 20 }).then(
+      (changeList) => {
+        if (!cancelled) {
+          setChanges(changeList.items);
+        }
+      },
+      () => undefined,
+    );
     return () => {
       cancelled = true;
     };
   }, [assetId]);
 
   if (!asset) {
-    return <Empty description="Объект не найден или ещё загружается" />;
+    return (
+      <Empty description={missing ? 'Объект не найден' : 'Объект ещё загружается'} />
+    );
   }
 
   const showLoads =
@@ -144,7 +180,7 @@ const ObjectDetailPage = () => {
           />
         </Space>
       ) : (
-        <Empty />
+        <Empty description={lineageFailed ? 'Lineage недоступен' : 'Загрузка lineage…'} />
       ),
     },
     ...(showLoads

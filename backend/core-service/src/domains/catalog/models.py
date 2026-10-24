@@ -113,6 +113,17 @@ class AssetSnapshot(BaseModel):
     object_count: int | None = None
     structure_hash: str | None = None
 
+    def contributed_storage_bytes(self) -> tuple[int, int, int]:
+        """Bytes this snapshot adds to a history point.
+
+        Zero is treated as missing, matching ``value or fallback``: a stored
+        ``total_bytes`` of 0 is replaced by table plus index bytes.
+        """
+        table_bytes = self.table_bytes or 0
+        index_bytes = self.index_bytes or 0
+        total_bytes = self.total_bytes or (table_bytes + index_bytes)
+        return table_bytes, index_bytes, total_bytes
+
 
 class AssetListEntry(BaseModel):
     """One catalog-list row: the asset plus the fields the grid renders beside it."""

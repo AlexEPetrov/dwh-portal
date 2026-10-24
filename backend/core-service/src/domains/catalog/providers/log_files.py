@@ -23,6 +23,10 @@ _FIELD_CANDIDATES: dict[str, tuple[str, ...]] = {
 }
 _SOURCE_ID_CANDIDATES = ("extraction_source_id", "source_id")
 
+# Non-empty column sets for connections this process opens itself.
+# An injected connection is not cached: tests and callers can swap schemas.
+_COLUMN_CACHE: dict[tuple[str | None, int, str | None, str, str], frozenset[str]] = {}
+
 
 def _is_undefined_table(exc: Exception) -> bool:
     if type(exc).__name__ == "UndefinedTable":
@@ -154,8 +158,12 @@ class LogFilesProvider:
             doc_date_actual=doc_date if isinstance(doc_date, datetime.datetime) else None,
         )
 
-    @staticmethod
-    def _table_columns(connection, schema: str, table: str) -> set[str]:
+    def _table_columns(self, connection, schema: str, table: str) -> set[str]:
+        cache_key = self._column_cache_key(schema, table)
+        if cache_key is not None:
+            cached = _COLUMN_CACHE.get(cache_key)
+            if cached is not None:
+                return set(cached)
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -165,7 +173,23 @@ class LogFilesProvider:
                 """,
                 (schema, table),
             )
-            return {str(row[0]) for row in cursor.fetchall()}
+            columns = {str(row[0]) for row in cursor.fetchall()}
+        if cache_key is not None and columns:
+            _COLUMN_CACHE[cache_key] = frozenset(columns)
+        return columns
+
+    def _column_cache_key(
+        self, schema: str, table: str
+    ) -> tuple[str | None, int, str | None, str, str] | None:
+        if self._connection is not None:
+            return None
+        return (
+            self._settings.psg_host,
+            self._settings.psg_port,
+            self._settings.psg_db,
+            schema,
+            table,
+        )
 
 
 def _as_float(value: Any) -> float | None:

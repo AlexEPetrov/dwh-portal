@@ -29,6 +29,8 @@ class PortalStore(Protocol):
 
     def get_asset(self, asset_id: uuid.UUID, *, include_deleted: bool = True) -> Asset | None: ...
 
+    def get_assets(self, asset_ids: set[uuid.UUID]) -> list[Asset]: ...
+
     def find_by_identity(self, source_provider: str, identity_key: str) -> Asset | None: ...
 
     def find_by_qualified_name(
@@ -67,6 +69,13 @@ class PortalStore(Protocol):
         since: datetime.datetime | None = None,
         until: datetime.datetime | None = None,
     ) -> list[AssetSnapshot]: ...
+
+    def aggregate_storage_history(
+        self,
+        *,
+        since: datetime.datetime | None = None,
+        until: datetime.datetime | None = None,
+    ) -> list[dict]: ...
 
     def upsert_relationship(self, relationship: Relationship) -> Relationship: ...
 

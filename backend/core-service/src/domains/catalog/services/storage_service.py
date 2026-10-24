@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-from collections import defaultdict
 
 from domains.catalog.repositories.ports import PortalStore
 
@@ -29,18 +28,5 @@ class StorageService:
         }
 
     def history(self, since: datetime.datetime | None = None) -> list[dict]:
-        snapshots = self._store.list_snapshots(since=since)
-        buckets: dict[datetime.datetime, dict[str, int]] = defaultdict(
-            lambda: {"table_bytes": 0, "index_bytes": 0, "total_bytes": 0}
-        )
-        for snapshot in snapshots:
-            bucket = buckets[snapshot.snapshot_at]
-            bucket["table_bytes"] += snapshot.table_bytes or 0
-            bucket["index_bytes"] += snapshot.index_bytes or 0
-            bucket["total_bytes"] += snapshot.total_bytes or (snapshot.table_bytes or 0) + (
-                snapshot.index_bytes or 0
-            )
-        return [
-            {"snapshot_at": moment, **values}
-            for moment, values in sorted(buckets.items(), key=lambda item: item[0])
-        ]
+        """Return one summed point per snapshot time, without a default time window."""
+        return self._store.aggregate_storage_history(since=since)

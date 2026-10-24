@@ -26,16 +26,22 @@ class LineageService:
 
     def list_roots(self) -> dict:
         """Return lineage roots: every DATA_SOURCE and orphan EXTRACTION_SOURCE."""
+        index = self._lineage_index()
+        assets = self._assets_for(index)
         sources = self._list_active(AssetType.DATA_SOURCE)
         extractions = [
             asset
             for asset in self._list_active(AssetType.EXTRACTION_SOURCE)
-            if not self._has_data_source_parent(asset)
+            if not self._has_data_source_parent(asset, index, assets)
         ]
         nodes = sources + extractions
-        nodes.sort(key=lambda asset: (asset.asset_type.value, asset.name.lower(), asset.qualified_name))
+        nodes.sort(
+            key=lambda asset: (asset.asset_type.value, asset.name.lower(), asset.qualified_name)
+        )
         # Bounded downstream tallies for Universe sizing / HUD (edges stay empty).
-        counts = {asset.id: self._downstream_type_counts(asset.id) for asset in nodes}
+        counts = {
+            asset.id: self._downstream_type_counts(asset.id, index, assets) for asset in nodes
+        }
         return {
             "nodes": nodes,
             "edges": [],
@@ -43,7 +49,14 @@ class LineageService:
             "counts": counts,
         }
 
-    def _downstream_type_counts(self, start_id: uuid.UUID, *, max_depth: int = 4) -> dict[str, int]:
+    def _downstream_type_counts(
+        self,
+        start_id: uuid.UUID,
+        index: dict[uuid.UUID, list[Relationship]],
+        assets: dict[uuid.UUID, Asset],
+        *,
+        max_depth: int = 4,
+    ) -> dict[str, int]:
         """Count reachable assets by type, excluding the start node itself."""
         counts: dict[str, int] = {}
         queue: deque[tuple[uuid.UUID, int]] = deque([(start_id, 0)])
@@ -52,16 +65,14 @@ class LineageService:
             current_id, depth = queue.popleft()
             if depth >= max_depth:
                 continue
-            for edge in self._store.list_relationships(
-                asset_id=current_id, types=set(LINEAGE_RELATIONSHIP_TYPES)
-            ):
+            for edge in index.get(current_id, []):
                 neighbour = (
                     edge.to_asset_id if edge.from_asset_id == current_id else edge.from_asset_id
                 )
                 if neighbour in seen:
                     continue
                 seen.add(neighbour)
-                asset = self._store.get_asset(neighbour)
+                asset = assets.get(neighbour)
                 if asset is None or asset.deleted_at is not None:
                     continue
                 key = asset.asset_type.value
@@ -74,16 +85,18 @@ class LineageService:
         if origin is None:
             return {"asset": None, "nodes": [], "edges": [], "unresolved_targets": []}
 
-        edges = self._walk(asset_id)
+        index = self._lineage_index()
+        edges = self._walk(asset_id, index, self._max_depth)
         node_ids = {asset_id}
         for edge in edges:
             node_ids.add(edge.from_asset_id)
             node_ids.add(edge.to_asset_id)
+        assets = {asset.id: asset for asset in self._store.get_assets(node_ids)}
 
         nodes: list[Asset] = []
         unresolved_targets = []
         for node_id in node_ids:
-            asset = self._store.get_asset(node_id)
+            asset = assets.get(node_id)
             if asset is None:
                 continue
             nodes.append(asset)
@@ -103,18 +116,38 @@ class LineageService:
             "unresolved_targets": unresolved_targets,
         }
 
-    def _walk(self, start_id: uuid.UUID) -> list[Relationship]:
+    def _lineage_index(self) -> dict[uuid.UUID, list[Relationship]]:
+        """One read of every data-flow edge, indexed by either endpoint."""
+        index: dict[uuid.UUID, list[Relationship]] = {}
+        for edge in self._store.list_relationships(types=set(LINEAGE_RELATIONSHIP_TYPES)):
+            index.setdefault(edge.from_asset_id, []).append(edge)
+            if edge.to_asset_id != edge.from_asset_id:
+                index.setdefault(edge.to_asset_id, []).append(edge)
+        return index
+
+    def _assets_for(self, index: dict[uuid.UUID, list[Relationship]]) -> dict[uuid.UUID, Asset]:
+        node_ids: set[uuid.UUID] = set()
+        for edges in index.values():
+            for edge in edges:
+                node_ids.add(edge.from_asset_id)
+                node_ids.add(edge.to_asset_id)
+        return {asset.id: asset for asset in self._store.get_assets(node_ids)}
+
+    def _walk(
+        self,
+        start_id: uuid.UUID,
+        index: dict[uuid.UUID, list[Relationship]],
+        max_depth: int,
+    ) -> list[Relationship]:
         visited_edges: dict[uuid.UUID, Relationship] = {}
         queue: deque[tuple[uuid.UUID, int]] = deque([(start_id, 0)])
         seen_nodes = {start_id}
 
         while queue:
             current_id, depth = queue.popleft()
-            if depth >= self._max_depth:
+            if depth >= max_depth:
                 continue
-            for edge in self._store.list_relationships(
-                asset_id=current_id, types=set(LINEAGE_RELATIONSHIP_TYPES)
-            ):
+            for edge in index.get(current_id, []):
                 visited_edges[edge.id] = edge
                 neighbour = edge.to_asset_id if edge.from_asset_id == current_id else edge.from_asset_id
                 if neighbour not in seen_nodes:
@@ -141,13 +174,18 @@ class LineageService:
             page += 1
         return items
 
-    def _has_data_source_parent(self, extraction: Asset) -> bool:
-        for edge in self._store.list_relationships(
-            asset_id=extraction.id, types={RelationshipType.EXTRACTS_TO}
-        ):
+    def _has_data_source_parent(
+        self,
+        extraction: Asset,
+        index: dict[uuid.UUID, list[Relationship]],
+        assets: dict[uuid.UUID, Asset],
+    ) -> bool:
+        for edge in index.get(extraction.id, []):
+            if edge.relationship_type != RelationshipType.EXTRACTS_TO:
+                continue
             if edge.to_asset_id != extraction.id:
                 continue
-            parent = self._store.get_asset(edge.from_asset_id)
+            parent = assets.get(edge.from_asset_id)
             if (
                 parent is not None
                 and parent.asset_type == AssetType.DATA_SOURCE
