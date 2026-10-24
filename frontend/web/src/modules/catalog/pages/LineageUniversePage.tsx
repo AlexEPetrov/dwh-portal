@@ -21,6 +21,24 @@ type LocationState = {
   fromRing?: UniverseOrigin;
 };
 
+/** Scheme tokens such as `extraction:airflow:` are not part of the visible name. */
+const IDENTITY_PREFIXES = [
+  'process:airflow:',
+  'extraction:airflow:',
+  'datasource:url:',
+  'process:',
+  'extraction:',
+  'datasource:',
+  'storage:',
+  'unresolved:',
+];
+
+const identityTail = (qualifiedName: string): string => {
+  const lower = qualifiedName.toLowerCase();
+  const prefix = IDENTITY_PREFIXES.find((item) => lower.startsWith(item));
+  return prefix ? qualifiedName.slice(prefix.length) : qualifiedName;
+};
+
 const matchesQuery = (node: LineageNode, query: string) => {
   if (!query) {
     return true;
@@ -28,9 +46,9 @@ const matchesQuery = (node: LineageNode, query: string) => {
   const hay = [
     node.display_name,
     node.name,
-    node.qualified_name,
-    node.asset_type,
     node.kind,
+    node.asset_type,
+    identityTail(node.qualified_name),
   ]
     .filter(Boolean)
     .join(' ')
