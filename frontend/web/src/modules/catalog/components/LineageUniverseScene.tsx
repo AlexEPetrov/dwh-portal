@@ -2377,6 +2377,15 @@ const LineageUniverseScene = ({
       );
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       if (event.key === 'Home' || event.key === '0') {
         resetView();
         return;

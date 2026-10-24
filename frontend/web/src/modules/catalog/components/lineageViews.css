@@ -356,12 +356,12 @@
 }
 
 .lineage-list-legend {
-  animation: lineage-list-fade-up 0.42s cubic-bezier(0.33, 1, 0.32, 1) backwards;
+  animation: lineage-list-fade-up 0.28s cubic-bezier(0.33, 1, 0.32, 1) backwards;
 }
 
 .lineage-list-stage {
-  animation: lineage-list-fade-up 0.48s cubic-bezier(0.33, 1, 0.32, 1) backwards;
-  animation-delay: calc(var(--lineage-stage-i, 0) * 70ms);
+  animation: lineage-list-fade-up 0.32s cubic-bezier(0.33, 1, 0.32, 1) backwards;
+  animation-delay: calc(var(--lineage-stage-i, 0) * 36ms);
 }
 
 .lineage-list-stage__tag {
@@ -376,8 +376,8 @@
 
 .lineage-list-chip-enter {
   display: inline-flex;
-  animation: lineage-chip-enter 0.5s cubic-bezier(0.33, 1, 0.32, 1) backwards;
-  animation-delay: calc(var(--lineage-chip-i, 0) * 40ms + var(--lineage-stage-i, 0) * 70ms);
+  animation: lineage-chip-enter 0.34s cubic-bezier(0.33, 1, 0.32, 1) backwards;
+  animation-delay: calc(var(--lineage-chip-i, 0) * 20ms + var(--lineage-stage-i, 0) * 36ms);
 }
 
 .lineage-list-rows {
@@ -395,7 +395,7 @@
   overflow-x: auto;
   padding: 2px 0 6px;
   width: 100%;
-  transition: opacity 560ms cubic-bezier(0.45, 0, 0.25, 1);
+  transition: opacity 360ms cubic-bezier(0.45, 0, 0.25, 1);
 }
 
 .lineage-list-hop.is-dimmed {
@@ -404,16 +404,16 @@
 }
 
 .lineage-list-view .lineage-list-hop > .lineage-asset-chip {
-  animation: lineage-chip-enter 0.52s cubic-bezier(0.33, 1, 0.32, 1) backwards;
-  animation-delay: calc(var(--lineage-hop-i, 0) * 42ms);
+  animation: lineage-chip-enter 0.34s cubic-bezier(0.33, 1, 0.32, 1) backwards;
+  animation-delay: calc(var(--lineage-hop-i, 0) * 22ms);
 }
 
 .lineage-list-view .lineage-list-hop > .lineage-asset-chip:nth-child(3) {
-  animation-delay: calc(var(--lineage-hop-i, 0) * 42ms + 55ms);
+  animation-delay: calc(var(--lineage-hop-i, 0) * 22ms + 28ms);
 }
 
 .lineage-list-view .lineage-list-hop > .lineage-asset-chip:nth-child(5) {
-  animation-delay: calc(var(--lineage-hop-i, 0) * 42ms + 110ms);
+  animation-delay: calc(var(--lineage-hop-i, 0) * 22ms + 56ms);
 }
 
 .lineage-list-arrow {
@@ -424,8 +424,8 @@
   flex: 0 1 auto;
   min-width: 0;
   padding: 4px 2px;
-  animation: lineage-arrow-in 0.45s cubic-bezier(0.33, 1, 0.32, 1) backwards;
-  animation-delay: calc(var(--lineage-hop-i, 0) * 42ms + 30ms);
+  animation: lineage-arrow-in 0.3s cubic-bezier(0.33, 1, 0.32, 1) backwards;
+  animation-delay: calc(var(--lineage-hop-i, 0) * 22ms + 16ms);
 }
 
 .lineage-list-arrow__line {
@@ -471,7 +471,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
     0 10px 28px -16px rgba(22, 119, 255, 0.35),
     0 0 0 1px rgba(22, 119, 255, 0.06);
-  animation: lineage-focus-in 0.55s cubic-bezier(0.33, 1, 0.32, 1) backwards;
+  animation: lineage-focus-in 0.36s cubic-bezier(0.33, 1, 0.32, 1) backwards;
 }
 
 @keyframes lineage-chip-enter {
