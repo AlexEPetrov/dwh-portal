@@ -6,6 +6,7 @@ from domains.catalog.collectors.catalog import CatalogCollector
 from domains.catalog.collectors.changes import ChangeCollector
 from domains.catalog.collectors.extraction_registry import ExtractionRegistryCollector
 from domains.catalog.collectors.runner import run_daily_collection
+from domains.catalog.collectors.storage import StorageCollector
 from domains.catalog.identity import compute_structure_hash
 from domains.catalog.models import (
     AssetColumn,
@@ -325,6 +326,74 @@ def test_change_detector_emits_added_and_structure_change(store, now):
     types = {event.change_type.value for event in store.changes.values() if event.asset_id == table.id}
     assert "ADDED" in types
     assert "STRUCTURE_CHANGED" in types
+
+
+def test_storage_run_keeps_the_catalog_snapshot(store, now):
+    provider = FakeMetadataProvider(_catalog_objects())
+    CatalogCollector(store, provider).run(now)
+    storage_run = StorageCollector(store).run(now + datetime.timedelta(minutes=1))
+    table = store.find_by_qualified_name("dwh.raw.ice_brent")
+    assert table is not None
+    snapshots = store.list_snapshots(asset_id=table.id)
+
+    assert storage_run.status == CollectorStatus.SUCCESS
+    assert storage_run.details["recorded_by"] == "catalog"
+    assert len(snapshots) == 1
+    assert snapshots[0].structure_hash
+    assert snapshots[0].total_bytes == 110
+
+
+def test_structure_change_survives_storage_run(store, now):
+    provider = FakeMetadataProvider(_catalog_objects())
+    CatalogCollector(store, provider).run(now)
+    StorageCollector(store).run(now)
+    ChangeCollector(store).run(now)
+    table = store.find_by_qualified_name("dwh.raw.ice_brent")
+    assert table is not None
+    columns = store.get_columns(table.id)
+    later = now + datetime.timedelta(days=1)
+    extra = columns + [
+        AssetColumn(
+            asset_id=table.id,
+            ordinal=2,
+            name="currency",
+            data_type="varchar(3)",
+            nullable=True,
+        )
+    ]
+    latest = store.latest_snapshot(table.id)
+    store.add_snapshot(
+        latest.model_copy(
+            update={
+                "id": uuid.uuid4(),
+                "snapshot_at": later,
+                "structure_hash": compute_structure_hash(AssetType.TABLE, extra),
+            }
+        )
+    )
+    StorageCollector(store).run(later)
+    ChangeCollector(store).run(later)
+    types = {event.change_type.value for event in store.changes.values() if event.asset_id == table.id}
+    assert "STRUCTURE_CHANGED" in types
+
+
+def test_change_detector_visits_every_asset_page(store, now):
+    objects = [
+        CatalogObject(asset_type=AssetType.DATABASE, database="dwh", schema=None, name="dwh"),
+        _schema("raw"),
+        _named_table("raw", "one"),
+        _named_table("raw", "two"),
+    ]
+    CatalogCollector(store, FakeMetadataProvider(objects)).run(now)
+    ChangeCollector(store, page_size=1).run(now)
+    added_names = set()
+    for event in store.changes.values():
+        if event.change_type.value != "ADDED":
+            continue
+        asset = store.get_asset(event.asset_id)
+        assert asset is not None
+        added_names.add(asset.name)
+    assert added_names == {"one", "two"}
 
 
 def test_python_and_rest_discovery_helpers(monkeypatch):

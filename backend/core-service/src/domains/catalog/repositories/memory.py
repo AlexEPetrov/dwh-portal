@@ -275,6 +275,12 @@ class InMemoryPortalStore:
         latest = max(matches, key=lambda item: item.snapshot_at)
         return latest.model_copy(deep=True)
 
+    def recent_snapshots(self, asset_id: uuid.UUID, *, limit: int = 2) -> list[AssetSnapshot]:
+        """Return the newest snapshots for one asset, newest first."""
+        matches = [item for item in self.snapshots if item.asset_id == asset_id]
+        matches.sort(key=lambda item: item.snapshot_at, reverse=True)
+        return [item.model_copy(deep=True) for item in matches[:limit]]
+
     def list_snapshots(
         self,
         *,

@@ -571,14 +571,23 @@ class SqlPortalStore:
             return self._snapshot_from_row(row)
 
     def latest_snapshot(self, asset_id: uuid.UUID) -> AssetSnapshot | None:
+        rows = self.recent_snapshots(asset_id, limit=1)
+        return rows[0] if rows else None
+
+    def recent_snapshots(self, asset_id: uuid.UUID, *, limit: int = 2) -> list[AssetSnapshot]:
+        """Return the newest snapshots for one asset, newest first."""
         with self._session() as session:
-            row = session.scalar(
-                select(PortalAssetSnapshotDbModel)
-                .where(PortalAssetSnapshotDbModel.asset_id == asset_id)
-                .order_by(PortalAssetSnapshotDbModel.snapshot_at.desc())
-                .limit(1)
-            )
-            return self._snapshot_from_row(row) if row else None
+            rows = session.scalars(self._recent_snapshots_stmt(asset_id, limit)).all()
+            return [self._snapshot_from_row(row) for row in rows]
+
+    @staticmethod
+    def _recent_snapshots_stmt(asset_id: uuid.UUID, limit: int):
+        return (
+            select(PortalAssetSnapshotDbModel)
+            .where(PortalAssetSnapshotDbModel.asset_id == asset_id)
+            .order_by(PortalAssetSnapshotDbModel.snapshot_at.desc())
+            .limit(limit)
+        )
 
     def list_snapshots(
         self,

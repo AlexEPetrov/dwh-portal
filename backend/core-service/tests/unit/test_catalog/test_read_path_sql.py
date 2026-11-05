@@ -46,6 +46,16 @@ def test_latest_runs_reads_one_row_per_collector():
     assert "started_at" in sql
 
 
+def test_recent_snapshots_reads_newest_first_with_limit():
+    statement = SqlPortalStore._recent_snapshots_stmt(uuid.uuid4(), 2)
+    sql = _sql(statement).lower()
+
+    assert "portal_asset_snapshots" in sql
+    assert "order by" in sql
+    assert "snapshot_at desc" in sql
+    assert "limit" in sql
+
+
 def test_storage_history_is_grouped_in_sql():
     statement = SqlPortalStore._storage_history_stmt(
         since=datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)

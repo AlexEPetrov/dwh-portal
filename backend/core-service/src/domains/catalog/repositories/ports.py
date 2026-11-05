@@ -62,6 +62,8 @@ class PortalStore(Protocol):
 
     def latest_snapshot(self, asset_id: uuid.UUID) -> AssetSnapshot | None: ...
 
+    def recent_snapshots(self, asset_id: uuid.UUID, *, limit: int = 2) -> list[AssetSnapshot]: ...
+
     def list_snapshots(
         self,
         *,

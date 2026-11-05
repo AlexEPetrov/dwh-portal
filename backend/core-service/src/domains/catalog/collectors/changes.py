@@ -16,27 +16,25 @@ from domains.catalog.models import (
 from domains.catalog.repositories.ports import PortalStore
 
 TRACKED_TYPES = {AssetType.TABLE, AssetType.VIEW, AssetType.MATERIALIZED_VIEW}
+_PAGE_SIZE = 500
 
 
 class ChangeCollector:
-    """Compare catalog snapshots and emit structural change events."""
+    """Compare the two newest catalog snapshots and emit structural change events."""
 
-    def __init__(self, store: PortalStore):
+    def __init__(self, store: PortalStore, page_size: int = _PAGE_SIZE):
         self._store = store
+        self._page_size = page_size
 
     def run(self, now: datetime.datetime | None = None) -> CollectionRun:
+        """Emit change events for every tracked asset, one page of assets at a time."""
         started = now or datetime.datetime.now(datetime.timezone.utc)
         created = 0
-        assets, _ = self._store.list_assets(
-            AssetQuery(status=AssetStatus.ACTIVE, page=1, page_size=10_000)
-        )
-        deleted, _ = self._store.list_assets(
-            AssetQuery(status=AssetStatus.DELETED, page=1, page_size=10_000)
-        )
-        for asset in assets + deleted:
-            if asset.asset_type not in TRACKED_TYPES:
-                continue
-            created += self._detect_for_asset(asset, started)
+        for status in (AssetStatus.ACTIVE, AssetStatus.DELETED):
+            for asset in self._iter_assets(status):
+                if asset.asset_type not in TRACKED_TYPES:
+                    continue
+                created += self._detect_for_asset(asset, started)
         run = CollectionRun(
             collector_name="changes",
             started_at=started,
@@ -47,12 +45,24 @@ class ChangeCollector:
         )
         return self._store.add_collection_run(run)
 
+    def _iter_assets(self, status: AssetStatus):
+        """Yield every asset of one status, following pages until the list ends."""
+        page = 1
+        while True:
+            assets, total = self._store.list_assets(
+                AssetQuery(status=status, page=page, page_size=self._page_size)
+            )
+            yield from assets
+            if not assets or page * self._page_size >= total:
+                return
+            page += 1
+
     def _detect_for_asset(self, asset: Asset, now: datetime.datetime) -> int:
-        snapshots = self._store.list_snapshots(asset_id=asset.id)
+        snapshots = self._store.recent_snapshots(asset.id, limit=2)
         if not snapshots:
             return 0
-        latest = snapshots[-1]
-        previous = snapshots[-2] if len(snapshots) > 1 else None
+        latest = snapshots[0]
+        previous = snapshots[1] if len(snapshots) > 1 else None
         existing, _ = self._store.list_changes(ChangeQuery(asset_id=asset.id, page=1, page_size=50))
         created = 0
         if previous is None and asset.deleted_at is None:

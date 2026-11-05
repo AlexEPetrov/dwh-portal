@@ -32,7 +32,7 @@ def run_daily_collection(
         settings, schemas=schemas
     )
     catalog_run = CatalogCollector(store, metadata_provider, settings).run()
-    storage_run = StorageCollector(store, metadata_provider).run()
+    storage_run = StorageCollector(store).run()
     adapters = lineage_adapters or load_lineage_adapters(
         store,
         settings,
