@@ -1,10 +1,4 @@
-import { listAssets } from '@shared/api/generated';
 import type { AssetListItem } from '@shared/api/generated';
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   FilterChipGroup,
   FilterClear,
@@ -15,6 +9,11 @@ import {
   formatDateTime,
   formatRows,
 } from '@shared/ui/portal';
+import { Alert, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useCatalogAssets } from '../queries';
 
 const TYPE_TOGGLES = [
   { key: 'DATA_SOURCE', label: 'Source' },
@@ -39,16 +38,12 @@ const ObjectsPage = () => {
 
   const typeFilter = selectedTypes.length > 0 ? selectedTypes.join(',') : undefined;
 
-  const assetsQuery = useQuery({
-    queryKey: ['catalog', 'assets', { status, q: deferredQ, typeFilter, page, pageSize }],
-    queryFn: () =>
-      listAssets({
-        status,
-        page,
-        pageSize,
-        q: deferredQ || undefined,
-        type: typeFilter,
-      }),
+  const assetsQuery = useCatalogAssets({
+    status,
+    page,
+    pageSize,
+    q: deferredQ || undefined,
+    type: typeFilter,
   });
 
   const items = assetsQuery.data?.items ?? [];
@@ -179,6 +174,7 @@ const ObjectsPage = () => {
       <Table
         rowKey="id"
         loading={assetsQuery.isPending || assetsQuery.isFetching}
+        locale={{ emptyText: assetsQuery.isError ? 'Список недоступен' : assetsQuery.isPending ? 'Загрузка…' : 'Нет объектов' }}
         columns={columns}
         dataSource={items}
         pagination={{

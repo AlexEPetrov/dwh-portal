@@ -1,8 +1,8 @@
-import { listAssetLoads } from '@shared/api/generated';
-import type { LoadFileItem, LoadFileListResponse } from '@shared/api/generated';
-import { Card, Empty, Table } from 'antd';
-import { useEffect, useState } from 'react';
+import type { LoadFileItem } from '@shared/api/generated';
 import { formatBytes, formatDateTime } from '@shared/ui/portal';
+import { Alert, Card, Empty, Spin, Table } from 'antd';
+import { useState } from 'react';
+import { useCatalogLoads } from '../queries';
 
 type Props = {
   assetId: string;
@@ -12,36 +12,19 @@ type Props = {
 
 const PAGE_SIZE_OPTIONS = ['20', '50', '100'];
 
-const ExtractionLoadsPanel = ({ assetId, hideWhenUnavailable = false, compact = false }: Props) => {
+const ExtractionLoadsContent = ({ assetId, hideWhenUnavailable = false, compact = false }: Props) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [payload, setPayload] = useState<LoadFileListResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const loadsQuery = useCatalogLoads(assetId, page, pageSize);
+  const payload = loadsQuery.data;
 
-  useEffect(() => {
-    setPage(1);
-  }, [assetId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    listAssetLoads({ assetId, page, pageSize })
-      .then((data) => {
-        if (!cancelled) {
-          setPayload(data);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [assetId, page, pageSize]);
-
-  if (hideWhenUnavailable && (!payload || !payload.available)) {
+  if (loadsQuery.isError) {
+    return <Alert type="error" showIcon message="Не удалось загрузить журнал загрузок" description={loadsQuery.error.message} />;
+  }
+  if (!payload) {
+    return <Spin tip="Загрузка журнала…"><div style={{ minHeight: 80 }} /></Spin>;
+  }
+  if (hideWhenUnavailable && !payload.available) {
     return null;
   }
 
@@ -53,7 +36,7 @@ const ExtractionLoadsPanel = ({ assetId, hideWhenUnavailable = false, compact = 
     <Table<LoadFileItem>
       rowKey="id"
       size="small"
-      loading={loading}
+      loading={loadsQuery.isFetching}
       dataSource={payload?.items ?? []}
       locale={{ emptyText: 'Нет загруженных файлов' }}
       scroll={compact ? { y: 280 } : undefined}
@@ -65,7 +48,7 @@ const ExtractionLoadsPanel = ({ assetId, hideWhenUnavailable = false, compact = 
         pageSizeOptions: PAGE_SIZE_OPTIONS,
         showTotal: (total) => `${total}`,
         onChange: (nextPage, nextSize) => {
-          setPage(nextPage);
+          setPage(nextSize === pageSize ? nextPage : 1);
           setPageSize(nextSize);
         },
       }}
@@ -105,5 +88,8 @@ const ExtractionLoadsPanel = ({ assetId, hideWhenUnavailable = false, compact = 
     </Card>
   );
 };
+
+// Remount pagination with the asset so no request uses the previous asset's page.
+const ExtractionLoadsPanel = (props: Props) => <ExtractionLoadsContent key={props.assetId} {...props} />;
 
 export default ExtractionLoadsPanel;

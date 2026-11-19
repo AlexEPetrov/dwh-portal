@@ -57,3 +57,30 @@ Applications provide business metadata/content and concrete auth/permission adap
 - `@asset-management/app-shell/routing` — standard route composition and `RouteSuspense`.
 - `@asset-management/app-shell/auth` — auth/permission guards and `ApplicationCan`.
 
+## Module publication and failures
+
+Each module declares a stable, non-empty `ModuleRegistration.id`. Discovery paths
+and menu order are not identities. Applications declare `requiredModuleIds` at
+discovery: a missing or disabled required identity prevents startup. There is no
+implicit optional-module policy: every import, malformed export, collision, route
+factory failure, or contribution callback failure rejects discovery. Only an
+explicit `enabled: false` skips an otherwise valid, non-required module.
+
+Imports run in parallel, followed by deterministic order/path sorting. The registry
+stages the complete enabled batch and publishes only after all registrations pass.
+Module IDs, explicit route IDs, route match patterns, recursive menu paths, and
+contribution slot/key pairs must be unique, including against prior registrations.
+Route/menu paths are conservatively compared without case or redundant slashes;
+parameter names do not distinguish route patterns. Index routes are distinct from
+their parent layouts. This detects duplicate identities, not every possible
+overlap between optional parameters, static routes, and wildcards.
+
+Contribution callbacks must be synchronous, return nothing, and only register
+through the supplied writer. Retained writers are closed after the callback.
+Opaque contribution values are not deep-cloned: callbacks and module imports must
+not mutate existing values or perform external side effects expecting rollback.
+Discovery observers run after publication and must not throw.
+
+`RouteSuspense` must be rendered inside a router. It catches lazy import/render
+failures locally, resets on navigation, and provides a full reload action for
+failed cached chunk imports. Applications can override loading/error fallbacks.

@@ -11,6 +11,11 @@ const LineagePage = lazy(() => import('./pages/LineagePage'));
 const LineageUniversePage = lazy(() => import('./pages/LineageUniversePage'));
 const ChangesPage = lazy(() => import('./pages/ChangesPage'));
 
+/** Public catalog landing page; consumers need not import catalog internals. */
+export function CatalogHomePage() {
+  return <RouteSuspense><OverviewPage /></RouteSuspense>;
+}
+
 const wrap = (el: ReactNode) => <RouteSuspense>{el}</RouteSuspense>;
 
 const routes: ModuleRegistration['routes'] = () => [
@@ -26,6 +31,7 @@ const routes: ModuleRegistration['routes'] = () => [
 ];
 
 export default {
+  id: 'catalog',
   enabled: true,
   order: 20,
   menu,

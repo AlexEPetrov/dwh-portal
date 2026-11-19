@@ -1,67 +1,35 @@
-import { getAssetLineage, listAssets, listLineageRoots } from '@shared/api/generated';
-import type { AssetListItem, LineageResponse, LineageRootsResponse } from '@shared/api/generated';
 import { ExperimentOutlined } from '@ant-design/icons';
-import { Alert, Button, Card, Empty, Select, Space, Typography } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { FreshnessBar } from '@shared/ui/portal';
+import { Alert, Button, Card, Select, Space, Spin, Typography } from 'antd';
+import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
-import { FreshnessBar } from '@shared/ui/portal';
 import LineageGraph from '../components/LineageGraph';
-
-const LINEAGE_PICKER_TYPES = [
-  'DATA_SOURCE',
-  'EXTRACTION_SOURCE',
-  'PROCESS',
-  'TABLE',
-  'VIEW',
-  'STORAGE_LOCATION',
-] as const;
+import { LINEAGE_PICKER_TYPES, useCatalogAsset, useCatalogLineage, useCatalogLineagePicker } from '../queries';
 
 const TYPE_ORDER = new Map(LINEAGE_PICKER_TYPES.map((type, index) => [type, index]));
 
 const LineagePage = () => {
   const { assetId } = useParams<{ assetId: string }>();
   const navigate = useNavigate();
-  const [options, setOptions] = useState<Array<{ value: string; label: string; type: string }>>([]);
-  const [lineage, setLineage] = useState<LineageResponse | LineageRootsResponse | null>(null);
-
-  useEffect(() => {
-    Promise.all(
-      LINEAGE_PICKER_TYPES.map((type) =>
-        listAssets({ type, status: 'active', pageSize: 100 }).then((payload) =>
-          payload.items.map((item: AssetListItem) => ({
-            value: item.id,
-            type: item.asset_type,
-            label: `[${item.asset_type}] ${item.display_name || item.name || item.qualified_name}`,
-          }))
-        )
-      )
-    ).then((groups) => {
-      const flat = groups.flat();
-      flat.sort((a, b) => {
+  const pickerQueries = useCatalogLineagePicker();
+  const lineageQuery = useCatalogLineage(assetId);
+  const selectedAssetQuery = useCatalogAsset(assetId);
+  const lineage = lineageQuery.isError ? undefined : lineageQuery.data;
+  const options = pickerQueries.flatMap((query) =>
+    (query.data?.items ?? []).map((item) => ({
+      value: item.id,
+      type: item.asset_type,
+      label: `[${item.asset_type}] ${item.display_name || item.name || item.qualified_name}`,
+    }))
+  ).sort((a, b) => {
         const typeDiff = (TYPE_ORDER.get(a.type as (typeof LINEAGE_PICKER_TYPES)[number]) ?? 99)
           - (TYPE_ORDER.get(b.type as (typeof LINEAGE_PICKER_TYPES)[number]) ?? 99);
         if (typeDiff !== 0) {
           return typeDiff;
         }
         return a.label.localeCompare(b.label);
-      });
-      setOptions(flat);
-    });
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const request = assetId ? getAssetLineage({ assetId }) : listLineageRoots();
-    request.then((payload) => {
-      if (!cancelled) {
-        setLineage(payload);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [assetId]);
+  });
 
   const chainHint = useMemo(() => {
     if (!assetId || !lineage) {
@@ -83,9 +51,8 @@ const LineagePage = () => {
     return missing;
   }, [assetId, lineage]);
 
-  const selectedIsExtraction = options.some(
-    (item) => item.value === assetId && item.type === 'EXTRACTION_SOURCE'
-  );
+  const selectedIsExtraction = selectedAssetQuery.data?.asset_type === 'EXTRACTION_SOURCE'
+    && selectedAssetQuery.data.source_provider === 'extraction_registry';
 
   return (
     <div
@@ -118,6 +85,8 @@ const LineagePage = () => {
             style={{ width: 'min(100%, 640px)', minWidth: 280 }}
             value={assetId}
             options={options}
+            loading={pickerQueries.some((query) => query.isFetching)}
+            notFoundContent={pickerQueries.some((query) => query.isPending) ? 'Загрузка…' : pickerQueries.some((query) => query.isError) ? 'Список недоступен' : 'Нет объектов'}
             onChange={(value) => navigate(value ? `/lineage/${value}` : '/lineage')}
           />
           <Button
@@ -133,6 +102,10 @@ const LineagePage = () => {
           </Button>
         </Space>
       </Card>
+      {pickerQueries.some((query) => query.isError) ? <Alert type="error" showIcon message="Не удалось загрузить часть списка объектов" /> : null}
+      {selectedAssetQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить сведения выбранного объекта и доступность загрузок" description={selectedAssetQuery.error.message} /> : null}
+      {assetId && selectedAssetQuery.isPending ? <Typography.Text type="secondary">Загрузка сведений выбранного объекта…</Typography.Text> : null}
+      {lineageQuery.isFetching ? <Spin size="small" /> : null}
       {assetId && lineage?.unresolved_targets.length ? (
         <Alert
           type="warning"
@@ -150,8 +123,11 @@ const LineagePage = () => {
         />
       ) : null}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {lineage ? (
+        {lineageQuery.isError ? (
+          <Alert type="error" showIcon message="Не удалось загрузить lineage" description={lineageQuery.error.message} />
+        ) : lineage ? (
           <LineageGraph
+            key={assetId ?? 'roots'}
             nodes={lineage.nodes}
             edges={lineage.edges}
             selectedAssetId={assetId}
@@ -160,7 +136,7 @@ const LineagePage = () => {
             rootsOverview={!assetId}
           />
         ) : (
-          <Empty description="Загрузка lineage…" />
+          <Spin tip="Загрузка lineage…"><div style={{ minHeight: 160 }} /></Spin>
         )}
       </div>
       {selectedIsExtraction && assetId ? (

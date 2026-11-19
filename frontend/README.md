@@ -16,6 +16,10 @@ web -> app-shell -> ui-kit
 
 Plugin infrastructure is shell-owned, while application-specific plugin state integration is expressed through generic contribution slots. The current web application maps one such slot to Zustand slices; Zustand is not an app-shell dependency.
 
+See [architectural boundaries and hardening evidence](ARCHITECTURE.md) for service scope,
+feature-owned server queries, authenticated cache lifetime, module failure policy,
+flat-state validation, and future contract blockers.
+
 `ui-kit` and `app-shell` intentionally have no independent `dist` build yet. Their package exports point to source and are consumed through the npm workspace.
 
 ## Install

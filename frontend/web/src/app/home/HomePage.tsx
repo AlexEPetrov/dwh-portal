@@ -1,1 +1,1 @@
-export { default } from '@modules/catalog/pages/OverviewPage';
+export { CatalogHomePage as default } from '@modules/catalog';

@@ -1,2 +1,4 @@
 // src/app/core/api/index.ts
-export { apiClient, initApiClient } from './client';
+export { apiClient, createServiceConfig, initApiClient } from './client';
+export type { ServiceClientOptions } from './client';
+

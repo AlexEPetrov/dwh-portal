@@ -12,6 +12,7 @@ const routes: ModuleRegistration['routes'] = () => [
 ];
 
 export default {
+  id: 'admin',
   enabled: true,
   order: 40,
   menu,

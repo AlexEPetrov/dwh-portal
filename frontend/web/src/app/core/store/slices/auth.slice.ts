@@ -7,6 +7,7 @@ import {
 import { StateCreator } from 'zustand';
 import { getPermissionsForRoles, normalizeRoles } from '../../auth/permissions';
 import { User, UserPermissions } from '../../auth/types';
+import { clearPrivateQueryData } from '../../queryClient';
 
 const normalizeAuthType = (authType?: string | null): 'session' | 'api_key' | null => {
   if (authType === 'session' || authType === 'api_key') return authType;
@@ -33,6 +34,7 @@ export const createAuthSlice: StateCreator<AuthSliceRootState, [], [], AuthState
   isLoading: false,
 
   login: async (username: string, password: string) => {
+    clearPrivateQueryData();
     set({ isLoading: true });
     try {
       const data = await loginApiAuthLoginPost({
@@ -67,9 +69,11 @@ export const createAuthSlice: StateCreator<AuthSliceRootState, [], [], AuthState
   },
 
   logout: async () => {
+    clearPrivateQueryData();
     try {
       await logoutApiAuthLogoutPost();
     } finally {
+      clearPrivateQueryData();
       set({ user: null, permissions: [], authType: null, isAuthenticated: false });
     }
   },

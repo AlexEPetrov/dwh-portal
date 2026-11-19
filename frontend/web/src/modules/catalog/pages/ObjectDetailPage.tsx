@@ -1,15 +1,3 @@
-import { getAsset, getAssetColumns, getAssetLineage, listChanges } from '@shared/api/generated';
-import type {
-  AssetDetailResponse,
-  ChangeSummaryItem,
-  ColumnItem,
-  LineageResponse,
-} from '@shared/api/generated';
-import { Button, Card, Descriptions, Empty, Space, Table, Tabs, Tag, Typography } from 'antd';
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
-import LineageGraph from '../components/LineageGraph';
 import {
   FreshnessBar,
   changeGlyph,
@@ -17,6 +5,11 @@ import {
   formatDateTime,
   formatRows,
 } from '@shared/ui/portal';
+import { Alert, Button, Card, Descriptions, Empty, Space, Spin, Table, Tabs, Tag, Typography } from 'antd';
+import { useNavigate, useParams } from 'react-router-dom';
+import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
+import LineageGraph from '../components/LineageGraph';
+import { useCatalogAsset, useCatalogChanges, useCatalogColumns, useCatalogLineage } from '../queries';
 
 const nextStepHint = (assetType: string): string => {
   switch (assetType) {
@@ -38,73 +31,21 @@ const nextStepHint = (assetType: string): string => {
 const ObjectDetailPage = () => {
   const { assetId } = useParams<{ assetId: string }>();
   const navigate = useNavigate();
-  const [asset, setAsset] = useState<AssetDetailResponse | null>(null);
-  const [missing, setMissing] = useState(false);
-  const [columns, setColumns] = useState<ColumnItem[]>([]);
-  const [lineage, setLineage] = useState<LineageResponse | null>(null);
-  const [lineageFailed, setLineageFailed] = useState(false);
-  const [changes, setChanges] = useState<ChangeSummaryItem[]>([]);
+  const assetQuery = useCatalogAsset(assetId);
+  const columnsQuery = useCatalogColumns(assetId);
+  const lineageQuery = useCatalogLineage(assetId, Boolean(assetId));
+  const changesQuery = useCatalogChanges({ assetId, pageSize: 20 }, Boolean(assetId));
+  const asset = assetQuery.data;
+  const lineage = lineageQuery.data;
 
-  useEffect(() => {
-    if (!assetId) {
-      return undefined;
-    }
-    let cancelled = false;
-    setAsset(null);
-    setMissing(false);
-    setColumns([]);
-    setLineage(null);
-    setLineageFailed(false);
-    setChanges([]);
-    getAsset({ assetId }).then(
-      (detail) => {
-        if (!cancelled) {
-          setAsset(detail);
-        }
-      },
-      () => {
-        if (!cancelled) {
-          setMissing(true);
-        }
-      },
-    );
-    getAssetColumns({ assetId }).then(
-      (columnList) => {
-        if (!cancelled) {
-          setColumns(columnList.items);
-        }
-      },
-      () => undefined,
-    );
-    getAssetLineage({ assetId }).then(
-      (lineagePayload) => {
-        if (!cancelled) {
-          setLineage(lineagePayload);
-        }
-      },
-      () => {
-        if (!cancelled) {
-          setLineageFailed(true);
-        }
-      },
-    );
-    listChanges({ assetId, pageSize: 20 }).then(
-      (changeList) => {
-        if (!cancelled) {
-          setChanges(changeList.items);
-        }
-      },
-      () => undefined,
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [assetId]);
-
+  if (!assetId) return <Empty description="Объект не выбран" />;
   if (!asset) {
-    return (
-      <Empty description={missing ? 'Объект не найден' : 'Объект ещё загружается'} />
-    );
+    if (assetQuery.isError) {
+      const missing = 'status' in assetQuery.error && assetQuery.error.status === 404;
+      return missing ? <Empty description="Объект не найден" />
+        : <Alert type="error" showIcon message="Не удалось загрузить объект" description={assetQuery.error.message} />;
+    }
+    return <Spin tip="Загрузка объекта…"><div style={{ minHeight: 160 }} /></Spin>;
   }
 
   const showLoads =
@@ -139,11 +80,15 @@ const ObjectDetailPage = () => {
       key: 'columns',
       label: 'Columns',
       children: (
+        <Space direction="vertical" style={{ width: '100%' }}>
+        {columnsQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить колонки" description={columnsQuery.error.message} /> : null}
         <Table
           rowKey="name"
+          loading={columnsQuery.isPending || columnsQuery.isFetching}
+          locale={{ emptyText: columnsQuery.isError ? 'Колонки недоступны' : columnsQuery.isPending ? 'Загрузка…' : 'Нет колонок' }}
           size="small"
           pagination={false}
-          dataSource={columns}
+          dataSource={columnsQuery.data?.items ?? []}
           columns={[
             { title: '#', dataIndex: 'ordinal', width: 60 },
             { title: 'Name', dataIndex: 'name' },
@@ -152,7 +97,7 @@ const ObjectDetailPage = () => {
               title: 'Nullable',
               dataIndex: 'nullable',
               width: 100,
-              render: (value) => (value ? 'yes' : 'no'),
+              render: (value: boolean | null | undefined) => (value == null ? '—' : value ? 'yes' : 'no'),
             },
             {
               title: 'Описание',
@@ -162,17 +107,24 @@ const ObjectDetailPage = () => {
             },
           ]}
         />
+        </Space>
       ),
     },
     {
       key: 'lineage',
       label: 'Lineage',
-      children: lineage ? (
+      children: lineageQuery.isError ? (
+        <Alert type="error" showIcon message="Lineage недоступен" description={lineageQuery.error.message} />
+      ) : lineage ? (
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {lineageQuery.isFetching ? <Spin size="small" /> : null}
+          <FreshnessBar items={lineage.collector_freshness} />
+          {lineage.unresolved_targets.length ? <Alert type="warning" showIcon message="Нерешённые цели" description={lineage.unresolved_targets.map((item) => item.qualified_name).join(', ')} /> : null}
           <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/lineage/${asset.id}`)}>
             Открыть на странице Lineage
           </Button>
           <LineageGraph
+            key={asset.id}
             nodes={lineage.nodes}
             edges={lineage.edges}
             selectedAssetId={asset.id}
@@ -180,7 +132,7 @@ const ObjectDetailPage = () => {
           />
         </Space>
       ) : (
-        <Empty description={lineageFailed ? 'Lineage недоступен' : 'Загрузка lineage…'} />
+        <Spin tip="Загрузка lineage…"><div style={{ minHeight: 120 }} /></Spin>
       ),
     },
     ...(showLoads
@@ -208,11 +160,16 @@ const ObjectDetailPage = () => {
       key: 'changes',
       label: 'Changes',
       children: (
+        <Space direction="vertical" style={{ width: '100%' }}>
+        {changesQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить изменения" description={changesQuery.error.message} /> : null}
+        {changesQuery.data ? <FreshnessBar items={changesQuery.data.collector_freshness} /> : null}
         <Table
           rowKey="id"
+          loading={changesQuery.isPending || changesQuery.isFetching}
+          locale={{ emptyText: changesQuery.isError ? 'Изменения недоступны' : changesQuery.isPending ? 'Загрузка…' : 'Нет изменений' }}
           size="small"
           pagination={false}
-          dataSource={changes}
+          dataSource={changesQuery.data?.items ?? []}
           onRow={(row) => ({
             onClick: () => navigate(`/objects/${row.asset_id}`),
             style: { cursor: 'pointer' },
@@ -231,6 +188,7 @@ const ObjectDetailPage = () => {
             { title: 'Detected', dataIndex: 'detected_at', render: (value) => formatDateTime(value) },
           ]}
         />
+        </Space>
       ),
     },
   ];
@@ -257,7 +215,9 @@ const ObjectDetailPage = () => {
         </Typography.Paragraph>
         <FreshnessBar items={asset.collector_freshness} />
       </div>
-      <Tabs items={tabItems} />
+      {assetQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить объект" description={assetQuery.error.message} /> : null}
+      {assetQuery.isFetching ? <Spin size="small" /> : null}
+      <Tabs key={asset.id} items={tabItems} />
     </Space>
   );
 };

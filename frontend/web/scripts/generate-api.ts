@@ -9,8 +9,13 @@ async function generate() {
   await createClient({
     input: path.resolve(__dirname, '../../../common/contracts/openapi/openapi.json'),
     output: path.resolve(__dirname, '../src/shared/api/generated'),
-    plugins: ['@hey-api/client-axios'],
+    // Installed openapi-ts 0.46 uses `client`, not the newer plugin API.
+    // Keep the cancellable Fetch service surface and existing operation names.
+    client: 'fetch',
   });
 }
 
-generate().catch(console.error);
+generate().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

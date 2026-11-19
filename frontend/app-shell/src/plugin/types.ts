@@ -30,6 +30,8 @@ export interface PluginRegistryContract {
 }
 
 export interface ModuleRegistration {
+  /** Stable application-owned identity, independent of discovery path/order. */
+  id: string;
   enabled?: boolean;
   /**
    * Lower values appear earlier in the sidebar when modules are
@@ -40,6 +42,11 @@ export interface ModuleRegistration {
   menu: MenuItem[];
   routes: () => RouteObject[];
   registerContributions?: (registry: PluginRegistryContract) => void;
+}
+
+/** Publishes a complete batch only after every module has been staged successfully. */
+export interface ModuleRegistryContract extends PluginRegistryContract {
+  registerModules(modules: readonly ModuleRegistration[]): RouteObject[];
 }
 
 export type DiscoveredModuleImport = () => Promise<unknown>;

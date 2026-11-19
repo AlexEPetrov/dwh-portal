@@ -1,28 +1,20 @@
-import { getStorage, getStorageHistory } from '@shared/api/generated';
-import type { StorageHistoryResponse, StorageResponse } from '@shared/api/generated';
-import { Card, Col, Empty, Progress, Row, Space, Statistic, Table, Typography } from 'antd';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FreshnessBar, formatBytes, formatDateTime, formatRows } from '@shared/ui/portal';
+import { Alert, Card, Col, Empty, Progress, Row, Space, Spin, Statistic, Table, Typography } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { useCatalogStorage, useCatalogStorageHistory } from '../queries';
 
 const StoragePage = () => {
   const navigate = useNavigate();
-  const [storage, setStorage] = useState<StorageResponse | null>(null);
-  const [history, setHistory] = useState<StorageHistoryResponse | null>(null);
+  const storageQuery = useCatalogStorage();
+  const historyQuery = useCatalogStorageHistory();
+  const storage = storageQuery.data;
+  const history = historyQuery.data;
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getStorage(), getStorageHistory()]).then(([current, hist]) => {
-      if (cancelled) {
-        return;
-      }
-      setStorage(current);
-      setHistory(hist);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  if (!storage) {
+    return storageQuery.isError
+      ? <Alert type="error" showIcon message="Не удалось загрузить storage" description={storageQuery.error.message} />
+      : <Spin tip="Загрузка storage…"><div style={{ minHeight: 160 }} /></Spin>;
+  }
 
   const maxSchema = Math.max(1, ...(storage?.by_schema || []).map((row) => row.total_bytes));
 
@@ -37,6 +29,8 @@ const StoragePage = () => {
           <FreshnessBar items={storage?.collector_freshness} />
         </div>
       </div>
+      {storageQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить storage" description={storageQuery.error.message} /> : null}
+      {storageQuery.isFetching ? <Spin size="small" /> : null}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
@@ -85,8 +79,12 @@ const StoragePage = () => {
         />
       </Card>
       <Card title="History">
+        {historyQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить историю хранения" description={historyQuery.error.message} /> : null}
+        {history ? <FreshnessBar items={history.collector_freshness} /> : null}
         <Table
           rowKey="snapshot_at"
+          loading={historyQuery.isPending || historyQuery.isFetching}
+          locale={{ emptyText: historyQuery.isError ? 'История недоступна' : historyQuery.isPending ? 'Загрузка…' : 'Нет снимков' }}
           size="small"
           pagination={false}
           dataSource={history?.items || []}

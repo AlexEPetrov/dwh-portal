@@ -1,17 +1,17 @@
-import { listChanges } from '@shared/api/generated';
-import type { ChangeListResponse, ChangeSummaryItem } from '@shared/api/generated';
 import { ExportOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Row, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import type { ChangeSummaryItem } from '@shared/api/generated';
 import {
-  FilterChipGroup,
-  FilterClear,
-  FilterSep,
-  FilterToolbar,
-  FreshnessBar,
-  formatDateTime,
+    FilterChipGroup,
+    FilterClear,
+    FilterSep,
+    FilterToolbar,
+    FreshnessBar,
+    formatDateTime,
 } from '@shared/ui/portal';
+import { Alert, Button, Card, Col, Row, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useCatalogPeriodChanges } from '../queries';
 
 const OP_TOGGLES = [
   { key: 'ADDED', label: 'Added' },
@@ -66,24 +66,11 @@ const rowName = (row: ChangeSummaryItem): string => {
 const ChangesPage = () => {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<'1' | '7' | '30'>('7');
-  const [data, setData] = useState<ChangeListResponse | null>(null);
+  const changesQuery = useCatalogPeriodChanges(Number(period));
+  const data = changesQuery.data;
   /** Default: all pressed. */
   const [selectedOps, setSelectedOps] = useState<string[]>(() => [...ALL_OPS]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>(() => [...ALL_TYPES]);
-
-  useEffect(() => {
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - Number(period));
-    let cancelled = false;
-    listChanges({ since: since.toISOString(), pageSize: 200 }).then((payload) => {
-      if (!cancelled) {
-        setData(payload);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [period]);
 
   const filtered = useMemo(() => {
     const items = data?.items || [];
@@ -141,6 +128,7 @@ const ChangesPage = () => {
         </Typography.Title>
         <FreshnessBar items={data?.collector_freshness} />
       </div>
+      {changesQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить изменения" description={changesQuery.error.message} /> : null}
 
       <FilterToolbar>
         <Select
@@ -164,22 +152,24 @@ const ChangesPage = () => {
       <Row gutter={12}>
         <Col span={8}>
           <Card size="small">
-            <Statistic title="Added" value={filteredStats.added} />
+            <Statistic title="Added" value={data ? filteredStats.added : '—'} />
           </Card>
         </Col>
         <Col span={8}>
           <Card size="small">
-            <Statistic title="Changed" value={filteredStats.changed} />
+            <Statistic title="Changed" value={data ? filteredStats.changed : '—'} />
           </Card>
         </Col>
         <Col span={8}>
           <Card size="small">
-            <Statistic title="Removed" value={filteredStats.removed} />
+            <Statistic title="Removed" value={data ? filteredStats.removed : '—'} />
           </Card>
         </Col>
       </Row>
       <Table
         rowKey="id"
+        loading={changesQuery.isPending || changesQuery.isFetching}
+        locale={{ emptyText: changesQuery.isError ? 'Изменения недоступны' : changesQuery.isPending ? 'Загрузка…' : 'Нет изменений' }}
         dataSource={filtered}
         pagination={{ pageSize: 50, showSizeChanger: false }}
         onRow={(row) => ({

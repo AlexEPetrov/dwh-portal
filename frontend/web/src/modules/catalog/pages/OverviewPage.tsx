@@ -1,32 +1,18 @@
-import { getOverview } from '@shared/api/generated';
-import type { OverviewResponse } from '@shared/api/generated';
-import { Card, Col, Empty, List, Progress, Row, Space, Statistic, Tag, Typography } from 'antd';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FreshnessBar, changeGlyph, formatBytes } from '@shared/ui/portal';
+import { Alert, Card, Col, Empty, List, Progress, Row, Space, Spin, Statistic, Tag, Typography } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { useCatalogOverview } from '../queries';
 
 const OverviewPage = () => {
   const navigate = useNavigate();
-  const [data, setData] = useState<OverviewResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const overviewQuery = useCatalogOverview();
+  const data = overviewQuery.data;
 
-  useEffect(() => {
-    let cancelled = false;
-    getOverview()
-      .then((payload) => {
-        if (!cancelled) {
-          setData(payload);
-        }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message || 'Не удалось загрузить overview');
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  if (!data) {
+    return overviewQuery.isError
+      ? <Alert type="error" showIcon message="Не удалось загрузить overview" description={overviewQuery.error.message} />
+      : <Spin tip="Загрузка overview…"><div style={{ minHeight: 160 }} /></Spin>;
+  }
 
   const maxSchema = Math.max(1, ...(data?.storage_by_schema || []).map((row) => row.total_bytes));
 
@@ -38,7 +24,8 @@ const OverviewPage = () => {
         </Typography.Title>
         <FreshnessBar items={data?.collector_freshness} />
       </div>
-      {error ? <Typography.Text type="danger">{error}</Typography.Text> : null}
+      {overviewQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить overview" description={overviewQuery.error.message} /> : null}
+      {overviewQuery.isFetching ? <Spin size="small" /> : null}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>

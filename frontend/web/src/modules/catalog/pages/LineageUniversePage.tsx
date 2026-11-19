@@ -1,21 +1,22 @@
-import { getAssetLineage, listLineageRoots } from '@shared/api/generated';
-import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { AimOutlined, ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
-import { Button, Empty, Input, Spin, Typography } from 'antd';
+import type { LineageEdge, LineageNode } from '@shared/api/generated';
+import { FreshnessBar } from '@shared/ui/portal';
+import { Alert, Button, Empty, Input, Spin, Typography } from 'antd';
 import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useDeferredValue,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import LineageUniverseScene, {
-  type UniverseOrigin,
-  type UniverseSceneControls,
+    type UniverseOrigin,
+    type UniverseSceneControls,
 } from '../components/LineageUniverseScene';
 import '../components/lineageUniverse.css';
+import { useCatalogLineage } from '../queries';
 
 type LocationState = {
   fromRing?: UniverseOrigin;
@@ -70,16 +71,23 @@ const startsWithChar = (name: string, ch: string) =>
 const byDisplayName = (a: LineageNode, b: LineageNode) =>
   a.display_name.localeCompare(b.display_name) || a.id.localeCompare(b.id);
 
+const EMPTY_NODES: LineageNode[] = [];
+const EMPTY_EDGES: LineageEdge[] = [];
+
 const LineageUniversePage = () => {
   const { assetId } = useParams<{ assetId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const mode = assetId ? 'chain' : 'roots';
-  const [nodes, setNodes] = useState<LineageNode[]>([]);
-  const [edges, setEdges] = useState<LineageEdge[]>([]);
-  const [title, setTitle] = useState('Universe');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const lineageQuery = useCatalogLineage(assetId);
+  const payload = lineageQuery.isError ? undefined : lineageQuery.data;
+  const nodes = payload?.nodes ?? EMPTY_NODES;
+  const edges = payload?.edges ?? EMPTY_EDGES;
+  const title = assetId
+    ? nodes.find((node) => node.id === assetId)?.display_name || 'Universe'
+    : 'Каталог источников';
+  const loading = lineageQuery.isPending;
+  const error = lineageQuery.isError ? 'Не удалось загрузить lineage для Universe' : null;
   const [query, setQuery] = useState('');
   const deferredRaw = useDeferredValue(query.trim());
   /** 1 char → alphabet jump (no filter). 2+ → substring search. */
@@ -115,38 +123,8 @@ const LineageUniversePage = () => {
   }, [assetId]);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
     setFocusAssetId(null);
-    const request = assetId ? getAssetLineage({ assetId }) : listLineageRoots();
-    request
-      .then((payload) => {
-        if (cancelled) {
-          return;
-        }
-        setNodes(payload.nodes);
-        setEdges(payload.edges);
-        if (assetId) {
-          const current = payload.nodes.find((node) => node.id === assetId);
-          setTitle(current?.display_name || 'Universe');
-        } else {
-          setTitle('Каталог источников');
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError('Не удалось загрузить lineage для Universe');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+    setParadeIds([]);
   }, [assetId]);
 
   const hasKinds = useMemo(
@@ -535,6 +513,9 @@ const LineageUniversePage = () => {
           </Typography.Paragraph>
         </div>
       </header>
+      <FreshnessBar items={payload?.collector_freshness} />
+      {lineageQuery.isFetching && !loading ? <Spin size="small" /> : null}
+      {payload?.unresolved_targets.length ? <Alert type="warning" showIcon message="Нерешённые цели" description={payload.unresolved_targets.map((item) => item.qualified_name).join(', ')} /> : null}
       <main className="lineage-universe-stage">
         {loading ? (
           <div className="lineage-universe-state">
@@ -542,7 +523,7 @@ const LineageUniversePage = () => {
           </div>
         ) : error ? (
           <div className="lineage-universe-state">
-            <Empty description={error} />
+            <Alert type="error" showIcon message={error} description={lineageQuery.error?.message} />
           </div>
         ) : !nodes.length ? (
           <div className="lineage-universe-state">
@@ -560,6 +541,7 @@ const LineageUniversePage = () => {
           </div>
         ) : (
           <LineageUniverseScene
+            key={assetId ?? 'roots'}
             nodes={filteredNodes}
             edges={filteredEdges}
             selectedAssetId={assetId}
