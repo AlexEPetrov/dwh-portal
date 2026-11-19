@@ -1,4 +1,3 @@
-import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import {
   AimOutlined,
   DragOutlined,
@@ -7,6 +6,7 @@ import {
   ReloadOutlined,
   RetweetOutlined,
 } from '@ant-design/icons';
+import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Button, Segmented, Space, Tooltip } from 'antd';
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { STAGE_ORDER, TYPE_ACCENT, buildFlowEdges } from './lineageFlow';
@@ -203,6 +203,131 @@ type Link = {
 
 type Star = { x: number; y: number; z: number; s: number };
 type ScreenHit = { id: string; x: number; y: number; r: number; z: number };
+
+/** Technical objects in an observatory, not interchangeable celestial bodies.
+ * Screen-facing glyphs retain their meaning while the camera orbits the graph.
+ * Shared by the scene and legend so type is encoded by shape as well as color.
+ */
+const drawAssetGlyph = (
+  ctx: CanvasRenderingContext2D,
+  type: string,
+  color: string,
+  x: number,
+  y: number,
+  radius: number,
+  active = false,
+  unresolved = false
+) => {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(radius, radius);
+  ctx.lineWidth = (active ? 1.8 : 1.3) / radius;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+  ctx.fillStyle = '#101d32';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = active ? 12 : 3;
+
+  const line = (points: number[][], close = false, fill = false) => {
+    ctx.beginPath();
+    points.forEach(([px, py], index) => {
+      if (index === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    if (close) ctx.closePath();
+    if (fill) ctx.fill();
+    ctx.stroke();
+  };
+  const frame = () => {
+    ctx.beginPath();
+    ctx.rect(-0.85, -0.68, 1.7, 1.25);
+    ctx.fill();
+    ctx.stroke();
+  };
+  const storedLayers = () => {
+    line([[-0.85, 0.55], [-0.85, 0.75], [0.85, 0.75], [0.85, 0.55]]);
+    line([[-0.85, 0.78], [-0.85, 0.98], [0.85, 0.98], [0.85, 0.78]]);
+  };
+
+  if (type === 'TABLE') {
+    storedLayers();
+    frame();
+    ctx.fillStyle = `${color}55`;
+    ctx.fillRect(-0.83, -0.66, 1.66, 0.3);
+    line([[-0.85, -0.34], [0.85, -0.34]]);
+    line([[-0.85, 0.1], [0.85, 0.1]]);
+    line([[-0.28, -0.34], [-0.28, 0.57]]);
+    line([[0.28, -0.34], [0.28, 0.57]]);
+  } else if (type === 'VIEW' || type === 'MATERIALIZED_VIEW') {
+    if (type === 'MATERIALIZED_VIEW') storedLayers();
+    // A projection window: open/dashed frame, with a solid lens inside.
+    ctx.fillStyle = `${color}10`;
+    ctx.setLineDash([3 / radius, 3 / radius]);
+    frame();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(-0.61, -0.05);
+    ctx.quadraticCurveTo(0, -0.75, 0.61, -0.05);
+    ctx.quadraticCurveTo(0, 0.65, -0.61, -0.05);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -0.05, 0.16, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  } else if (type === 'PROCESS') {
+    line([[0, -1], [0.95, 0], [0, 1], [-0.95, 0]], true, true);
+    line([[-0.48, 0], [0.48, 0]]);
+    line([[0.12, -0.35], [0.48, 0], [0.12, 0.35]]);
+  } else if (type === 'EXTRACTION_SOURCE') {
+    line([[-0.9, -0.75], [0.9, -0.75], [0.28, 0.1], [0.28, 0.65],
+      [-0.28, 0.85], [-0.28, 0.1]], true, true);
+    line([[-0.48, -0.38], [0.48, -0.38]]);
+  } else if (type === 'STORAGE_LOCATION') {
+    ctx.beginPath();
+    ctx.ellipse(0, -0.55, 0.82, 0.32, 0, Math.PI, 0);
+    ctx.lineTo(0.82, 0.55);
+    ctx.ellipse(0, 0.55, 0.82, 0.32, 0, 0, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, -0.55, 0.82, 0.32, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    // Source station (or neutral unknown object), not a luminous sphere.
+    line([[-0.48, -0.85], [0.48, -0.85], [0.96, 0], [0.48, 0.85],
+      [-0.48, 0.85], [-0.96, 0]], true, true);
+    if (type === 'DATA_SOURCE') {
+      line([[-0.45, -0.25], [0.28, -0.25], [0.28, 0.25], [-0.45, 0.25]], true);
+      line([[0.28, 0], [0.72, 0]]);
+    } else {
+      line([[-0.3, 0], [0.3, 0]]);
+    }
+  }
+
+  if (active) {
+    // Instrument-style corner brackets instead of a planetary selection halo.
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1.5 / radius;
+    for (const sx of [-1, 1]) {
+      for (const sy of [-1, 1]) {
+        line([[sx * 0.85, sy * 1.18], [sx * 1.18, sy * 1.18], [sx * 1.18, sy * 0.85]]);
+      }
+    }
+  }
+  if (unresolved) {
+    ctx.shadowBlur = 0;
+    ctx.font = `700 ${Math.max(11, radius * 0.65) / radius}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillText('?', 1, -0.9);
+  }
+  ctx.restore();
+};
 
 const FOCAL = 820;
 /** Stronger perspective on roots turntable — front islands read closer. */
@@ -1762,7 +1887,7 @@ const LineageUniverseScene = ({
         // Filtered spiral: all nodes; archipelago: emphasize the flying front of that kind.
         const inKindCohort =
           isCurrentKind && (Boolean(kindFilterRef.current) || front >= 0.35);
-        // Keep asset-type color on the nucleus; cyan is only a kind marker ring.
+        // Keep asset-type color on the glyph; cyan is only a kind marker ring.
         const nearPop =
           mode === 'roots' ? 1 + front * front * 0.72 + (inKindCohort ? 0.08 : 0) : 1;
         const radius = Math.max(
@@ -1783,40 +1908,7 @@ const LineageUniverseScene = ({
             : 1;
         ctx.globalAlpha = exitFade * depthFade * cohortFade;
 
-        const glow = ctx.createRadialGradient(
-          p.x,
-          p.y,
-          0,
-          p.x,
-          p.y,
-          radius * 2.4
-        );
-        glow.addColorStop(0, `${body.color}88`);
-        glow.addColorStop(0.4, `${body.color}28`);
-        glow.addColorStop(1, `${body.color}00`);
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, radius * 2.4, 0, Math.PI * 2);
-        ctx.fill();
-
-        const core = ctx.createRadialGradient(
-          p.x - radius * 0.28,
-          p.y - radius * 0.28,
-          radius * 0.12,
-          p.x,
-          p.y,
-          radius
-        );
-        core.addColorStop(0, '#ffffff');
-        core.addColorStop(0.28, body.color);
-        core.addColorStop(1, '#0b1224');
-        ctx.fillStyle = core;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = active ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.25)';
-        ctx.lineWidth = active ? 2 : 1;
-        ctx.stroke();
+        drawAssetGlyph(ctx, body.type, body.color, p.x, p.y, radius, active, body.unresolved);
 
         if (isCurrentKind) {
           // Kind marker: hairline only — no cyan smoke cloud.
@@ -2149,23 +2241,18 @@ const LineageUniverseScene = ({
 
       // legend + controls
       const legendX = 20;
-      let legendY = height - 22 - STAGE_ORDER.length * 18;
+      const visibleTypes = STAGE_ORDER.filter((type) => nodes.some((node) => node.asset_type === type));
+      let legendY = height - 22 - visibleTypes.length * 24;
       ctx.font = '11px "Segoe UI", system-ui, sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.textAlign = 'left';
       ctx.fillText(links.length ? `Связей: ${links.length}` : 'Связей в этом виде нет — это каталог корней', legendX, legendY - 18);
-      for (const type of STAGE_ORDER) {
-        if (!nodes.some((node) => node.asset_type === type)) {
-          continue;
-        }
+      for (const type of visibleTypes) {
         const color = TYPE_ACCENT[type] || '#8c8c8c';
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(legendX + 6, legendY, 5, 0, Math.PI * 2);
-        ctx.fill();
+        drawAssetGlyph(ctx, type, color, legendX + 8, legendY, 8);
         ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
-        ctx.fillText(type, legendX + 18, legendY + 4);
-        legendY += 18;
+        ctx.fillText(type, legendX + 24, legendY + 4);
+        legendY += 24;
       }
 
       if (hoverGuide) {

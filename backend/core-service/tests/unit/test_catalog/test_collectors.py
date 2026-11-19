@@ -110,7 +110,9 @@ def test_catalog_scope_follows_the_full_schema_list(store, now):
     core_only = [database, _schema("core"), _named_table("core", "prices")]
 
     CatalogCollector(store, FakeMetadataProvider(raw_only)).run(now)
-    CatalogCollector(store, FakeMetadataProvider(raw_and_core)).run(now + datetime.timedelta(hours=1))
+    CatalogCollector(store, FakeMetadataProvider(raw_and_core)).run(
+        now + datetime.timedelta(hours=1)
+    )
     active, _ = store.list_assets(AssetQuery(status=AssetStatus.ACTIVE, page_size=100))
     active_tables = {item.name for item in active if item.asset_type == AssetType.TABLE}
     assert active_tables == {"ice_brent", "prices"}
@@ -157,7 +159,16 @@ def test_python_handler_is_deferred_without_metadata_call(store, now):
         extract_source_type_id=1,
         extract_options={"subject_patterns": ["Brent"]},
         storage_options={"path": "landing/ice/brent", "password": "secret"},
-        load_options={"handlers": [{"handler_type": "Python", "module": "missing.loader"}]},
+        load_options={
+            "handlers": [
+                {
+                    "handler_type": "Python",
+                    "module": "missing.loader",
+                    "entry_point": "SelectedLoader",
+                    "options": {"password": "secret"},
+                }
+            ]
+        },
         load_schedule_id=None,
         data_source_id="ice",
         data_source_name="ICE",
@@ -176,7 +187,12 @@ def test_python_handler_is_deferred_without_metadata_call(store, now):
     assert processes[0].attributes["metadata_status"] == "DEFERRED"
     assert processes[0].attributes["lineage_status"] == "UNRESOLVED"
     assert processes[0].attributes["module"] == "missing.loader"
-    storage = next(item for item in store.assets.values() if item.asset_type == AssetType.STORAGE_LOCATION)
+    assert processes[0].attributes["entry_point"] == "SelectedLoader"
+    assert "options" not in processes[0].attributes
+    assert "password" not in processes[0].attributes
+    storage = next(
+        item for item in store.assets.values() if item.asset_type == AssetType.STORAGE_LOCATION
+    )
     assert "password" not in storage.attributes
     assert not store.list_diagnostics(processes[0].id)
 
@@ -323,7 +339,9 @@ def test_change_detector_emits_added_and_structure_change(store, now):
         )
     )
     ChangeCollector(store).run(later)
-    types = {event.change_type.value for event in store.changes.values() if event.asset_id == table.id}
+    types = {
+        event.change_type.value for event in store.changes.values() if event.asset_id == table.id
+    }
     assert "ADDED" in types
     assert "STRUCTURE_CHANGED" in types
 
@@ -373,7 +391,9 @@ def test_structure_change_survives_storage_run(store, now):
     )
     StorageCollector(store).run(later)
     ChangeCollector(store).run(later)
-    types = {event.change_type.value for event in store.changes.values() if event.asset_id == table.id}
+    types = {
+        event.change_type.value for event in store.changes.values() if event.asset_id == table.id
+    }
     assert "STRUCTURE_CHANGED" in types
 
 
@@ -401,7 +421,9 @@ def test_python_and_rest_discovery_helpers(monkeypatch):
         get_metadata=lambda: {
             "schema_version": "1.0",
             "name": "ice_brent_loader",
-            "writes_to": [{"type": "table", "database": "dwh", "schema": "raw", "name": "ice_brent"}],
+            "writes_to": [
+                {"type": "table", "database": "dwh", "schema": "raw", "name": "ice_brent"}
+            ],
         }
     )
 
@@ -410,7 +432,9 @@ def test_python_and_rest_discovery_helpers(monkeypatch):
             return module
         raise ModuleNotFoundError(name)
 
-    monkeypatch.setattr("domains.catalog.providers.python_metadata.importlib.import_module", fake_import)
+    monkeypatch.setattr(
+        "domains.catalog.providers.python_metadata.importlib.import_module", fake_import
+    )
     resolved = resolve_python_metadata("company.ice_brent", "ice")
     assert resolved.writes_to[0].name == "ice_brent"
     missing = resolve_python_metadata("missing.mod", "ice")

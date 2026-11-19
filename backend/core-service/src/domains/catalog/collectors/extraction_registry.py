@@ -166,7 +166,8 @@ class ExtractionRegistryCollector:
             self._diagnostic(
                 process.id,
                 now,
-                metadata.diagnostic or {"code": metadata.metadata_status, "message": metadata.metadata_status},
+                metadata.diagnostic
+                or {"code": metadata.metadata_status, "message": metadata.metadata_status},
             )
             details["diagnostics"] += 1
             return
@@ -205,7 +206,9 @@ class ExtractionRegistryCollector:
                 unresolved += 1
                 continue
             view_asset = self._resolve_relation_target(target, process.id, now, details)
-            base_asset = self._resolve_relation_target(target.derived_from, process.id, now, details)
+            base_asset = self._resolve_relation_target(
+                target.derived_from, process.id, now, details
+            )
             if view_asset.attributes.get("unresolved") or base_asset.attributes.get("unresolved"):
                 unresolved += 1
             # VIEW DERIVED_FROM → TABLE
@@ -213,9 +216,7 @@ class ExtractionRegistryCollector:
         attributes["lineage_status"] = (
             LineageStatus.UNRESOLVED
             if unresolved and not metadata.writes_to
-            else LineageStatus.PARTIAL
-            if unresolved
-            else LineageStatus.RESOLVED
+            else LineageStatus.PARTIAL if unresolved else LineageStatus.RESOLVED
         )
         if not write_targets:
             attributes["lineage_status"] = LineageStatus.UNRESOLVED
@@ -442,12 +443,30 @@ class ExtractionRegistryCollector:
                 attributes={
                     "handler_type": handler.get("handler_type"),
                     "module": handler.get("module"),
+                    "entry_point": (
+                        handler["entry_point"]
+                        if isinstance(handler.get("entry_point"), str)
+                        and all(part.isidentifier() for part in handler["entry_point"].split("."))
+                        else None
+                    ),
+                    "entry_point_invalid": (
+                        "entry_point" in handler
+                        and handler["entry_point"] is not None
+                        and (
+                            not isinstance(handler["entry_point"], str)
+                            or not all(
+                                part.isidentifier() for part in handler["entry_point"].split(".")
+                            )
+                        )
+                    ),
                     "extraction_source_id": record.id,
                 },
             )
         )
 
-    def _unresolved_target(self, database: str, schema: str, name: str, now: datetime.datetime) -> Asset:
+    def _unresolved_target(
+        self, database: str, schema: str, name: str, now: datetime.datetime
+    ) -> Asset:
         qualified_name, identity_key = unresolved_target_identity(database, schema, name)
         return self._store.upsert_asset(
             Asset(
@@ -460,7 +479,12 @@ class ExtractionRegistryCollector:
                 last_seen_at=now,
                 attributes={
                     "unresolved": True,
-                    "target_ref": {"type": "table", "database": database, "schema": schema, "name": name},
+                    "target_ref": {
+                        "type": "table",
+                        "database": database,
+                        "schema": schema,
+                        "name": name,
+                    },
                     "database": database,
                     "schema": schema,
                     "display_name": f"{schema}.{name}",

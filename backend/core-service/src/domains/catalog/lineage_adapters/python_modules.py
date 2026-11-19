@@ -22,8 +22,8 @@ from domains.catalog.lineage_adapters.airflow_syntax import (
     rescan_writes,
     resolve_local_module,
     storage_paths_for_closure,
-    write_targets_for_closure,
 )
+from domains.catalog.lineage_adapters.python_loader_analysis import PythonLoaderAnalyzer
 from domains.catalog.lineage_adapters.runs import record_adapter_run, skipped_run
 from domains.catalog.models import (
     Asset,
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 PROVIDER = "python_modules"
 REGISTRY_PROVIDER = "extraction_registry"
-WRITE_TYPES = {AssetType.TABLE, AssetType.MATERIALIZED_VIEW}
+WRITE_TYPES = {AssetType.TABLE}
 PYTHON_HANDLERS = frozenset({"Python", "PythonV0"})
 
 
@@ -188,13 +188,36 @@ class PythonModulesLineageAdapter:
             self._mark_process(process, MetadataStatus.MISSING, LineageStatus.UNRESOLVED, now)
             return
 
-        closure_paths = self._ensure_closure(entry, root, facts_cache)
-        has_write = any(
-            facts_cache[path].has_write for path in closure_paths if path in facts_cache
+        analysis = PythonLoaderAnalyzer(root).analyze(
+            entry,
+            (
+                "__invalid_entry_point__"
+                if process.attributes.get("entry_point_invalid")
+                else process.attributes.get("entry_point")
+            ),
         )
-        refs = write_targets_for_closure(closure_paths, facts_cache) if has_write else []
+        refs = analysis.refs
+        process.attributes = {**process.attributes, "write_evidence": analysis.evidence}
+        for diagnostic in analysis.diagnostics:
+            details["diagnostics"] += 1
+            self._diagnostic(process.id, now, diagnostic)
+        closure_paths = [root / path for path in analysis.source_files]
         matched = self._match_tables(refs, catalog_tables, now, mode, root)
-        path_refs = storage_paths_for_closure(closure_paths, facts_cache) if mode == "code" else []
+        path_refs = []
+        if mode == "code":
+            # Preserve existing storage discovery independently of TABLE inference.
+            storage_closure = self._ensure_closure(entry, root, facts_cache)
+            path_refs = storage_paths_for_closure(storage_closure, facts_cache)
+        if len(matched) < len(refs):
+            details["diagnostics"] += 1
+            self._diagnostic(
+                process.id,
+                now,
+                {
+                    "code": "TABLE_TARGET_UNMATCHED",
+                    "message": "One or more proven targets have no unique catalog match",
+                },
+            )
 
         _log_module_lookup(module_name, root, entry, refs, matched)
         if not matched and not path_refs:
@@ -209,7 +232,13 @@ class PythonModulesLineageAdapter:
                     "entry": str(entry),
                 },
             )
-            self._mark_process(process, MetadataStatus.MISSING, LineageStatus.UNRESOLVED, now)
+            self._mark_process(
+                process,
+                MetadataStatus.MISSING,
+                LineageStatus.UNRESOLVED,
+                now,
+                source_files=analysis.source_files,
+            )
             return
 
         unresolved = 0
@@ -226,21 +255,19 @@ class PythonModulesLineageAdapter:
 
         lineage = (
             LineageStatus.PARTIAL
-            if unresolved
-            else LineageStatus.RESOLVED
-            if matched
-            else LineageStatus.UNRESOLVED
+            if unresolved or analysis.diagnostics or len(matched) < len(refs)
+            else LineageStatus.RESOLVED if matched else LineageStatus.UNRESOLVED
         )
-        self._mark_process(process, MetadataStatus.OK, lineage, now, source_files=_rel_files(closure_paths, root))
+        self._mark_process(
+            process, MetadataStatus.OK, lineage, now, source_files=_rel_files(closure_paths, root)
+        )
         details["resolved"] += 1
 
-    def _ensure_closure(
-        self, entry: Path, root: Path, facts_cache: dict[Path, Any]
-    ) -> list[Path]:
+    def _ensure_closure(self, entry: Path, root: Path, facts_cache: dict[Path, Any]) -> list[Path]:
         resolved_root = root.resolve()
         queue = [entry.resolve()]
         seen: set[Path] = set()
-        while queue:
+        while queue and len(seen) < 80:
             path = queue.pop(0)
             if path in seen:
                 continue
@@ -320,7 +347,7 @@ class PythonModulesLineageAdapter:
             ]
             if len(hits) == 1:
                 return hits[0]
-        if len(name) >= 4:
+        if not schema:
             hits = [
                 item
                 for item in tables
@@ -462,9 +489,7 @@ def _log_module_lookup(
         )
         return
     targets = ", ".join(_ref_label(ref) for ref in refs) or "нет"
-    catalog = [
-        _asset_label(item) for item in matched if not item.attributes.get("unresolved")
-    ]
+    catalog = [_asset_label(item) for item in matched if not item.attributes.get("unresolved")]
     catalog_text = ", ".join(catalog) or "нет"
     logger.info(
         "python_modules: модуль %s ищем в %s — найден %s, schema/table: %s, в каталоге: %s",
