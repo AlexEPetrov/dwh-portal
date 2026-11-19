@@ -147,10 +147,11 @@ class LoadFileItem(BaseModel):
 
 class LoadFileListResponse(BaseModel):
     items: list[LoadFileItem]
-    total: int
+    total: int | None
     page: int
     page_size: int
     available: bool
+    has_more: bool = False
 
 
 class LineageNode(BaseModel):

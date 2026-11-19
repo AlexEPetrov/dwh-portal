@@ -9,6 +9,7 @@ import { Alert, Button, Card, Descriptions, Empty, Space, Spin, Table, Tabs, Tag
 import { useNavigate, useParams } from 'react-router-dom';
 import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
 import LineageGraph from '../components/LineageGraph';
+import UnresolvedTargetsAlert from '../components/UnresolvedTargetsAlert';
 import { useCatalogAsset, useCatalogChanges, useCatalogColumns, useCatalogLineage } from '../queries';
 
 const nextStepHint = (assetType: string): string => {
@@ -119,7 +120,7 @@ const ObjectDetailPage = () => {
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           {lineageQuery.isFetching ? <Spin size="small" /> : null}
           <FreshnessBar items={lineage.collector_freshness} />
-          {lineage.unresolved_targets.length ? <Alert type="warning" showIcon message="Нерешённые цели" description={lineage.unresolved_targets.map((item) => item.qualified_name).join(', ')} /> : null}
+          <UnresolvedTargetsAlert key={asset.id} targets={lineage.unresolved_targets} />
           <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/lineage/${asset.id}`)}>
             Открыть на странице Lineage
           </Button>

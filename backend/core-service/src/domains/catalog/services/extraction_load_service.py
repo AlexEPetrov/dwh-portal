@@ -16,8 +16,10 @@ class ExtractionLoadService:
         self._store = store
         self._provider = provider or LogFilesProvider()
 
-    def list_loads(self, asset_id: uuid.UUID, page: int, page_size: int) -> LoadFilePage | None:
-        """Return load files for a catalog asset, or None if the asset is missing."""
+    def list_loads(
+        self, asset_id: uuid.UUID, page: int, page_size: int, *, include_total: bool = True
+    ) -> LoadFilePage | None:
+        """Return a live page with an optional exact count, or None for a missing asset."""
         asset = self._store.get_asset(asset_id)
         if asset is None:
             return None
@@ -32,4 +34,6 @@ class ExtractionLoadService:
             uuid.UUID(str(asset.native_id))
         except ValueError:
             return LoadFilePage(items=[], total=0, available=True)
-        return self._provider.list_files(str(asset.native_id), page, page_size)
+        return self._provider.list_files(
+            str(asset.native_id), page, page_size, include_total=include_total
+        )

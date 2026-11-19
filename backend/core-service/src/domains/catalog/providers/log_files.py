@@ -59,8 +59,9 @@ class LoadFilePage:
     """Paged live read of extraction load files."""
 
     items: list[LoadFileRecord]
-    total: int
+    total: int | None
     available: bool
+    has_more: bool = False
 
 
 class LogFilesProvider:
@@ -74,14 +75,16 @@ class LogFilesProvider:
         self._settings = settings or DwhCollectorSettings()
         self._connection = connection
 
-    def list_files(self, extraction_source_id: str, page: int, page_size: int) -> LoadFilePage:
-        """Return files for one extraction_source_id, newest load first."""
+    def list_files(
+        self, extraction_source_id: str, page: int, page_size: int, *, include_total: bool = True
+    ) -> LoadFilePage:
+        """Return newest files, optionally without counting the complete source history."""
         if self._connection is None and (not self._settings.psg_host or not self._settings.psg_db):
             return LoadFilePage(items=[], total=0, available=False)
         connection = self._connection or self._connect()
         should_close = self._connection is None
         try:
-            return self._read_page(connection, extraction_source_id, page, page_size)
+            return self._read_page(connection, extraction_source_id, page, page_size, include_total)
         except Exception as exc:
             if _is_undefined_table(exc):
                 return LoadFilePage(items=[], total=0, available=False)
@@ -96,7 +99,12 @@ class LogFilesProvider:
         return connect_dwh_readonly(self._settings)
 
     def _read_page(
-        self, connection, extraction_source_id: str, page: int, page_size: int
+        self,
+        connection,
+        extraction_source_id: str,
+        page: int,
+        page_size: int,
+        include_total: bool,
     ) -> LoadFilePage:
         columns = self._table_columns(connection, "sys", "log_files")
         source_col = next((name for name in _SOURCE_ID_CANDIDATES if name in columns), None)
@@ -114,26 +122,34 @@ class LogFilesProvider:
         order_ident = time_ident or next(
             (ident for field, ident in selected if field == "id"), source_ident
         )
+        id_ident = next((ident for field, ident in selected if field == "id"), None)
+        order_sql = f"{order_ident} DESC NULLS LAST"
+        if id_ident is not None and id_ident != order_ident:
+            order_sql += f", {id_ident} DESC"
         select_sql = ", ".join(ident for _, ident in selected)
         offset = max(page - 1, 0) * page_size
+        total = None
         with connection.cursor() as cursor:
-            cursor.execute(
-                f"SELECT COUNT(*) FROM sys.log_files WHERE {source_ident} = %s",
-                (extraction_source_id,),
-            )
-            total = int(cursor.fetchone()[0] or 0)
+            if include_total:
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM sys.log_files WHERE {source_ident} = %s",
+                    (extraction_source_id,),
+                )
+                total = int(cursor.fetchone()[0] or 0)
             cursor.execute(
                 f"""
                 SELECT {select_sql}
                 FROM sys.log_files
                 WHERE {source_ident} = %s
-                ORDER BY {order_ident} DESC NULLS LAST
+                ORDER BY {order_sql}
                 LIMIT %s OFFSET %s
                 """,
-                (extraction_source_id, page_size, offset),
+                (extraction_source_id, page_size if include_total else page_size + 1, offset),
             )
-            items = [self._record(selected, row) for row in cursor.fetchall()]
-        return LoadFilePage(items=items, total=total, available=True)
+            rows = cursor.fetchall()
+            has_more = offset + page_size < total if total is not None else len(rows) > page_size
+            items = [self._record(selected, row) for row in rows[:page_size]]
+        return LoadFilePage(items=items, total=total, available=True, has_more=has_more)
 
     @staticmethod
     def _record(selected: list[tuple[str, str]], row: tuple[Any, ...]) -> LoadFileRecord:

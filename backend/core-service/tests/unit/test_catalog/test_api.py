@@ -164,7 +164,7 @@ class _FakeLoadService:
     def __init__(self, pages: dict):
         self.pages = pages
 
-    def list_loads(self, asset_id, page: int, page_size: int):
+    def list_loads(self, asset_id, page: int, page_size: int, *, include_total=True):
         from domains.catalog.providers.log_files import LoadFilePage
 
         if asset_id not in self.pages:
@@ -172,7 +172,10 @@ class _FakeLoadService:
         items = self.pages[asset_id]
         start = (page - 1) * page_size
         return LoadFilePage(
-            items=items[start : start + page_size], total=len(items), available=True
+            items=items[start : start + page_size],
+            total=len(items) if include_total else None,
+            available=True,
+            has_more=start + page_size < len(items),
         )
 
 
@@ -209,6 +212,22 @@ def test_asset_loads_are_paged_for_registry_extraction():
     assert body["total"] == 2
     assert body["page_size"] == 1
     assert body["items"][0]["file_name"] == "new.xlsx"
+    assert body["has_more"] is True
+
+    fast = client.get(
+        f"/api/v1/assets/{extraction_id}/loads",
+        params={"page": 1, "page_size": 1, "include_total": False},
+    )
+    assert fast.status_code == 200
+    assert fast.json()["total"] is None
+    assert fast.json()["has_more"] is True
+    assert len(fast.json()["items"]) == 1
+    last = client.get(
+        f"/api/v1/assets/{extraction_id}/loads",
+        params={"page": 2, "page_size": 1, "include_total": False},
+    )
+    assert last.json()["has_more"] is False
+    assert last.json()["items"][0]["file_name"] == "old.xlsx"
 
     missing = client.get(f"/api/v1/assets/{uuid.uuid4()}/loads")
     assert missing.status_code == 404

@@ -3,18 +3,19 @@ import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { FreshnessBar } from '@shared/ui/portal';
 import { Alert, Button, Empty, Input, Spin, Typography } from 'antd';
 import {
-    useCallback,
-    useDeferredValue,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import LineageUniverseScene, {
-    type UniverseOrigin,
-    type UniverseSceneControls,
+  type UniverseOrigin,
+  type UniverseSceneControls,
 } from '../components/LineageUniverseScene';
+import UnresolvedTargetsAlert from '../components/UnresolvedTargetsAlert';
 import '../components/lineageUniverse.css';
 import { useCatalogLineage } from '../queries';
 
@@ -515,7 +516,7 @@ const LineageUniversePage = () => {
       </header>
       <FreshnessBar items={payload?.collector_freshness} />
       {lineageQuery.isFetching && !loading ? <Spin size="small" /> : null}
-      {payload?.unresolved_targets.length ? <Alert type="warning" showIcon message="Нерешённые цели" description={payload.unresolved_targets.map((item) => item.qualified_name).join(', ')} /> : null}
+        {payload?.unresolved_targets.length ? <UnresolvedTargetsAlert key={assetId ?? 'roots'} targets={payload.unresolved_targets} /> : null}
       <main className="lineage-universe-stage">
         {loading ? (
           <div className="lineage-universe-state">

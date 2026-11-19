@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
 import LineageGraph from '../components/LineageGraph';
+import UnresolvedTargetsAlert from '../components/UnresolvedTargetsAlert';
 import { LINEAGE_PICKER_TYPES, useCatalogAsset, useCatalogLineage, useCatalogLineagePicker } from '../queries';
 
 const TYPE_ORDER = new Map(LINEAGE_PICKER_TYPES.map((type, index) => [type, index]));
@@ -107,12 +108,7 @@ const LineagePage = () => {
       {assetId && selectedAssetQuery.isPending ? <Typography.Text type="secondary">Загрузка сведений выбранного объекта…</Typography.Text> : null}
       {lineageQuery.isFetching ? <Spin size="small" /> : null}
       {assetId && lineage?.unresolved_targets.length ? (
-        <Alert
-          type="warning"
-          showIcon
-          message="Нерешённые цели loader metadata"
-          description={lineage.unresolved_targets.map((item) => item.qualified_name).join(', ')}
-        />
+        <UnresolvedTargetsAlert key={assetId} targets={lineage.unresolved_targets} />
       ) : null}
       {chainHint ? (
         <Alert

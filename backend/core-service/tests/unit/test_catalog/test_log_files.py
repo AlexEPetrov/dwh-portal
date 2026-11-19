@@ -37,6 +37,7 @@ class FakeCursor:
 
     def execute(self, sql: str, params=None) -> None:
         normalized = " ".join(sql.lower().split())
+        self._connection.executed.append((normalized, params))
         if "information_schema.columns" in normalized:
             schema, table = params
             if schema == "sys" and table == "log_files":
@@ -61,7 +62,7 @@ class FakeCursor:
         matched = [
             row for row in self._connection.rows if str(row["extraction_source_id"]) == source_id
         ]
-        matched.sort(key=lambda row: row["timestamp"] or datetime.datetime.min, reverse=True)
+        matched.sort(key=lambda row: (row["timestamp"], row["rid"]), reverse=True)
         page_rows = matched[offset : offset + limit]
         select_part = sql.split("FROM", 1)[0].replace("SELECT", "", 1)
         idents = [part.strip().strip('"') for part in select_part.split(",") if part.strip()]
@@ -79,6 +80,7 @@ class FakeConnection:
         self.columns = columns
         self.rows = rows
         self.closed = False
+        self.executed = []
 
     def cursor(self) -> FakeCursor:
         return FakeCursor(self)
@@ -135,6 +137,35 @@ def test_missing_log_files_table_is_empty_unavailable():
     assert page.available is False
     assert page.items == []
     assert page.total == 0
+
+
+def test_fast_page_fetches_only_51_rows_and_never_counts():
+    rows = [_file_row(f"file_{i}.xlsx", TS_NEW, str(uuid.UUID(int=i + 1))) for i in range(101)]
+    other = _file_row("other_source.xlsx", TS_NEW, str(uuid.UUID(int=200)))
+    other["extraction_source_id"] = uuid.uuid4()
+    connection = FakeConnection(LOG_COLUMNS, [*rows, other])
+    provider = LogFilesProvider(connection=connection)
+    first = provider.list_files(SOURCE_ID, 1, 50, include_total=False)
+    second = provider.list_files(SOURCE_ID, 2, 50, include_total=False)
+    last = provider.list_files(SOURCE_ID, 3, 50, include_total=False)
+    empty = provider.list_files(SOURCE_ID, 4, 50, include_total=False)
+    assert first.total is None
+    assert len(first.items) == len(second.items) == 50
+    assert first.has_more is second.has_more is True
+    assert len(last.items) == 1
+    assert last.has_more is empty.has_more is False
+    assert empty.items == []
+    assert not ({item.id for item in first.items} & {item.id for item in second.items})
+    assert first.items[0].file_name == "file_100.xlsx"
+    assert not any("count(*)" in sql for sql, _ in connection.executed)
+    reads = [(sql, params) for sql, params in connection.executed if "from sys.log_files" in sql]
+    assert [params for _, params in reads] == [
+        (SOURCE_ID, 51, 0),
+        (SOURCE_ID, 51, 50),
+        (SOURCE_ID, 51, 100),
+        (SOURCE_ID, 51, 150),
+    ]
+    assert all('order by "timestamp" desc nulls last, "rid" desc' in sql for sql, _ in reads)
 
 
 def test_unconfigured_dwh_is_empty_unavailable():
@@ -242,9 +273,7 @@ def test_empty_column_probe_is_not_cached(monkeypatch):
     try:
         assert provider.list_files(SOURCE_ID, page=1, page_size=10).available is False
         connection.columns = set(LOG_COLUMNS)
-        connection.rows = [
-            _file_row("later.xlsx", TS_NEW, "c2000000-0000-0000-0000-000000000004")
-        ]
+        connection.rows = [_file_row("later.xlsx", TS_NEW, "c2000000-0000-0000-0000-000000000004")]
         page = provider.list_files(SOURCE_ID, page=1, page_size=10)
         assert calls["schema"] == 2
         assert page.available is True

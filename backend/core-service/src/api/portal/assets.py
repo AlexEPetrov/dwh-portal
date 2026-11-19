@@ -60,10 +60,7 @@ def list_lineage_roots(
     payload = service.list_roots()
     counts = payload.get("counts") or {}
     return LineageRootsResponse(
-        nodes=[
-            lineage_node(node, counts=counts.get(node.id))
-            for node in payload["nodes"]
-        ],
+        nodes=[lineage_node(node, counts=counts.get(node.id)) for node in payload["nodes"]],
         edges=[lineage_edge(edge) for edge in payload["edges"]],
         unresolved_targets=[
             UnresolvedTarget.model_validate(item) for item in payload["unresolved_targets"]
@@ -108,9 +105,7 @@ def list_assets(
         page_size=resolved_page_size,
     )
     rows, total = service.list_page(query)
-    mapped = [
-        asset_list_item(row.asset, row.snapshot, row.last_changed_at) for row in rows
-    ]
+    mapped = [asset_list_item(row.asset, row.snapshot, row.last_changed_at) for row in rows]
     return AssetListResponse(
         items=mapped,
         total=total,
@@ -201,10 +196,11 @@ def list_asset_loads(
     service: Annotated[ExtractionLoadService, Depends(get_extraction_load_service)],
     page: int = Query(default=1, ge=1),
     page_size: int | None = Query(default=None, ge=1),
+    include_total: bool = Query(default=True),
 ) -> LoadFileListResponse:
     settings = get_portal_settings()
     resolved_page_size = min(page_size or settings.default_page_size, settings.max_page_size)
-    payload = service.list_loads(asset_id, page, resolved_page_size)
+    payload = service.list_loads(asset_id, page, resolved_page_size, include_total=include_total)
     if payload is None:
         raise HTTPException(status_code=404, detail="Asset not found")
     return LoadFileListResponse(
@@ -225,4 +221,5 @@ def list_asset_loads(
         page=page,
         page_size=resolved_page_size,
         available=payload.available,
+        has_more=payload.has_more,
     )
