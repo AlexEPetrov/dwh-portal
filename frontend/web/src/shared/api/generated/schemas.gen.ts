@@ -1091,7 +1091,14 @@ export const $LoadFileListResponse = {
             title: 'Items'
         },
         total: {
-            type: 'integer',
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Total'
         },
         page: {
@@ -1105,6 +1112,11 @@ export const $LoadFileListResponse = {
         available: {
             type: 'boolean',
             title: 'Available'
+        },
+        has_more: {
+            type: 'boolean',
+            title: 'Has More',
+            default: false
         }
     },
     type: 'object',

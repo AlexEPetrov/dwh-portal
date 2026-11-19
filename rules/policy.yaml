@@ -35,6 +35,11 @@ change_classes:
   business_or_contract_semantic:
     approval: human_required
 topics:
+  core-local-environment:
+    paths:
+    - rules/workflows/core-local-environment.md
+    approval: human_required
+    workflow: core-local-environment
   catalog:
     paths:
     - backend/core-service/src/domains/catalog/**
@@ -175,6 +180,22 @@ contracts:
     escalate_if: business_semantic_change
     escalate_to: human_required
 verification:
+  OPENSPEC-CHANGE-STATUS:
+    run_template: openspec status --change "{change_name}" --json
+  OPENSPEC-SPECS-INSTRUCTIONS:
+    run_template: openspec instructions specs --change "{change_name}" --json
+  OPENSPEC-DESIGN-INSTRUCTIONS:
+    run_template: openspec instructions design --change "{change_name}" --json
+  OPENSPEC-VALIDATE-SPECS:
+    run: openspec validate --specs
+  CORE-ENV-INSPECT:
+    run: cd backend/core-service && python3 --version && if [ -e .venv ] || [ -L .venv ]; then printf 'Existing .venv must be inspected before reuse\n'; else printf 'No existing .venv\n'; fi
+  CORE-ENV-CREATE:
+    run: cd backend/core-service && test ! -e .venv && test ! -L .venv && python3 -m venv .venv
+  CORE-ENV-PRESERVE-RELOCATED:
+    run: cd backend/core-service && test -d .venv && test ! -L .venv && test ! -e .venv.before-fast-load-pages && test ! -L .venv.before-fast-load-pages && mv -T -n .venv .venv.before-fast-load-pages && test ! -e .venv && test ! -L .venv
+  CORE-ENV-INSTALL:
+    run: cd backend/core-service && .venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt
   CORE-PYTEST-UNIT:
     run: cd backend/core-service && PYTHONPATH=. .venv/bin/pytest tests/unit/ -v
   CORE-PYTEST-TARGET:

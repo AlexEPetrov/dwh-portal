@@ -49,7 +49,7 @@ export const catalogKeys = {
     changes: (params: ListChangesData) => [...catalogScope, 'changes', params] as const,
     periodChanges: (days: number) => [...catalogScope, 'changes', 'period', days] as const,
     loads: (assetId: string, page: number, pageSize: number) =>
-        [...catalogScope, 'loads', assetId, { page, pageSize }] as const,
+        [...catalogScope, 'loads', assetId, { page, pageSize, includeTotal: false }] as const,
 };
 
 export const useCatalogOverview = () => useQuery({
@@ -127,7 +127,7 @@ export const useCatalogLoads = (assetId: string, page: number, pageSize: number)
     ...lifecycle,
     queryKey: catalogKeys.loads(assetId, page, pageSize),
     enabled: Boolean(assetId),
-    queryFn: ({ signal }) => requestWithSignal(signal, listAssetLoads({ assetId, page, pageSize })),
+    queryFn: ({ signal }) => requestWithSignal(signal, listAssetLoads({ assetId, page, pageSize, includeTotal: false })),
 });
 
 export const LINEAGE_PICKER_TYPES = [

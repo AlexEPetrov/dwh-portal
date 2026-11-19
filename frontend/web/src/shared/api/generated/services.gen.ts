@@ -221,6 +221,7 @@ export const getAssetLineage = (data: GetAssetLineageData): CancelablePromise<Ge
  * @param data.assetId
  * @param data.page
  * @param data.pageSize
+ * @param data.includeTotal
  * @returns LoadFileListResponse Successful Response
  * @throws ApiError
  */
@@ -232,7 +233,8 @@ export const listAssetLoads = (data: ListAssetLoadsData): CancelablePromise<List
     },
     query: {
         page: data.page,
-        page_size: data.pageSize
+        page_size: data.pageSize,
+        include_total: data.includeTotal
     },
     errors: {
         422: 'Validation Error'

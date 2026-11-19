@@ -638,6 +638,16 @@
               ],
               "title": "Page Size"
             }
+          },
+          {
+            "name": "include_total",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Total"
+            }
           }
         ],
         "responses": {
@@ -2226,7 +2236,14 @@
             "title": "Items"
           },
           "total": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Total"
           },
           "page": {
@@ -2240,6 +2257,11 @@
           "available": {
             "type": "boolean",
             "title": "Available"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
           }
         },
         "type": "object",

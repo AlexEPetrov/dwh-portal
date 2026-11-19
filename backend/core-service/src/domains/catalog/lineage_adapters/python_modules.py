@@ -103,7 +103,7 @@ class PythonModulesLineageAdapter:
             details["processes"] = len(processes)
             logger.info(
                 "python_modules: ищем модули в %s, процессов %s, mode=%s",
-                sources.roots,
+                ", ".join(str(root) for root in sources.roots),
                 len(processes),
                 mode,
             )
@@ -191,6 +191,8 @@ class PythonModulesLineageAdapter:
             )
             return
         if entry is None:
+            for root in sources.roots:
+                _log_module_lookup(module_name, root, None, [], [])
             details["diagnostics"] += 1
             self._diagnostic(
                 process.id,

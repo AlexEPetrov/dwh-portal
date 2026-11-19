@@ -145,6 +145,7 @@ celerybeat.pid
 .env
 !infra/environments/**/.env
 .venv
+/backend/core-service/.venv.before-fast-load-pages/
 env/
 venv/
 ENV/

@@ -1,6 +1,6 @@
 import type { LoadFileItem } from '@shared/api/generated';
 import { formatBytes, formatDateTime } from '@shared/ui/portal';
-import { Alert, Card, Empty, Spin, Table } from 'antd';
+import { Alert, Button, Card, Empty, Flex, Space, Spin, Table, Typography } from 'antd';
 import { useState } from 'react';
 import { useCatalogLoads } from '../queries';
 
@@ -10,12 +10,11 @@ type Props = {
   compact?: boolean;
 };
 
-const PAGE_SIZE_OPTIONS = ['20', '50', '100'];
+const PAGE_SIZE = 50;
 
 const ExtractionLoadsContent = ({ assetId, hideWhenUnavailable = false, compact = false }: Props) => {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
-  const loadsQuery = useCatalogLoads(assetId, page, pageSize);
+  const loadsQuery = useCatalogLoads(assetId, page, PAGE_SIZE);
   const payload = loadsQuery.data;
 
   if (loadsQuery.isError) {
@@ -40,18 +39,22 @@ const ExtractionLoadsContent = ({ assetId, hideWhenUnavailable = false, compact 
       dataSource={payload?.items ?? []}
       locale={{ emptyText: 'Нет загруженных файлов' }}
       scroll={compact ? { y: 280 } : undefined}
-      pagination={{
-        current: page,
-        pageSize,
-        total: payload?.total ?? 0,
-        showSizeChanger: true,
-        pageSizeOptions: PAGE_SIZE_OPTIONS,
-        showTotal: (total) => `${total}`,
-        onChange: (nextPage, nextSize) => {
-          setPage(nextSize === pageSize ? nextPage : 1);
-          setPageSize(nextSize);
-        },
-      }}
+      pagination={false}
+      footer={() => (
+        <Flex gap="small" justify="space-between" align="center" wrap>
+          <Typography.Text type="secondary">
+            Страница {page} · Файлов: {payload.items.length}
+          </Typography.Text>
+          <Space>
+            <Button disabled={page === 1 || loadsQuery.isFetching} onClick={() => setPage((current) => current - 1)}>
+              Назад
+            </Button>
+            <Button disabled={!payload.has_more || loadsQuery.isFetching} onClick={() => setPage((current) => current + 1)}>
+              Далее
+            </Button>
+          </Space>
+        </Flex>
+      )}
       columns={[
         { title: 'Файл', dataIndex: 'file_name', ellipsis: true },
         {

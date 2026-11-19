@@ -24,6 +24,19 @@ Missing assets MUST return 404. Unsupported asset types/providers and missing
 `sys.log_files` MUST return empty items with `available=false`, not 500. The
 loads panel MUST remain available on registry source cards and Lineage pages.
 
+#### Scenario: Страница загрузок постранично
+
+- GIVEN extraction source из реестра с несколькими строками в `sys.log_files`
+- WHEN клиент запрашивает `GET /api/v1/assets/{id}/loads?page=1&page_size=50`
+- THEN ответ содержит не более 50 файлов, `total` и `available=true`
+- AND строки отсортированы по времени загрузки по убыванию
+
+#### Scenario: Airflow extraction source без журнала загрузок
+
+- GIVEN `EXTRACTION_SOURCE` с `source_provider=airflow_dags`
+- WHEN клиент запрашивает `/loads`
+- THEN `items` пустой и `available=false`
+
 #### Scenario: Existing exact-count caller
 
 - GIVEN a registry extraction source with load history

@@ -203,19 +203,32 @@ MUST оставаться пустыми.
 Для `EXTRACTION_SOURCE` с `source_provider=extraction_registry`
 `GET /api/v1/assets/{asset_id}/loads` MUST возвращать постраничный список
 фактически загруженных файлов из `sys.log_files` по `extraction_source_id`
-(= `native_id` объекта), сортировка по времени загрузки DESC.
+(= `native_id` объекта), сортировка по времени загрузки DESC и по
+идентификатору DESC при совпадении времени, если идентификатор доступен.
 
 Это live-чтение журнала загрузок, не metadata-сканирование каталога и не
 замена снимков. Overview, storage и список объектов по-прежнему из снимков.
 Файлы MUST NOT становиться узлами lineage-графа.
 
-Эндпоинт MUST поддерживать `page` / `page_size`. Если объекта нет — 404.
+Эндпоинт MUST поддерживать `page`, `page_size` и `include_total`.
+`include_total` MUST по умолчанию быть `true`, сохраняя точное общее
+количество для существующих запросов. При `include_total=false` провайдер
+MUST NOT выполнять подсчёт общего количества и MUST читать не более
+`page_size + 1` строк. Ответ MUST содержать не более `page_size` файлов и
+`has_more`, показывающий наличие следующей страницы. Для доступного журнала
+без подсчёта `total` MUST быть `null`, а не вымышленным точным количеством.
+Для заведомо пустого или недоступного журнала MAY возвращаться ноль.
+
+Если объекта нет — 404.
 Для `EXTRACTION_SOURCE` из Airflow DAG, для других типов объектов и если
 `sys.log_files` отсутствует, ответ MUST быть пустым списком с
 `available=false`, а не 500.
 
 UI MUST показывать вкладку «Загрузки» на карточке registry extraction source
-и на странице Lineage при выборе такого объекта.
+и на странице Lineage при выборе такого объекта. UI MUST первоначально
+запрашивать последние 50 загрузок без точного подсчёта. Старые страницы MUST
+загружаться только по запросу пользователя; UI MUST NOT заранее загружать
+всю историю или ждать её общего количества для отображения первой страницы.
 
 #### Scenario: Страница загрузок постранично
 
@@ -229,6 +242,33 @@ UI MUST показывать вкладку «Загрузки» на карто
 - GIVEN `EXTRACTION_SOURCE` с `source_provider=airflow_dags`
 - WHEN клиент запрашивает `/loads`
 - THEN `items` пустой и `available=false`
+
+#### Scenario: Existing exact-count caller
+
+- GIVEN a registry extraction source with load history
+- WHEN a client requests loads without `include_total`
+- THEN `total` is the exact count and the page contains at most `page_size` items
+- AND `has_more` indicates whether another page exists
+
+#### Scenario: Latest 50 without counting history
+
+- GIVEN a registry extraction source with more than 50 loads
+- WHEN UI requests page 1 with `page_size=50` and `include_total=false`
+- THEN the provider executes no count query and reads at most 51 matching rows
+- AND the response contains the newest 50 items, `total=null`, and `has_more=true`
+- AND older history is fetched only when the user requests another page
+
+#### Scenario: Last or empty page
+
+- GIVEN a count-free request at the end of load history
+- WHEN no additional row exists after the requested page
+- THEN `has_more=false`, with at most `page_size` items and `total=null`
+
+#### Scenario: Unavailable history
+
+- GIVEN an Airflow source, another asset type, or an unavailable log table
+- WHEN a client requests loads
+- THEN items are empty, `available=false`, and `has_more=false`
 
 ### Requirement: Браузер говорит только с Portal API
 

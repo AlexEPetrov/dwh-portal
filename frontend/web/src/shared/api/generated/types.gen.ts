@@ -225,10 +225,11 @@ export type LoadFileItem = {
 
 export type LoadFileListResponse = {
     items: Array<LoadFileItem>;
-    total: number;
+    total: number | null;
     page: number;
     page_size: number;
     available: boolean;
+    has_more?: boolean;
 };
 
 export type LoginRequest = {
@@ -399,6 +400,7 @@ export type GetAssetLineageResponse = LineageResponse;
 
 export type ListAssetLoadsData = {
     assetId: string;
+    includeTotal?: boolean;
     page?: number;
     pageSize?: number | null;
 };
