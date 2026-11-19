@@ -1,18 +1,13 @@
 import { FreshnessBar, changeGlyph, formatBytes } from '@shared/ui/portal';
 import { Alert, Card, Col, Empty, List, Progress, Row, Space, Spin, Statistic, Tag, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import OverviewSearch from '../components/OverviewSearch';
 import { useCatalogOverview } from '../queries';
 
 const OverviewPage = () => {
   const navigate = useNavigate();
   const overviewQuery = useCatalogOverview();
   const data = overviewQuery.data;
-
-  if (!data) {
-    return overviewQuery.isError
-      ? <Alert type="error" showIcon message="Не удалось загрузить overview" description={overviewQuery.error.message} />
-      : <Spin tip="Загрузка overview…"><div style={{ minHeight: 160 }} /></Spin>;
-  }
 
   const maxSchema = Math.max(1, ...(data?.storage_by_schema || []).map((row) => row.total_bytes));
 
@@ -22,8 +17,15 @@ const OverviewPage = () => {
         <Typography.Title level={2} style={{ marginBottom: 4 }}>
           DWH Overview
         </Typography.Title>
-        <FreshnessBar items={data?.collector_freshness} />
+        {data ? <FreshnessBar items={data.collector_freshness} /> : null}
       </div>
+      <OverviewSearch />
+      {!data ? (
+        overviewQuery.isError
+          ? <Alert type="error" showIcon message="Не удалось загрузить overview" description={overviewQuery.error.message} />
+          : <Spin tip="Загрузка overview…"><div style={{ minHeight: 160 }} /></Spin>
+      ) : (
+      <>
       {overviewQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить overview" description={overviewQuery.error.message} /> : null}
       {overviewQuery.isFetching ? <Spin size="small" /> : null}
       <Row gutter={[16, 16]}>
@@ -107,6 +109,8 @@ const OverviewPage = () => {
           </Card>
         </Col>
       </Row>
+      </>
+      )}
     </Space>
   );
 };
