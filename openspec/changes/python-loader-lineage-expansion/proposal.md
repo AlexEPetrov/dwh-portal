@@ -7,6 +7,13 @@ lineage requirement as baseline. This is an approved business-semantic change
 (`human_required`): the user explicitly approved entry-point anchored, bounded,
 source-aware Python analysis and reconciliation of the current spec.
 
+The user additionally explicitly approved semicolon-separated roots in the
+existing string setting, trimming, empty-component removal, physical-path
+deduplication, single-root compatibility, and ambiguity-safe lookup for entry
+modules and absolute dependencies. Relative imports stay in their declaring
+package/root. Extend this same approved ingestion change; no new capability,
+HTTP surface or generated contract is introduced.
+
 Authoring scopes: registry collector, Python lineage adapter and a dedicated
 static analyzer, independent catalog unit tests, and OpenSpec artifacts.
 Preserve process identity; retain only the safe entry-point identifier, not

@@ -2,7 +2,7 @@
 
 Use a Python-only symbolic AST analyzer; leave legacy Airflow pipelines intact.
 Index symbols by source module and class, resolve local imports lazily within
-the configured root, and use explicit budgets for source size, module count,
+the configured roots, and use explicit budgets for source size, module count,
 AST size, recursive resolution, calls, expression steps and loop iterations.
 
 Configured classes dispatch through `load_file` (including inherited methods);
@@ -29,6 +29,26 @@ unique catalog name. Catalog mode never invents missing tables; code mode keeps
 unresolved TABLE semantics. No view dependency processing is added.
 
 ## Verification and reconciliation
+
+The existing `python_modules_root` string accepts any number of `;`-separated
+paths. Trim components, ignore empty ones, resolve paths and deduplicate aliases
+before lookup. Diagnose unavailable roots with portable ordinal labels, continue
+valid roots, and skip successfully when none remain. Keep Airflow settings and
+shared resolvers unchanged.
+
+One Python-only resolver serves entries, imports and code-mode storage closure.
+Absolute names search all roots, deduplicate physical candidates and reject
+collisions, including duplicated regular package prefixes. Relative imports
+anchor to the declaring file and its most specific containing root; no fallback
+to another root is allowed. Candidate symlinks must stay inside their lookup root.
+Blocked imports remain unknown, not external name-based writer guesses. Keep
+independently proven writes and diagnose partial results.
+
+Preserve process identity. For multiple usable roots, prefix existing relative
+POSIX provenance with `root_N/`, ordered by normalized unique usable roots; one
+root retains its old relative filenames. Never persist absolute source roots.
+The storage graph and constant cache are per process and use these same import
+bindings, preventing ambiguity or previous-process state from leaking into it.
 
 Use registered CORE-PYTEST-TARGET for `tests/unit/test_catalog` and
 CORE-PYTEST-UNIT. Tests create independent temporary source trees. Reconcile

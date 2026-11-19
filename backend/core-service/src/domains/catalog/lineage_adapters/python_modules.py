@@ -15,15 +15,17 @@ from domains.catalog.lineage_adapters.airflow_dags import (
 )
 from domains.catalog.lineage_adapters.airflow_syntax import (
     TableRef,
-    bind_imported_constants,
-    dag_closure,
-    iter_local_deps,
     parse_module,
     rescan_writes,
-    resolve_local_module,
     storage_paths_for_closure,
 )
-from domains.catalog.lineage_adapters.python_loader_analysis import PythonLoaderAnalyzer
+from domains.catalog.lineage_adapters.python_loader_analysis import (
+    AmbiguousModule,
+    PythonLoaderAnalyzer,
+    PythonModuleRoots,
+    _Limit,
+    _Symbol,
+)
 from domains.catalog.lineage_adapters.runs import record_adapter_run, skipped_run
 from domains.catalog.models import (
     Asset,
@@ -65,8 +67,18 @@ class PythonModulesLineageAdapter:
 
     def collect(self, now: datetime.datetime | None = None) -> CollectionRun:
         started = now or datetime.datetime.now(datetime.timezone.utc)
-        root_raw = (self._settings.python_modules_root or "").strip()
-        if not root_raw:
+        sources = PythonModuleRoots.from_setting(self._settings.python_modules_root)
+        for label in sources.invalid:
+            self._diagnostic(
+                None,
+                started,
+                {
+                    "code": "MODULES_ROOT_UNAVAILABLE",
+                    "message": "Configured Python source root is unavailable",
+                    "root": label,
+                },
+            )
+        if not sources.roots:
             logger.info("python_modules: корень модулей не задан, поиск не выполняется")
             return skipped_run(
                 self._store,
@@ -75,16 +87,6 @@ class PythonModulesLineageAdapter:
                 reason="MODULES_ROOT_MISSING",
                 message="Python modules root is not configured",
             )
-        root = Path(root_raw)
-        if not root.is_dir():
-            logger.info("python_modules: папка не найдена: %s", root)
-            return skipped_run(
-                self._store,
-                name=self.name,
-                started=started,
-                reason="MODULES_ROOT_MISSING",
-                message=f"Python modules root does not exist: {root}",
-            )
         mode = _lineage_mode(self._settings)
         details = {
             "processes": 0,
@@ -92,7 +94,7 @@ class PythonModulesLineageAdapter:
             "writes": 0,
             "storages": 0,
             "unresolved": 0,
-            "diagnostics": 0,
+            "diagnostics": len(sources.invalid),
             "mode": mode,
         }
         try:
@@ -101,15 +103,12 @@ class PythonModulesLineageAdapter:
             details["processes"] = len(processes)
             logger.info(
                 "python_modules: ищем модули в %s, процессов %s, mode=%s",
-                root,
+                sources.roots,
                 len(processes),
                 mode,
             )
-            facts_cache: dict[Path, Any] = {}
             for process in processes:
-                self._ingest_process(
-                    process, root, catalog_tables, facts_cache, started, mode, details
-                )
+                self._ingest_process(process, sources, catalog_tables, started, mode, details)
             message = (
                 f"Scanned {details['processes']} processes, "
                 f"resolved {details['resolved']}, writes {details['writes']}"
@@ -119,14 +118,16 @@ class PythonModulesLineageAdapter:
                 if details["diagnostics"] and details["writes"]
                 else CollectorStatus.SUCCESS
             )
-        except Exception as exc:
+        except Exception:
+            # Full exception paths belong in server logs, not persisted run details.
+            logger.exception("python_modules: source analysis failed")
             return record_adapter_run(
                 self._store,
                 name=self.name,
                 started=started,
                 status=CollectorStatus.FAILED,
-                message=str(exc),
-                details={"error": str(exc)},
+                message="Python source analysis failed; see server logs",
+                details={"error": "PYTHON_SOURCE_ANALYSIS_FAILED"},
             )
         return record_adapter_run(
             self._store,
@@ -164,17 +165,32 @@ class PythonModulesLineageAdapter:
     def _ingest_process(
         self,
         process: Asset,
-        root: Path,
+        sources: PythonModuleRoots,
         catalog_tables: list[Asset],
-        facts_cache: dict[Path, Any],
         now: datetime.datetime,
         mode: str,
         details: dict,
     ) -> None:
         module_name = str(process.attributes.get("module") or "").strip()
-        entry = resolve_local_module(module_name, root / "_portal_entry_.py", root)
+        try:
+            entry = sources.resolve(module_name)
+        except AmbiguousModule:
+            details["diagnostics"] += 1
+            self._diagnostic(
+                process.id,
+                now,
+                {
+                    "code": "MODULE_AMBIGUOUS",
+                    "message": "Registry module has multiple configured source candidates",
+                    "module": module_name,
+                },
+            )
+            process.attributes = {**process.attributes, "write_evidence": []}
+            self._mark_process(
+                process, MetadataStatus.MISSING, LineageStatus.UNRESOLVED, now, source_files=[]
+            )
+            return
         if entry is None:
-            _log_module_lookup(module_name, root, None, [], [])
             details["diagnostics"] += 1
             self._diagnostic(
                 process.id,
@@ -188,7 +204,8 @@ class PythonModulesLineageAdapter:
             self._mark_process(process, MetadataStatus.MISSING, LineageStatus.UNRESOLVED, now)
             return
 
-        analysis = PythonLoaderAnalyzer(root).analyze(
+        analyzer = PythonLoaderAnalyzer(sources)
+        analysis = analyzer.analyze(
             entry,
             (
                 "__invalid_entry_point__"
@@ -198,16 +215,19 @@ class PythonModulesLineageAdapter:
         )
         refs = analysis.refs
         process.attributes = {**process.attributes, "write_evidence": analysis.evidence}
+        matched = self._match_tables(refs, catalog_tables, now, mode)
+        path_refs = []
+        if mode == "code":
+            # A process-local graph prevents constants from leaking across loaders.
+            facts_cache: dict[Path, Any] = {}
+            storage_closure = self._ensure_closure(entry, analyzer, facts_cache)
+            path_refs = storage_paths_for_closure(storage_closure, facts_cache)
+        analysis.source_files = sorted(
+            sources.label(path) for path, module in analyzer.modules.items() if module is not None
+        )
         for diagnostic in analysis.diagnostics:
             details["diagnostics"] += 1
             self._diagnostic(process.id, now, diagnostic)
-        closure_paths = [root / path for path in analysis.source_files]
-        matched = self._match_tables(refs, catalog_tables, now, mode, root)
-        path_refs = []
-        if mode == "code":
-            # Preserve existing storage discovery independently of TABLE inference.
-            storage_closure = self._ensure_closure(entry, root, facts_cache)
-            path_refs = storage_paths_for_closure(storage_closure, facts_cache)
         if len(matched) < len(refs):
             details["diagnostics"] += 1
             self._diagnostic(
@@ -219,7 +239,7 @@ class PythonModulesLineageAdapter:
                 },
             )
 
-        _log_module_lookup(module_name, root, entry, refs, matched)
+        _log_module_lookup(module_name, sources.owner(entry), entry, refs, matched)
         if not matched and not path_refs:
             details["diagnostics"] += 1
             self._diagnostic(
@@ -229,7 +249,7 @@ class PythonModulesLineageAdapter:
                     "code": "NO_WRITE_TARGETS",
                     "message": f"no write targets found in module closure for {module_name}",
                     "module": module_name,
-                    "entry": str(entry),
+                    "entry": sources.label(entry),
                 },
             )
             self._mark_process(
@@ -259,31 +279,47 @@ class PythonModulesLineageAdapter:
             else LineageStatus.RESOLVED if matched else LineageStatus.UNRESOLVED
         )
         self._mark_process(
-            process, MetadataStatus.OK, lineage, now, source_files=_rel_files(closure_paths, root)
+            process, MetadataStatus.OK, lineage, now, source_files=analysis.source_files
         )
         details["resolved"] += 1
 
-    def _ensure_closure(self, entry: Path, root: Path, facts_cache: dict[Path, Any]) -> list[Path]:
-        resolved_root = root.resolve()
-        queue = [entry.resolve()]
+    def _ensure_closure(
+        self, entry: Path, analyzer: PythonLoaderAnalyzer, facts_cache: dict[Path, Any]
+    ) -> list[Path]:
+        queue = [entry.resolve(), *(path for path in analyzer.modules if path != entry.resolve())]
         seen: set[Path] = set()
         while queue and len(seen) < 80:
             path = queue.pop(0)
             if path in seen:
                 continue
             seen.add(path)
-            if path not in facts_cache:
-                facts = self._parse_file(path)
-                if facts is None:
-                    continue
-                facts_cache[path] = facts
-            for dep in iter_local_deps(facts_cache[path], resolved_root):
+            try:
+                module = analyzer._module(path)
+            except (_Limit, RecursionError):
+                analyzer._diagnostic("ANALYSIS_LIMIT", path)
+                break
+            facts = self._parse_file(path) if module is not None else None
+            if facts is None:
+                continue
+            facts_cache[path] = facts
+            for dep in module.dependencies:
                 if dep not in seen:
                     queue.append(dep)
-        bind_imported_constants(facts_cache, resolved_root)
-        for facts in facts_cache.values():
+            for imported in module.imports.values():
+                if isinstance(imported, _Symbol) and imported.path not in seen:
+                    queue.append(imported.path)
+        if queue:
+            analyzer._diagnostic("ANALYSIS_LIMIT", entry)
+        for path, facts in facts_cache.items():
+            module = analyzer.modules[path]
+            for alias, imported in module.imports.items():
+                if not isinstance(imported, _Symbol):
+                    continue
+                other = facts_cache.get(imported.path)
+                if other is not None and imported.name in other.constants:
+                    facts.constants[alias] = other.constants[imported.name]
             rescan_writes(facts)
-        return dag_closure(entry.resolve(), facts_cache, resolved_root)
+        return list(facts_cache)
 
     def _parse_file(self, path: Path) -> Any | None:
         if any(part in SKIP_DIRS for part in path.parts):
@@ -306,7 +342,6 @@ class PythonModulesLineageAdapter:
         tables: list[Asset],
         now: datetime.datetime,
         mode: str,
-        root: Path,
     ) -> list[Asset]:
         matched: list[Asset] = []
         seen: set[str] = set()
@@ -504,19 +539,3 @@ def _log_module_lookup(
 def _lineage_mode(settings: DwhCollectorSettings) -> str:
     mode = (settings.python_modules_lineage_mode or "catalog").strip().lower()
     return mode if mode in {"catalog", "code"} else "catalog"
-
-
-def _rel_files(paths: list[Path], root: Path) -> list[str]:
-    found: list[str] = []
-    seen: set[str] = set()
-    root_resolved = root.resolve()
-    for path in paths:
-        try:
-            rel = str(path.resolve().relative_to(root_resolved))
-        except ValueError:
-            rel = str(path)
-        if rel in seen:
-            continue
-        seen.add(rel)
-        found.append(rel)
-    return found

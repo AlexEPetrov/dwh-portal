@@ -9,17 +9,17 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from domains.catalog.lineage_adapters.airflow_syntax import (
     TableRef,
-    resolve_local_module,
-    resolve_relative,
 )
 
 UNKNOWN = object()
+_BLOCKED_IMPORT = object()
 _UNKNOWN_TEXT = "__PORTAL_UNKNOWN_VALUE__"
 MAX_MODULES = 80
 MAX_FILE_BYTES = 2_000_000
@@ -41,6 +41,7 @@ class _Symbol:
     path: Path
     name: str = ""
     owner: str = ""
+    absolute: str = ""
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,12 @@ class _Bound:
 @dataclass(frozen=True)
 class _External:
     name: str
+
+
+@dataclass(frozen=True)
+class _Namespace:
+    name: str
+    source: Path
 
 
 @dataclass(frozen=True)
@@ -70,6 +77,7 @@ class _Module:
     tree: ast.Module
     symbols: dict[str, ast.AST] = field(default_factory=dict)
     imports: dict[str, Any] = field(default_factory=dict)
+    dependencies: set[Path] = field(default_factory=set)
 
 
 @dataclass
@@ -86,11 +94,102 @@ class _Limit(Exception):
     pass
 
 
+class AmbiguousModule(Exception):
+    """Multiple confined source files claim the same absolute module name."""
+
+
+class PythonModuleRoots:
+    """Normalize Python-only roots and resolve sources without search-order wins."""
+
+    def __init__(self, roots: Path | Iterable[Path]):
+        self.roots: list[Path] = []
+        self.invalid: list[str] = []
+        seen: set[Path] = set()
+        for index, raw in enumerate([roots] if isinstance(roots, Path) else roots, 1):
+            try:
+                root = raw.resolve()
+                if root in seen:
+                    continue
+                seen.add(root)
+                if not root.is_dir():
+                    self.invalid.append(f"root_{index}")
+                    continue
+                self.roots.append(root)
+            except (OSError, ValueError, RuntimeError):
+                self.invalid.append(f"root_{index}")
+
+    @classmethod
+    def from_setting(cls, value: str | None) -> PythonModuleRoots:
+        """Split the existing string setting; empty components are not roots."""
+        return cls(Path(part.strip()) for part in (value or "").split(";") if part.strip())
+
+    def owner(self, path: Path) -> Path | None:
+        """Use the most specific configured root for overlapping source trees."""
+        resolved = path.resolve()
+        owners = [root for root in self.roots if resolved.is_relative_to(root)]
+        return max(owners, key=lambda root: len(root.parts)) if owners else None
+
+    def label(self, path: Path) -> str:
+        """Return portable provenance, never a host-specific absolute path."""
+        root = self.owner(path)
+        if root is None:
+            return "<outside_python_roots>"
+        relative = path.resolve().relative_to(root).as_posix()
+        return relative if len(self.roots) == 1 else f"root_{self.roots.index(root) + 1}/{relative}"
+
+    def _candidate(self, base: Path, root: Path) -> Path | None:
+        try:
+            for path in (base.with_suffix(".py"), base / "__init__.py"):
+                if path.is_file() and path.resolve().is_relative_to(root):
+                    return path.resolve()
+        except (OSError, ValueError, RuntimeError):
+            return None
+        return None
+
+    def namespace(self, spec: str) -> bool:
+        """Recognize confined namespace directories without executing packages."""
+        return any(
+            (base := root.joinpath(*spec.split("."))).is_dir()
+            and base.resolve().is_relative_to(root)
+            for root in self.roots
+        )
+
+    def resolve(self, spec: str, from_file: Path | None = None, level: int = 0) -> Path | None:
+        """Anchor relative imports; reject collisions in absolute module prefixes."""
+        parts = spec.split(".") if spec else []
+        if any(not part.isidentifier() for part in parts):
+            return None
+        if level:
+            root = self.owner(from_file) if from_file is not None else None
+            if root is None:
+                return None
+            base = from_file.resolve().parent
+            for _ in range(level - 1):
+                base = base.parent
+            if not base.is_relative_to(root):
+                return None
+            return self._candidate(base.joinpath(*parts), root)
+        if not parts:
+            return None
+        # A unique child must not silently combine two identically named packages.
+        for length in range(1, len(parts) + 1):
+            hits = {
+                candidate
+                for root in self.roots
+                if (candidate := self._candidate(root.joinpath(*parts[:length]), root)) is not None
+            }
+            if len(hits) > 1:
+                raise AmbiguousModule(spec)
+            if length == len(parts):
+                return next(iter(hits), None)
+        return None
+
+
 class PythonLoaderAnalyzer:
     """Resolve one registry entry point within a confined, finite source graph."""
 
-    def __init__(self, root: Path):
-        self.root = root.resolve()
+    def __init__(self, root: Path | Iterable[Path] | PythonModuleRoots):
+        self.sources = root if isinstance(root, PythonModuleRoots) else PythonModuleRoots(root)
         self.result = LoaderAnalysis()
         self.modules: dict[Path, _Module | None] = {}
         self.resolving: set[tuple] = set()
@@ -142,9 +241,7 @@ class PythonLoaderAnalyzer:
         except (_Limit, RecursionError):
             self._diagnostic("ANALYSIS_LIMIT", entry)
         self.result.source_files = sorted(
-            str(path.relative_to(self.root))
-            for path, module in self.modules.items()
-            if module is not None
+            self.sources.label(path) for path, module in self.modules.items() if module is not None
         )
         return self.result
 
@@ -157,7 +254,7 @@ class PythonLoaderAnalyzer:
         payload = {
             "code": code,
             "message": code.replace("_", " ").lower(),
-            "file": str(path.relative_to(self.root)),
+            "file": self.sources.label(path),
             "line": getattr(node, "lineno", 1),
         }
         if payload not in self.result.diagnostics:
@@ -165,7 +262,7 @@ class PythonLoaderAnalyzer:
 
     def _module(self, path):
         path = path.resolve()
-        if not path.is_relative_to(self.root):
+        if self.sources.owner(path) is None:
             return None
         if path in self.modules:
             return self.modules[path]
@@ -185,7 +282,7 @@ class PythonLoaderAnalyzer:
             return None
         module = _Module(tree)
         self.modules[path] = module
-        self.result.source_files.append(str(path.relative_to(self.root)))
+        self.result.source_files.append(self.sources.label(path))
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 module.symbols[node.name] = node
@@ -198,38 +295,68 @@ class PythonLoaderAnalyzer:
             elif isinstance(node, ast.Import):
                 for alias in node.names:
                     spec = alias.name if alias.asname else alias.name.split(".")[0]
-                    dep = resolve_local_module(spec, path, self.root)
-                    module.imports[alias.asname or spec] = _Symbol(dep) if dep else _External(spec)
+                    full = self._resolve_import(alias.name, path, node)
+                    dep = (
+                        self._resolve_import(spec, path, node)
+                        if full is not _BLOCKED_IMPORT
+                        else _BLOCKED_IMPORT
+                    )
+                    if isinstance(full, Path):
+                        module.dependencies.add(full)
+                    module.imports[alias.asname or spec] = (
+                        _BLOCKED_IMPORT
+                        if dep is _BLOCKED_IMPORT
+                        else (
+                            _Symbol(dep, absolute=spec)
+                            if dep
+                            else (
+                                _Namespace(spec, path)
+                                if isinstance(full, Path) or self.sources.namespace(spec)
+                                else _External(spec)
+                            )
+                        )
+                    )
             elif isinstance(node, ast.ImportFrom):
-                dep = (
-                    resolve_relative(node.module, node.level, path, self.root)
-                    if node.level
-                    else resolve_local_module(node.module or "", path, self.root)
-                )
+                dep = self._resolve_import(node.module or "", path, node, node.level)
+                if isinstance(dep, Path):
+                    module.dependencies.add(dep)
                 for alias in node.names:
                     if alias.name == "*":
                         self._diagnostic("IMPORT_UNRESOLVED", path, node)
                         continue
-                    nested = (
-                        resolve_relative(
-                            ".".join(filter(None, [node.module, alias.name])),
-                            node.level,
-                            path,
-                            self.root,
-                        )
-                        if node.level
-                        else resolve_local_module(f"{node.module}.{alias.name}", path, self.root)
+                    nested = self._resolve_import(
+                        ".".join(filter(None, [node.module, alias.name])), path, node, node.level
                     )
+                    if isinstance(nested, Path) and dep is not _BLOCKED_IMPORT:
+                        module.dependencies.add(nested)
                     module.imports[alias.asname or alias.name] = (
-                        _Symbol(nested)
-                        if nested
+                        _BLOCKED_IMPORT
+                        if dep is _BLOCKED_IMPORT or nested is _BLOCKED_IMPORT
                         else (
-                            _Symbol(dep, alias.name)
-                            if dep
-                            else _External(f"{node.module}.{alias.name}")
+                            _Symbol(
+                                nested,
+                                absolute=(
+                                    ".".join(filter(None, [node.module, alias.name]))
+                                    if not node.level
+                                    else ""
+                                ),
+                            )
+                            if nested
+                            else (
+                                _Symbol(dep, alias.name)
+                                if dep
+                                else _External(f"{node.module}.{alias.name}")
+                            )
                         )
                     )
         return module
+
+    def _resolve_import(self, spec, path, node, level=0):
+        try:
+            return self.sources.resolve(spec, path, level)
+        except AmbiguousModule:
+            self._diagnostic("MODULE_AMBIGUOUS", path, node)
+            return _BLOCKED_IMPORT
 
     def _node(self, symbol):
         module = self._module(symbol.path)
@@ -281,6 +408,20 @@ class PythonLoaderAnalyzer:
 
     def _attr(self, value, name, seen=None):
         self._tick()
+        if value is _BLOCKED_IMPORT:
+            return _BLOCKED_IMPORT
+        if isinstance(value, _Namespace):
+            spec = f"{value.name}.{name}"
+            try:
+                dep = self.sources.resolve(spec)
+            except AmbiguousModule:
+                self._diagnostic("MODULE_AMBIGUOUS", value.source)
+                return _BLOCKED_IMPORT
+            return (
+                _Symbol(dep, absolute=spec)
+                if dep
+                else (_Namespace(spec, value.source) if self.sources.namespace(spec) else UNKNOWN)
+            )
         if isinstance(value, _External):
             return _External(f"{value.name}.{name}")
         if isinstance(value, _Super):
@@ -302,10 +443,20 @@ class PythonLoaderAnalyzer:
                 module = self._module(value.path)
                 parent = value.path.parent if value.path.name == "__init__.py" else None
                 if module and parent:
+                    if value.absolute:
+                        spec = f"{value.absolute}.{name}"
+                        try:
+                            nested = self.sources.resolve(spec)
+                        except AmbiguousModule:
+                            self._diagnostic("MODULE_AMBIGUOUS", value.path)
+                            return _BLOCKED_IMPORT
+                        return _Symbol(nested, absolute=spec) if nested else UNKNOWN
                     nested = parent / f"{name}.py"
                     package = parent / name / "__init__.py"
                     for path in (nested, package):
-                        if path.is_file() and path.resolve().is_relative_to(self.root):
+                        if path.is_file() and path.resolve().is_relative_to(
+                            self.sources.owner(value.path)
+                        ):
                             return _Symbol(path.resolve())
             return found
         node = self._node(value)
@@ -454,6 +605,10 @@ class PythonLoaderAnalyzer:
             if isinstance(node.func, ast.Attribute)
             else self._expr(node.func, env, path)
         )
+        # Unknown runtime receivers may still be dataframes; an explicitly
+        # blocked local import must never fall through to name-based writers.
+        if owner is _BLOCKED_IMPORT or function is _BLOCKED_IMPORT:
+            return _BLOCKED_IMPORT
         if isinstance(function, (_Symbol, _Bound)):
             symbol = function.function if isinstance(function, _Bound) else function
             if isinstance(self._node(symbol), ast.ClassDef):
@@ -563,7 +718,7 @@ class PythonLoaderAnalyzer:
         evidence = {
             "schema": schema,
             "table": table,
-            "file": str(path.relative_to(self.root)),
+            "file": self.sources.label(path),
             "line": node.lineno,
             "pattern": pattern,
         }

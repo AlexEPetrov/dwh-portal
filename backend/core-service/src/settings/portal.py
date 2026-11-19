@@ -46,6 +46,8 @@ class DwhCollectorSettings(BaseSettings):
     # Local Python loader / package sources for registry PROCESS AST lineage.
     # Distinct from airflow_dags_root — never share the setting in code.
     # Required for python_modules to produce WRITES_TO (otherwise the adapter skips).
+    # Semicolon-separated roots: trim whitespace, ignore empty entries, deduplicate
+    # resolved paths; module collisions are diagnosed, never resolved by order.
     python_modules_root: str | None = None
     # catalog: WRITES_TO only tables already in the catalog snapshot.
     # code: materialize write targets from module AST even if absent from the snapshot.

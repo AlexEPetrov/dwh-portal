@@ -5,7 +5,11 @@ import textwrap
 import pytest
 
 from domains.catalog.lineage_adapters import python_loader_analysis as analysis_module
-from domains.catalog.lineage_adapters.python_loader_analysis import PythonLoaderAnalyzer
+from domains.catalog.lineage_adapters.python_loader_analysis import (
+    AmbiguousModule,
+    PythonLoaderAnalyzer,
+    PythonModuleRoots,
+)
 from domains.catalog.lineage_adapters.python_modules import PythonModulesLineageAdapter
 from domains.catalog.models import Asset, AssetType, RelationshipType
 from settings.portal import DwhCollectorSettings
@@ -412,3 +416,301 @@ def test_adapter_qualified_miss_never_falls_back_to_another_schema(store, now, t
         assert target.attributes["unresolved"] is True
         assert target.attributes["schema"] == "inbox"
     assert store.get_asset(process.id).attributes["write_evidence"][0]["file"] == "loader.py"
+
+
+def _registry_process(store, now, module="loader"):
+    return store.upsert_asset(
+        Asset(
+            asset_type=AssetType.PROCESS,
+            name=module,
+            qualified_name=f"process:{module}",
+            source_provider="extraction_registry",
+            identity_key=f"process:{module}",
+            first_seen_at=now,
+            last_seen_at=now,
+            attributes={"handler_type": "Python", "module": module, "entry_point": "load_file"},
+        )
+    )
+
+
+def test_roots_trim_empty_normalized_and_symlink_duplicates(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "child").mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(root, target_is_directory=True)
+    _sources(root, {"loader.py": "def load_file():\n    df.to_sql('one', schema='raw')"})
+    sources = PythonModuleRoots.from_setting(f" ; {root} ; ; {root}/child/.. ; {alias}; {root} ; ")
+    assert sources.roots == [root.resolve()]
+    assert not sources.invalid
+    assert sources.resolve("loader") == root / "loader.py"
+    result = PythonLoaderAnalyzer(sources).analyze(root / "loader.py", "load_file")
+    assert _targets(result) == {("raw", "one")}
+    assert result.source_files == ["loader.py"]
+
+
+@pytest.mark.parametrize("position", [2, 5])
+def test_adapter_finds_entry_in_any_configured_root(store, now, tmp_path, position):
+    roots = [tmp_path / str(index) for index in range(5)]
+    for root in roots:
+        root.mkdir()
+    _sources(
+        roots[position - 1], {"loader.py": "def load_file():\n    df.to_sql('one', schema='raw')"}
+    )
+    process = _registry_process(store, now)
+    run = PythonModulesLineageAdapter(
+        store,
+        DwhCollectorSettings(
+            python_modules_root=" ; ".join(map(str, roots)), python_modules_lineage_mode="code"
+        ),
+    ).collect(now)
+    assert run.status == "SUCCESS"
+    assert run.details["writes"] == 1
+    stored = store.get_asset(process.id)
+    assert stored.identity_key == process.identity_key
+    assert stored.attributes["source_files"] == [f"root_{position}/loader.py"]
+    assert stored.attributes["write_evidence"][0]["file"] == f"root_{position}/loader.py"
+    assert str(tmp_path) not in str(stored.attributes)
+
+
+def test_adapter_entry_collision_is_diagnostic_not_first_match(store, now, tmp_path):
+    roots = [tmp_path / "one", tmp_path / "two"]
+    for root in roots:
+        _sources(root, {"loader.py": "def load_file():\n    df.to_sql('wrong', schema='raw')"})
+    process = _registry_process(store, now)
+    run = PythonModulesLineageAdapter(
+        store,
+        DwhCollectorSettings(
+            python_modules_root=";".join(map(str, roots)), python_modules_lineage_mode="code"
+        ),
+    ).collect(now)
+    assert run.status != "FAILED"
+    assert not store.list_relationships(asset_id=process.id, types={RelationshipType.WRITES_TO})
+    assert "MODULE_AMBIGUOUS" in {d.code for d in store.list_diagnostics(process.id)}
+    assert store.get_asset(process.id).attributes["source_files"] == []
+
+
+@pytest.mark.parametrize(
+    "statement,call",
+    [
+        ("from writer import save", "save()"),
+        ("import writer as helper", "helper.save()"),
+        ("import helpers.writer", "helpers.writer.save()"),
+        ("import helpers", "helpers.writer.save()"),
+    ],
+)
+def test_unique_absolute_dependency_across_roots(tmp_path, statement, call):
+    first, second = tmp_path / "first", tmp_path / "second"
+    _sources(first, {"loader.py": f"{statement}\ndef load_file():\n    {call}"})
+    _sources(
+        second,
+        {
+            "writer.py": "def save():\n    df.to_sql('cross_root', schema='raw')",
+            "helpers/writer.py": "def save():\n    df.to_sql('cross_root', schema='raw')",
+        },
+    )
+    result = PythonLoaderAnalyzer([first, second]).analyze(first / "loader.py", "load_file")
+    assert _targets(result) == {("raw", "cross_root")}
+    assert not result.diagnostics
+    assert result.evidence[0]["file"].startswith("root_2/")
+    assert str(tmp_path) not in str(result.evidence)
+
+
+@pytest.mark.parametrize(
+    "statement,call",
+    [
+        ("from writer import save", "save()"),
+        ("import writer as helper", "helper.save()"),
+        ("from writer import to_sql", "to_sql('wrong', schema='raw')"),
+        ("import writer\nto_sql = writer.save", "to_sql('wrong', schema='raw')"),
+        ("import writer", "writer.save().to_sql('wrong', schema='raw')"),
+    ],
+)
+def test_ambiguous_absolute_dependency_never_selects_a_writer(tmp_path, statement, call):
+    first, second = tmp_path / "first", tmp_path / "second"
+    for root in (first, second):
+        _sources(root, {"writer.py": "def save():\n    df.to_sql('wrong', schema='raw')"})
+    _sources(first, {"loader.py": f"{statement}\ndef load_file():\n    {call}"})
+    result = PythonLoaderAnalyzer([first, second]).analyze(first / "loader.py", "load_file")
+    assert not result.refs
+    assert "MODULE_AMBIGUOUS" in {d["code"] for d in result.diagnostics}
+    assert all(not name.endswith("writer.py") for name in result.source_files)
+
+
+def test_relative_dependencies_stay_in_declaring_package_and_root(tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    for root, table in ((first, "owned"), (second, "wrong")):
+        _sources(
+            root,
+            {
+                "pkg/__init__.py": "",
+                "pkg/helper.py": f"TABLE = '{table}'",
+            },
+        )
+    _sources(
+        first,
+        {"pkg/loader.py": """
+        from .helper import TABLE
+        def load_file():
+            df.to_sql(TABLE, schema='raw')
+    """},
+    )
+    result = PythonLoaderAnalyzer([first, second]).analyze(first / "pkg/loader.py", "load_file")
+    assert _targets(result) == {("raw", "owned")}
+    assert not result.diagnostics
+    assert "root_2/pkg/helper.py" not in result.source_files
+    (first / "pkg/helper.py").unlink()
+    result = PythonLoaderAnalyzer([first, second]).analyze(first / "pkg/loader.py", "load_file")
+    assert not result.refs
+
+
+def test_duplicate_package_cannot_supply_unique_children_from_different_roots(tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    _sources(first, {"pkg/__init__.py": "", "pkg/one.py": "VALUE = 1"})
+    _sources(second, {"pkg/__init__.py": "", "pkg/two.py": "VALUE = 2"})
+    sources = PythonModuleRoots([first, second])
+    with pytest.raises(AmbiguousModule):
+        sources.resolve("pkg.two")
+
+
+@pytest.mark.parametrize("value", ["", " ; ; ", "missing"])
+def test_no_usable_roots_skip_successfully(store, now, tmp_path, value):
+    setting = str(tmp_path / value) if value == "missing" else value
+    run = PythonModulesLineageAdapter(
+        store, DwhCollectorSettings(python_modules_root=setting)
+    ).collect(now)
+    assert run.status == "SUCCESS"
+    assert run.details["skipped"] is True
+    if value == "missing":
+        assert "MODULES_ROOT_UNAVAILABLE" in {d.code for d in store.list_diagnostics()}
+
+
+def test_missing_root_does_not_block_valid_root(store, now, tmp_path):
+    root = tmp_path / "valid"
+    _sources(root, {"loader.py": "def load_file():\n    df.to_sql('one', schema='raw')"})
+    _registry_process(store, now)
+    run = PythonModulesLineageAdapter(
+        store,
+        DwhCollectorSettings(
+            python_modules_root=f"{tmp_path / 'absent'};{root}", python_modules_lineage_mode="code"
+        ),
+    ).collect(now)
+    assert run.status == "PARTIAL"
+    assert run.details["writes"] == 1
+    diagnostics = store.list_diagnostics()
+    assert "MODULES_ROOT_UNAVAILABLE" in {d.code for d in diagnostics}
+    assert str(tmp_path) not in str([d.details for d in diagnostics])
+
+
+def test_code_storage_closure_does_not_pick_ambiguous_dependency(store, now, tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    for root in (first, second):
+        _sources(root, {"paths.py": "PATH = '/data/landing/ambiguous'"})
+    _sources(
+        first,
+        {"loader.py": """
+        import paths
+        def load_file():
+            df.to_sql('known', schema='raw')
+    """},
+    )
+    _registry_process(store, now)
+    run = PythonModulesLineageAdapter(
+        store,
+        DwhCollectorSettings(
+            python_modules_root=f"{first};{second}", python_modules_lineage_mode="code"
+        ),
+    ).collect(now)
+    assert run.status == "PARTIAL"
+    assert run.details["writes"] == 1
+    assert run.details["storages"] == 0
+    assert "MODULE_AMBIGUOUS" in {d.code for d in store.list_diagnostics()}
+
+
+def test_overlapping_roots_deduplicate_physical_module_and_confine_relative_import(tmp_path):
+    root = tmp_path / "root"
+    nested = root / "nested"
+    _sources(root, {"outside.py": "TABLE = 'wrong'"})
+    _sources(
+        nested,
+        {"loader.py": """
+        from ..outside import TABLE
+        def load_file():
+            df.to_sql(TABLE, schema='raw')
+    """},
+    )
+    sources = PythonModuleRoots([root, nested])
+    assert sources.owner(nested / "loader.py") == nested
+    result = PythonLoaderAnalyzer(sources).analyze(nested / "loader.py", "load_file")
+    assert not result.refs
+    assert result.source_files == ["root_2/loader.py"]
+
+
+def test_same_relative_filenames_keep_separate_values_and_provenance(tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    _sources(
+        first,
+        {
+            "common.py": "def save():\n    df.to_sql('one', schema='raw')",
+            "loader.py": """
+            from .common import save
+            from writer import write
+            def load_file():
+                save()
+                write()
+        """,
+        },
+    )
+    _sources(
+        second,
+        {
+            "common.py": "def save():\n    df.to_sql('two', schema='raw')",
+            "writer.py": "from .common import save\ndef write():\n    save()",
+        },
+    )
+    result = PythonLoaderAnalyzer([first, second]).analyze(first / "loader.py", "load_file")
+    assert _targets(result) == {("raw", "one"), ("raw", "two")}
+    assert not result.diagnostics
+    assert {item["file"] for item in result.evidence} == {"root_1/common.py", "root_2/common.py"}
+
+
+def test_lazy_absolute_package_child_cannot_hide_duplicate_module(tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    _sources(
+        first,
+        {
+            "pkg/__init__.py": "",
+            "pkg/writer.py": "def to_sql(*args, **kwargs):\n    pass",
+            "loader.py": "import pkg\ndef load_file():\n    pkg.writer.to_sql('wrong', schema='raw')",
+        },
+    )
+    _sources(second, {"pkg/writer.py": "def to_sql(*args, **kwargs):\n    pass"})
+    result = PythonLoaderAnalyzer([first, second]).analyze(first / "loader.py", "load_file")
+    assert not result.refs
+    assert "MODULE_AMBIGUOUS" in {d["code"] for d in result.diagnostics}
+
+
+def test_code_storage_unique_cross_root_and_process_caches_are_isolated(store, now, tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    _sources(
+        first,
+        {
+            "one.py": "import paths\ndef load_file():\n    pass",
+            "two.py": "def load_file():\n    pass",
+        },
+    )
+    _sources(second, {"paths.py": "PATH = '/data/landing/unique'"})
+    one = _registry_process(store, now, "one")
+    two = _registry_process(store, now, "two")
+    run = PythonModulesLineageAdapter(
+        store,
+        DwhCollectorSettings(
+            python_modules_root=f"{first};{second}", python_modules_lineage_mode="code"
+        ),
+    ).collect(now)
+    assert run.status != "FAILED"
+    assert run.details["storages"] == 1
+    assert len(store.list_relationships(asset_id=one.id, types={RelationshipType.READS_FROM})) == 1
+    assert not store.list_relationships(asset_id=two.id, types={RelationshipType.READS_FROM})
+    assert "root_2/paths.py" in store.get_asset(one.id).attributes["source_files"]
+    assert store.get_asset(two.id).attributes["source_files"] == ["root_1/two.py"]
