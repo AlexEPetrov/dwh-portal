@@ -75,6 +75,20 @@ they will build the image and return its output. Do not execute Docker in this
 task. Provide the registered build/smoke commands for the user and distinguish
 local source checks from unexecuted container checks.
 
+## Approved combined-image SQL launch and MCP follow-up
+
+On 2026-11-20 the user approved first connecting the combined image to the
+existing working SQL Portal configuration, then read-only MCP for search,
+details, OpenLineage and browser links. SQL support is not being reimplemented.
+Prepare a separate Compose project using the existing environment file and
+external `dwh_portal` network, without changing existing deployments or env files.
+Memory remains for tests. Do not execute the SQL launch, connect to live databases,
+apply migrations, collect data, print resolved Compose secrets or run Docker.
+`PORTAL-HARNESS-SQL` is a user-run command with an explicit existing `env_file`.
+MCP needs a separately documented contract, accurate OpenLineage mapping and
+explicit authentication boundaries before semantic implementation; generic
+service keys are not automatically read-only or per-user credentials.
+
 ## Approved memory-startup correction
 
 On 2026-11-20 the user reported the smoke container failing because startup
@@ -141,7 +155,8 @@ before the real pinned parser/Web-help checks. No DSH compilation inputs changed
 The user requested an Internet comparison of multi-user behavior in analogous
 tools. `PORTAL-HARNESS-UPSTREAM-RESEARCH` permits read-only HTTPS requests to
 official documentation and public GitHub repository/content/search APIs for
-OpenCode, DeepSeek Harness, OpenHands, LibreChat and Open WebUI. Substitute an
+OpenCode, DeepSeek Harness, OpenHands, LibreChat, Open WebUI, OpenLineage and
+the official Model Context Protocol SDK/specification. Substitute an
 explicit documentation/API URL for `url`; do not execute downloaded content or
 install products. Distinguish community self-hosted, enterprise and cloud
 features, browser login from catalog authorization, and history isolation from

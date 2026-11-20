@@ -100,6 +100,9 @@ does not need recompilation for these backend-only changes.
 
 ## Local demo
 
+This is the offline memory/demo launch only. For the combined image connected to
+the already-working SQL Portal configuration, use the separate launch below.
+
 ```sh
 bash infra/images/portal-harness/run-demo.sh
 ```
@@ -126,6 +129,43 @@ demo sets it to loopback and needs no reverse proxy. Remote deployments need an
 explicit approved TLS/forwarding setup; none is configured automatically.
 
 ## Runtime configuration
+
+### Existing SQL Portal configuration in the combined image
+
+The SQL store already exists. This launch only connects the combined image to
+the existing Portal database; it does not implement another store, create a new
+database, run migrations, collect metadata or replace the current deployment.
+
+From repository root, pass the existing Portal environment file:
+
+```sh
+bash infra/images/portal-harness/run-sql.sh infra/environments/test/.env
+```
+
+Use your actual existing environment file if it differs. Do not paste its
+contents or secrets into chat. The script passes it to Compose without sourcing
+it as shell code or displaying its resolved contents. [The Compose definition](compose-sql.json)
+is JSON (supported by Compose), so its structure is also testable without Docker.
+
+The separate project `dwh-portal-harness` runs a new `portal-harness` service on
+the already-defined external `dwh_portal` network. It requires the existing DB
+settings; SQL startup/migration validation remains strict. Demo seeding and
+reset-on-collect are explicitly disabled. The existing core-service is not
+restarted, recreated or stopped. Both instances can read the same Portal DB.
+
+Host ports default to loopback 5053 (Portal) and 3080 (DSH), and a separate
+project volume persists DSH state. Stop the old demo first if it occupies these
+ports; do not stop the current Portal deployment. Environment overrides
+`PORTAL_HARNESS_HOST_PORT` and `DSH_HOST_PORT` select different host ports. If you
+change the DSH host port, also set `DSH_PUBLIC_URL` to the actual browser root.
+Authentication/token warnings and single-owner limitations remain as above.
+Host bind mounts/collector-source mounts from the old deployment are not copied
+automatically; this launch targets existing snapshots, not running collectors.
+
+The combined image's environment filter keeps Portal DB/auth settings out of the
+DSH process. DSH does not connect to PostgreSQL. Future MCP calls will use Portal
+catalog interfaces, not direct database credentials. This SQL launch does not
+itself enable MCP or establish per-user authorization.
 
 DSH has two argument parsers. All launcher options (`--profile`, `--patch`,
 configuration dumps) must precede every Web-app option (`--no-open`, `--host`,

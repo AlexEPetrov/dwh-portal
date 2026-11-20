@@ -199,7 +199,7 @@ verification:
   PORTAL-HARNESS-NODE-TESTS:
     run: node --test infra/images/portal-harness/tests/test_dsh_parser_loader.mjs
   PORTAL-HARNESS-SHELL-CHECK:
-    run: sh -n infra/images/portal-harness/build.sh && sh -n infra/images/portal-harness/smoke.sh && bash -n infra/images/portal-harness/run-demo.sh && sh -n infra/images/portal-harness/dsh
+    run: sh -n infra/images/portal-harness/build.sh && sh -n infra/images/portal-harness/smoke.sh && bash -n infra/images/portal-harness/run-demo.sh && sh -n infra/images/portal-harness/dsh && bash -n infra/images/portal-harness/run-sql.sh
   PORTAL-HARNESS-DIFF:
     run: git diff --check && git diff --stat && git status --short
   PORTAL-HARNESS-BUILD:
@@ -208,6 +208,8 @@ verification:
     run: sh infra/images/portal-harness/smoke.sh
   PORTAL-HARNESS-DEMO:
     run: bash infra/images/portal-harness/run-demo.sh
+  PORTAL-HARNESS-SQL:
+    run_template: bash infra/images/portal-harness/run-sql.sh "{env_file}"
   OPENSPEC-CHANGE-STATUS:
     run_template: openspec status --change "{change_name}" --json
   OPENSPEC-SPECS-INSTRUCTIONS:

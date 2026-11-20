@@ -29,6 +29,26 @@ with patch.dict(sys.modules, {"launch": launcher}):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_sql_launch_reuses_configuration_without_replacing_existing_service(self):
+        compose = json.loads((SOURCE / "compose-sql.json").read_text())
+        self.assertEqual(set(compose["services"]), {"portal-harness"})
+        service = compose["services"]["portal-harness"]
+        self.assertEqual(service["environment"]["APP_PORTAL_STORE"], "sql")
+        self.assertEqual(service["environment"]["APP_PORTAL_SEED_DEMO"], "false")
+        self.assertEqual(service["environment"]["APP_PORTAL_RESET_ON_COLLECT"], "false")
+        self.assertTrue(service["env_file"][0].startswith("${PORTAL_ENV_FILE:?"))
+        self.assertTrue(all(port.startswith("127.0.0.1:") for port in service["ports"]))
+        self.assertEqual(
+            compose["networks"]["existing-portal"],
+            {"external": True, "name": "dwh_portal"},
+        )
+        self.assertNotIn("command", service)
+        self.assertNotIn("build", service)
+        script = (SOURCE / "run-sql.sh").read_text()
+        self.assertIn("--project-name dwh-portal-harness", script)
+        self.assertIn('--env-file "$PORTAL_ENV_FILE"', script)
+        self.assertNotIn("alembic", script)
+
     def test_source_and_toolchain_are_pinned(self):
         release = json.loads((SOURCE / "dsh-source.json").read_text())
         self.assertEqual(release["version"], "0.2.2-rc.5")
