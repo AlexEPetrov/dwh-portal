@@ -13,6 +13,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 from settings.database import DbConnectionSettings
+from settings.portal import PortalSettings
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +86,7 @@ def inspect_portal_migrations(
     try:
         with engine.connect() as connection:
             schema_exists = connection.execute(
-                text(
-                    "SELECT 1 FROM information_schema.schemata "
-                    "WHERE schema_name = :schema"
-                ),
+                text("SELECT 1 FROM information_schema.schemata " "WHERE schema_name = :schema"),
                 {"schema": PORTAL_VERSION_SCHEMA},
             ).scalar()
             if not schema_exists:
@@ -98,8 +96,7 @@ def inspect_portal_migrations(
                     current=(),
                     database=settings.psg_db or "(unknown)",
                     detail=(
-                        f"schema {PORTAL_VERSION_SCHEMA} is missing; "
-                        "run alembic upgrade head"
+                        f"schema {PORTAL_VERSION_SCHEMA} is missing; " "run alembic upgrade head"
                     ),
                 )
 
@@ -120,10 +117,7 @@ def inspect_portal_migrations(
             f"expected head(s): {', '.join(heads) or '(none)'}"
         )
     else:
-        detail = (
-            f"applied={', '.join(current)}; "
-            f"expected head(s)={', '.join(heads)}"
-        )
+        detail = f"applied={', '.join(current)}; " f"expected head(s)={', '.join(heads)}"
     return PortalMigrationStatus(
         ok=ok,
         heads=heads,
@@ -131,6 +125,19 @@ def inspect_portal_migrations(
         database=settings.psg_db or "(unknown)",
         detail=detail,
     )
+
+
+def ensure_portal_startup_migrations_current() -> None:
+    """Require SQL migrations at startup only when the configured store uses SQL.
+
+    Validate the store selection before inspecting DB settings so the supported
+    in-memory mode can start without PostgreSQL. Keep the explicit DB check and
+    CLI independent of this startup-only exception.
+    """
+    if PortalSettings().store == "memory":
+        logger.info("Portal store=memory; SQL migration check is not applicable")
+        return
+    ensure_portal_migrations_current()
 
 
 def ensure_portal_migrations_current() -> None:

@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from api.auth import auth_router
 from api.portal import portal_router
 from domains.catalog.db_targets import log_database_targets
-from infrastructure.db.migration_check import ensure_portal_migrations_current
+from infrastructure.db.migration_check import ensure_portal_startup_migrations_current
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     log_database_targets()
-    ensure_portal_migrations_current()
+    ensure_portal_startup_migrations_current()
     yield
 
 

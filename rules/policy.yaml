@@ -35,6 +35,12 @@ change_classes:
   business_or_contract_semantic:
     approval: human_required
 topics:
+  portal-harness-image:
+    paths:
+    - infra/images/portal-harness/**
+    - rules/workflows/portal-harness-image.md
+    approval: human_required
+    workflow: portal-harness-image
   core-local-environment:
     paths:
     - rules/workflows/core-local-environment.md
@@ -180,6 +186,28 @@ contracts:
     escalate_if: business_semantic_change
     escalate_to: human_required
 verification:
+  PORTAL-HARNESS-STATE:
+    run: git status --short
+  PORTAL-HARNESS-DOCKER-INSPECT:
+    run: docker version && docker image inspect 134/python-builder-313:1.0 134/python-slim-313:1.0 --format '{{.RepoTags}} {{.Id}} {{.Architecture}} {{.Os}}'
+  PORTAL-HARNESS-UPSTREAM-RESEARCH:
+    run_template: curl --fail --silent --show-error --location '{url}' -H 'Accept: application/vnd.github.raw+json'
+  PORTAL-HARNESS-SOURCE-TESTS:
+    run: python3 -B -m unittest discover -s infra/images/portal-harness/tests -v
+  PORTAL-HARNESS-NODE-INSPECT:
+    run: node --version
+  PORTAL-HARNESS-NODE-TESTS:
+    run: node --test infra/images/portal-harness/tests/test_dsh_parser_loader.mjs
+  PORTAL-HARNESS-SHELL-CHECK:
+    run: sh -n infra/images/portal-harness/build.sh && sh -n infra/images/portal-harness/smoke.sh && bash -n infra/images/portal-harness/run-demo.sh && sh -n infra/images/portal-harness/dsh
+  PORTAL-HARNESS-DIFF:
+    run: git diff --check && git diff --stat && git status --short
+  PORTAL-HARNESS-BUILD:
+    run: sh infra/images/portal-harness/build.sh
+  PORTAL-HARNESS-SMOKE:
+    run: sh infra/images/portal-harness/smoke.sh
+  PORTAL-HARNESS-DEMO:
+    run: bash infra/images/portal-harness/run-demo.sh
   OPENSPEC-CHANGE-STATUS:
     run_template: openspec status --change "{change_name}" --json
   OPENSPEC-SPECS-INSTRUCTIONS:

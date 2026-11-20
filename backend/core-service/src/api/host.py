@@ -13,7 +13,7 @@ from api.middlewares.request_context_log import register as register_request_con
 from api.portal import portal_router
 from api.system import system_router
 from domains.catalog.db_targets import log_database_targets
-from infrastructure.db.migration_check import ensure_portal_migrations_current
+from infrastructure.db.migration_check import ensure_portal_startup_migrations_current
 from shared.nullables import require
 
 tags_metadata = [
@@ -27,7 +27,7 @@ tags_metadata = [
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     log_database_targets()
-    ensure_portal_migrations_current()
+    ensure_portal_startup_migrations_current()
     yield
 
 

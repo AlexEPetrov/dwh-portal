@@ -1,0 +1,7 @@
+- id: hmr
+  disabled: true
+- id: plugin-manager
+  disabled: true
+- insert:
+    - id: portal-packaging-guard
+      name: /opt/portal-harness/dsh-guard.mjs
