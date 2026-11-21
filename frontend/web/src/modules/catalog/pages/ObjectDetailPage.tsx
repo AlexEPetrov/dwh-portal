@@ -1,16 +1,15 @@
 import {
-  FreshnessBar,
-  changeGlyph,
-  formatBytes,
-  formatDateTime,
-  formatRows,
+    FreshnessBar,
+    changeGlyph,
+    formatBytes,
+    formatDateTime,
+    formatRows,
 } from '@shared/ui/portal';
 import { Alert, Button, Card, Descriptions, Empty, Space, Spin, Table, Tabs, Tag, Typography } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
 import ExtractionLoadsPanel from '../components/ExtractionLoadsPanel';
-import LineageGraph from '../components/LineageGraph';
-import UnresolvedTargetsAlert from '../components/UnresolvedTargetsAlert';
-import { useCatalogAsset, useCatalogChanges, useCatalogColumns, useCatalogLineage } from '../queries';
+import LineageWorkspace from '../components/LineageWorkspace';
+import { useCatalogAsset, useCatalogChanges, useCatalogColumns } from '../queries';
 
 const nextStepHint = (assetType: string): string => {
   switch (assetType) {
@@ -34,10 +33,8 @@ const ObjectDetailPage = () => {
   const navigate = useNavigate();
   const assetQuery = useCatalogAsset(assetId);
   const columnsQuery = useCatalogColumns(assetId);
-  const lineageQuery = useCatalogLineage(assetId, Boolean(assetId));
   const changesQuery = useCatalogChanges({ assetId, pageSize: 20 }, Boolean(assetId));
   const asset = assetQuery.data;
-  const lineage = lineageQuery.data;
 
   if (!assetId) return <Empty description="Объект не выбран" />;
   if (!asset) {
@@ -114,27 +111,7 @@ const ObjectDetailPage = () => {
     {
       key: 'lineage',
       label: 'Lineage',
-      children: lineageQuery.isError ? (
-        <Alert type="error" showIcon message="Lineage недоступен" description={lineageQuery.error.message} />
-      ) : lineage ? (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          {lineageQuery.isFetching ? <Spin size="small" /> : null}
-          <FreshnessBar items={lineage.collector_freshness} />
-          <UnresolvedTargetsAlert key={asset.id} targets={lineage.unresolved_targets} />
-          <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/lineage/${asset.id}`)}>
-            Открыть на странице Lineage
-          </Button>
-          <LineageGraph
-            key={asset.id}
-            nodes={lineage.nodes}
-            edges={lineage.edges}
-            selectedAssetId={asset.id}
-            fillHeight={false}
-          />
-        </Space>
-      ) : (
-        <Spin tip="Загрузка lineage…"><div style={{ minHeight: 120 }} /></Spin>
-      ),
+      children: <LineageWorkspace key={asset.id} assetId={asset.id} embedded />,
     },
     ...(showLoads
       ? [

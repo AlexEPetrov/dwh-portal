@@ -197,7 +197,7 @@ test('lineage display labels cover canonical types without changing their identi
 });
 
 test('compact lineage retains metadata details, explicit unresolved targets and extraction loads', () => {
-    const page = readFileSync(new URL('../src/modules/catalog/pages/LineagePage.tsx', import.meta.url), 'utf8');
+    const page = readFileSync(new URL('../src/modules/catalog/components/LineageWorkspace.tsx', import.meta.url), 'utf8');
     assert.ok(page.includes('<FreshnessBar items={freshness} />'));
     assert.ok(page.includes('<details className="lineage-page__details">'));
     assert.ok(page.includes('<UnresolvedTargetsAlert key={assetId} targets={lineage.unresolved_targets} />'));
@@ -209,11 +209,31 @@ test('compact lineage retains metadata details, explicit unresolved targets and 
 });
 
 test('lineage object changes and source overview preserve the active view and Universe context', () => {
-    const page = readFileSync(new URL('../src/modules/catalog/pages/LineagePage.tsx', import.meta.url), 'utf8');
+    const page = readFileSync(new URL('../src/modules/catalog/components/LineageWorkspace.tsx', import.meta.url), 'utf8');
     assert.ok(page.includes("searchParams.get('view') === 'map' ? 'map' : 'list'"));
     assert.ok(page.includes("`${value ? `/lineage/${value}` : '/lineage'}?view=${view}`"));
     assert.ok(page.includes('navigate(`/lineage?view=${view}`)'));
     assert.ok(page.includes("assetId ? `/lineage/universe/${assetId}` : '/lineage/universe'"));
+});
+
+test('object tab and standalone route reuse the whole lineage workspace, not separate graph implementations', () => {
+    const route = readFileSync(new URL('../src/modules/catalog/pages/LineagePage.tsx', import.meta.url), 'utf8');
+    const object = readFileSync(new URL('../src/modules/catalog/pages/ObjectDetailPage.tsx', import.meta.url), 'utf8');
+    const workspace = readFileSync(new URL('../src/modules/catalog/components/LineageWorkspace.tsx', import.meta.url), 'utf8');
+    assert.ok(route.includes('<LineageWorkspace assetId={assetId} />'));
+    assert.ok(object.includes('<LineageWorkspace key={asset.id} assetId={asset.id} embedded />'));
+    for (const source of [route, object]) {
+        assert.ok(!source.includes('useCatalogLineage('));
+        assert.ok(!source.includes('<LineageGraph'));
+        assert.ok(!source.includes('<UnresolvedTargetsAlert'));
+    }
+    assert.ok(workspace.includes('useCatalogLineage(assetId)'));
+    assert.ok(workspace.includes('useCatalogLineagePicker(!embedded)'));
+    assert.ok(workspace.includes('navigate(`/lineage/${assetId}?view=${view}`)'));
+    assert.match(workspace, /<LineageGraph[\s\S]*?\sfillHeight\s+syncViewInUrl/);
+    assert.ok(!workspace.includes('fillHeight={false}'));
+    const css = readFileSync(new URL('../src/modules/catalog/components/lineageViews.css', import.meta.url), 'utf8');
+    assert.ok(css.includes('.lineage-page--embedded {'));
 });
 
 test('lineage exposes focus reset and direct keyboard-accessible object actions', () => {

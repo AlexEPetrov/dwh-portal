@@ -143,11 +143,12 @@ export const LINEAGE_PICKER_TYPES = [
     'DATA_SOURCE', 'EXTRACTION_SOURCE', 'PROCESS', 'TABLE', 'VIEW', 'STORAGE_LOCATION',
 ] as const;
 
-export const useCatalogLineagePicker = () => useQueries({
+export const useCatalogLineagePicker = (enabled = true) => useQueries({
     queries: LINEAGE_PICKER_TYPES.map((type) => {
         const params: ListAssetsData = { type, status: 'active', pageSize: 100 };
         return {
             ...lifecycle,
+            enabled,
             queryKey: catalogKeys.assets(params),
             queryFn: ({ signal }: { signal: AbortSignal }) => requestWithSignal(signal, listAssets(params)),
         };

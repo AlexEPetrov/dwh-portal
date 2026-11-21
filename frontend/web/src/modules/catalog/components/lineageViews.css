@@ -9,6 +9,10 @@
   min-height: 0;
 }
 
+.lineage-page--embedded {
+  height: clamp(560px, 75vh, 900px);
+}
+
 .lineage-page__header,
 .lineage-page__toolbar,
 .lineage-page__details {
