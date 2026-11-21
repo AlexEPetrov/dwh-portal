@@ -36,6 +36,16 @@ with patch.dict(sys.modules, {"launch": launcher}):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_obsolete_sql_wrapper_has_no_registered_execution_path(self):
+        policy = yaml.safe_load((REPOSITORY / "rules/policy.yaml").read_text())
+        verification = policy["verification"]
+        self.assertNotIn("PORTAL-HARNESS-SQL", verification)
+        self.assertNotIn("run-sql.sh", json.dumps(verification))
+        self.assertEqual(
+            verification["PORTAL-HARNESS-UP"]["run_template"],
+            'bash infra/environments/portal-harness/up.sh "{env_file}"',
+        )
+
     def test_yaml_conversion_preserves_the_original_compose_values(self):
         compose = yaml.safe_load(COMPOSE.read_text())
         normalized = json.dumps(compose, sort_keys=True, separators=(",", ":"))
@@ -90,13 +100,12 @@ class ConfigurationTests(unittest.TestCase):
             "up.sh",
             "down.sh",
             "compose.sh",
-            "run-sql.sh",
             "sample.env",
         ):
             self.assertTrue((ENVIRONMENT / name).is_file(), name)
             self.assertFalse((SOURCE / name).exists(), name)
         self.assertFalse((SOURCE / "compose-sql.json").exists())
-        for name in ("build-release.sh", "run-demo.sh"):
+        for name in ("build-release.sh", "run-demo.sh", "run-sql.sh"):
             self.assertFalse((ENVIRONMENT / name).exists())
         self.assertTrue(
             (REPOSITORY / "infra/scripts/build_env_portal_harness.sh").is_file()
@@ -108,7 +117,7 @@ class ConfigurationTests(unittest.TestCase):
             (REPOSITORY / "infra/scripts/run_portal_harness_demo.sh").is_file()
         )
 
-    def test_relocated_sql_launcher_resolves_compose_and_env_from_another_cwd(self):
+    def test_up_launcher_resolves_compose_and_env_from_another_cwd(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             capture = directory / "arguments"
@@ -120,7 +129,7 @@ class ConfigurationTests(unittest.TestCase):
             marker = directory / "must-not-run"
             env_file.write_text(f'UNTRUSTED=$(touch "{marker}")\n')
             result = subprocess.run(
-                ["bash", str(ENVIRONMENT / "run-sql.sh"), env_file.name],
+                ["bash", str(ENVIRONMENT / "up.sh"), env_file.name],
                 cwd=directory,
                 env={"PATH": f"{directory}:{os.defpath}", "CAPTURE_PATH": str(capture)},
                 capture_output=True,
@@ -138,21 +147,21 @@ class ConfigurationTests(unittest.TestCase):
             self.assertFalse(marker.exists())
             self.assertEqual(result.stdout, "")
 
-    def test_relocated_sql_launcher_rejects_missing_environment_without_docker(self):
+    def test_up_launcher_rejects_missing_environment_without_docker(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             fake_docker = directory / "docker"
             fake_docker.write_text("#!/bin/sh\nexit 99\n")
             fake_docker.chmod(0o700)
             result = subprocess.run(
-                ["bash", str(ENVIRONMENT / "run-sql.sh"), "missing.env"],
+                ["bash", str(ENVIRONMENT / "up.sh"), "missing.env"],
                 cwd=directory,
                 env={"PATH": f"{directory}:{os.defpath}"},
                 capture_output=True,
                 text=True,
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn("infra/environments/portal-harness/run-sql.sh", result.stderr)
+            self.assertIn("Environment file is missing", result.stderr)
 
     def test_source_and_toolchain_are_pinned(self):
         release = json.loads((SOURCE / "dsh-source.json").read_text())

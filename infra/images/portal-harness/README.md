@@ -188,10 +188,10 @@ The SQL store already exists. This launch only connects the combined image to
 the existing Portal database; it does not implement another store, create a new
 database, run migrations, collect metadata or replace the current deployment.
 
-From repository root, pass the existing Portal environment file:
+From repository root, pass the private harness environment file:
 
 ```sh
-bash infra/environments/portal-harness/run-sql.sh infra/environments/test/.env
+bash infra/environments/portal-harness/up.sh infra/environments/portal-harness/.env
 ```
 
 Use your actual existing environment file if it differs. Do not paste its
@@ -546,7 +546,7 @@ sh -n infra/images/portal-harness/build.sh
 sh -n infra/images/portal-harness/smoke.sh
 bash -n infra/scripts/run_portal_harness_demo.sh
 sh -n infra/images/portal-harness/dsh
-bash -n infra/environments/portal-harness/run-sql.sh
+bash -n infra/environments/portal-harness/up.sh
 node --test infra/images/portal-harness/tests/test_dsh_parser_loader.mjs infra/images/portal-harness/tests/test_dsh_guard.mjs infra/images/portal-harness/tests/test_dsh_provider_profile.mjs
 python3 -B -m unittest discover -s infra/scripts/tests -v
 ```

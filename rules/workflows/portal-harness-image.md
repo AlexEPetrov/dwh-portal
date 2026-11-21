@@ -28,6 +28,29 @@ approval_policy: human_required
 
 # Workflow: experimental Portal and harness image
 
+## Approved obsolete SQL wrapper removal
+
+On 2026-11-21 the user explicitly approved deleting the redundant `run-sql.sh`
+compatibility wrapper. Use `up.sh` as the sole startup entry point; its optional
+env argument, private `.env` default and checkout/release portability remain
+unchanged. Delete the wrapper from source and release payloads, replace active
+operator examples and retarget fake-Docker launcher tests to `up.sh`.
+
+Retire `PORTAL-HARNESS-SQL` and the completed `PORTAL-HARNESS-LAYOUT-MOVE`
+registration that moved the obsolete wrapper; remove the deleted path from
+registered shell/mode checks. Historical approval/move records below are retained
+as history and are superseded by this section, not current launch instructions.
+Run registered source/release Python tests, Node, shell and diff checks. Do not
+execute Docker, modify private envs, edit generated releases or access DB/models.
+No application/API semantics, contract generation, image rebuild or deployment
+is activated by this cleanup. Previously exported releases remain untouched.
+
+Cleanup evidence: all 52 image/environment tests and 15 release tests passed.
+The Node suite passed 16 tests with one existing native-stripping skip; registered
+shell checks passed. Remaining wrapper references are negative regression checks
+and historical workflow records only. Tests use fake/mocked Docker; no actual
+Docker, deployment, DB/model, private-env or generated-artifact action occurred.
+
 ## Purpose
 
 Build an opt-in image containing the existing Portal backend and frontend plus

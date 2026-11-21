@@ -117,7 +117,6 @@ class PortableLauncherTests(unittest.TestCase):
             "up.sh",
             "down.sh",
             "compose.sh",
-            "run-sql.sh",
             "diagnose-db.sh",
             "sample.env",
             "README.md",
@@ -410,11 +409,11 @@ class ReleaseTests(unittest.TestCase):
                 "up.sh",
                 "down.sh",
                 "compose.sh",
-                "run-sql.sh",
                 "diagnose-db.sh",
             ):
                 self.assertTrue(os.access(destination / name, os.X_OK))
             self.assertFalse((destination / ".env").exists())
+            self.assertFalse((destination / "run-sql.sh").exists())
             self.assertFalse((destination / "build_env_portal_harness.sh").exists())
             self.assertFalse(
                 (destination / "package_portal_harness_release.py").exists()

@@ -28,7 +28,6 @@ PROFILES = {
             "up.sh",
             "down.sh",
             "compose.sh",
-            "run-sql.sh",
             "diagnose-db.sh",
             "sample.env",
             "README.md",

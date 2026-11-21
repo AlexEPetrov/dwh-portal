@@ -19,8 +19,8 @@ bash infra/environments/portal-harness/down.sh infra/environments/portal-harness
 ```
 
 The example must be adapted to an existing prepared Portal DB and actual internal
-Ollama. `run-sql.sh` remains a compatibility alias for up with an explicit env
-file. Down stops/removes only this Compose project's containers/network; it does
+Ollama. Use `up.sh` for startup with an explicit env file or its private default.
+Down stops/removes only this Compose project's containers/network; it does
 not remove the DSH state volume, image archives, images or PostgreSQL data. The
 memory demo is separate and is not managed by this SQL project's down command.
 
@@ -191,7 +191,7 @@ up environment changes. This does not create the Portal schema or apply migratio
 ## Using a transferred release
 
 A prepared release contains the image archive, Compose definition, the same
-portable up/down/common scripts, [diagnose-db.sh](diagnose-db.sh), compatibility launcher, public env example,
+portable up/down/common scripts, [diagnose-db.sh](diagnose-db.sh), public env example,
 this guide, offline migration SQL, commit/image/source metadata and checksums.
 Frontend and application code are embedded in the image. Use only a directory
 marked `RELEASE_COMPLETE`; `RELEASE_FAILED` indicates an incomplete export.

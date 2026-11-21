@@ -323,21 +323,12 @@ verification:
       mv -n infra/images/portal-harness/package_release.py infra/scripts/package_portal_harness_release.py &&
       mv -n infra/environments/portal-harness/run-demo.sh infra/scripts/run_portal_harness_demo.sh &&
       mv -n infra/images/portal-harness/tests/test_release_layout.py infra/scripts/tests/test_release_layout.py
-  PORTAL-HARNESS-LAYOUT-MOVE:
-    run: >-
-      test ! -e infra/compose/docker-compose-portal-harness.json && test ! -L infra/compose/docker-compose-portal-harness.json &&
-      test ! -e infra/environments/portal-harness/run-sql.sh && test ! -L infra/environments/portal-harness/run-sql.sh &&
-      test ! -e infra/environments/portal-harness/run-demo.sh && test ! -L infra/environments/portal-harness/run-demo.sh &&
-      test ! -e infra/environments/portal-harness/sql.env.example && test ! -L infra/environments/portal-harness/sql.env.example &&
-      mkdir -p infra/environments/portal-harness &&
-      mv -n infra/images/portal-harness/compose-sql.json infra/compose/docker-compose-portal-harness.json &&
-      mv -n infra/images/portal-harness/run-sql.sh infra/images/portal-harness/run-demo.sh infra/images/portal-harness/sql.env.example infra/environments/portal-harness/
   PORTAL-HARNESS-NODE-INSPECT:
     run: node --version
   PORTAL-HARNESS-NODE-TESTS:
     run: node --test infra/images/portal-harness/tests/test_dsh_parser_loader.mjs infra/images/portal-harness/tests/test_dsh_guard.mjs infra/images/portal-harness/tests/test_dsh_provider_profile.mjs
   PORTAL-HARNESS-SHELL-CHECK:
-    run: sh -n infra/images/portal/build.sh && sh -n backend/core-service/build_image.sh && sh -n infra/images/portal-harness/build.sh && sh -n infra/images/portal-harness/smoke.sh && bash -n infra/scripts/run_portal_harness_demo.sh && sh -n infra/images/portal-harness/dsh && bash -n infra/environments/portal-harness/run-sql.sh && bash -n infra/environments/portal-harness/up.sh && bash -n infra/environments/portal-harness/down.sh && bash -n infra/environments/portal-harness/compose.sh && bash -n infra/scripts/build_env_portal_harness.sh && bash -n infra/scripts/build_env_test.sh && bash -n infra/scripts/_build_target.sh && bash -n infra/environments/test/up.sh && bash -n infra/environments/test/down.sh && bash -n infra/environments/test/compose.sh
+    run: sh -n infra/images/portal/build.sh && sh -n backend/core-service/build_image.sh && sh -n infra/images/portal-harness/build.sh && sh -n infra/images/portal-harness/smoke.sh && bash -n infra/scripts/run_portal_harness_demo.sh && sh -n infra/images/portal-harness/dsh && bash -n infra/environments/portal-harness/up.sh && bash -n infra/environments/portal-harness/down.sh && bash -n infra/environments/portal-harness/compose.sh && bash -n infra/scripts/build_env_portal_harness.sh && bash -n infra/scripts/build_env_test.sh && bash -n infra/scripts/_build_target.sh && bash -n infra/environments/test/up.sh && bash -n infra/environments/test/down.sh && bash -n infra/environments/test/compose.sh
   PORTAL-BASE-BUILD:
     run: sh infra/images/portal/build.sh
   PORTAL-TEST-RELEASE:
@@ -351,7 +342,7 @@ verification:
   PORTAL-HARNESS-DIFF:
     run: git diff --check && git diff --stat && git status --short
   PORTAL-UNIFICATION-MODES:
-    run: git diff --summary && git ls-files --stage backend/core-service/build_image.sh infra/scripts/_build_target.sh infra/scripts/build_env_test.sh infra/images/portal-harness/build.sh && stat -c '%a %n' backend/core-service/build_image.sh infra/scripts/_build_target.sh infra/scripts/build_env_test.sh infra/images/portal-harness/build.sh infra/scripts/build_env_portal_harness.sh infra/environments/portal-harness/up.sh infra/environments/portal-harness/down.sh infra/environments/portal-harness/compose.sh infra/environments/portal-harness/run-sql.sh
+    run: git diff --summary && git ls-files --stage backend/core-service/build_image.sh infra/scripts/_build_target.sh infra/scripts/build_env_test.sh infra/images/portal-harness/build.sh && stat -c '%a %n' backend/core-service/build_image.sh infra/scripts/_build_target.sh infra/scripts/build_env_test.sh infra/images/portal-harness/build.sh infra/scripts/build_env_portal_harness.sh infra/environments/portal-harness/up.sh infra/environments/portal-harness/down.sh infra/environments/portal-harness/compose.sh
   PORTAL-UNIFICATION-EXECUTABLES:
     run: chmod +x infra/scripts/_build_target.sh infra/images/portal/build.sh
   PORTAL-HARNESS-BUILD:
@@ -360,8 +351,6 @@ verification:
     run: sh infra/images/portal-harness/smoke.sh
   PORTAL-HARNESS-DEMO:
     run: bash infra/scripts/run_portal_harness_demo.sh
-  PORTAL-HARNESS-SQL:
-    run_template: bash infra/environments/portal-harness/run-sql.sh "{env_file}"
   PORTAL-HARNESS-UP:
     run_template: bash infra/environments/portal-harness/up.sh "{env_file}"
   PORTAL-HARNESS-DOWN:
