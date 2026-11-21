@@ -1,5 +1,6 @@
-import { listAssets } from '@shared/api/generated';
 import type { AssetListItem } from '@shared/api/generated';
+import { listAssets } from '@shared/api/generated';
+import { FilterClear, FilterToolbar, FreshnessBar, formatDateTime } from '@shared/ui/portal';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -18,13 +19,12 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
-import { FilterClear, FilterToolbar, FreshnessBar, formatDateTime } from '@shared/ui/portal';
-import OptionsForm from '../extractionOptions/OptionsForm';
-import '../extractionOptions/optionsForm.css';
 import {
   loadExtractionSourceDraft,
   type ExtractionSourceDraft,
 } from '../extractionOptions/loadDraft';
+import OptionsForm from '../extractionOptions/OptionsForm';
+import '../extractionOptions/optionsForm.css';
 import { compactPatternList, validateRegexPatternList } from '../extractionOptions/regex';
 import { extractSchemaKeyForTypeId } from '../extractionOptions/schema';
 
@@ -211,8 +211,8 @@ const ExtractionSourcesEditPage = () => {
           style={{ width: 110 }}
           value={status}
           options={[
-            { value: 'active', label: 'Active' },
-            { value: 'deleted', label: 'Deleted' },
+            { value: 'active', label: 'Активные' },
+            { value: 'deleted', label: 'Удалённые' },
           ]}
           onChange={(value) => setStatus(value)}
         />

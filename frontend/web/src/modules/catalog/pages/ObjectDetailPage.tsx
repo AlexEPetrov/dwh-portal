@@ -17,9 +17,9 @@ const nextStepHint = (assetType: string): string => {
     case 'DATA_SOURCE':
       return 'Дальше: откройте Lineage — увидите extraction sources и путь до таблиц.';
     case 'EXTRACTION_SOURCE':
-      return 'Дальше: Lineage покажет storage и PROCESS; в Objects можно открыть связанный loader.';
+      return 'Дальше: Lineage покажет место хранения и PROCESS; в списке объектов можно открыть связанный loader.';
     case 'PROCESS':
-      return 'Дальше: Lineage — READS_FROM storage и WRITES_TO table (если get_metadata отработал).';
+      return 'Дальше: Lineage — READS_FROM места хранения и WRITES_TO таблицы (если get_metadata отработал).';
     case 'TABLE':
     case 'VIEW':
     case 'MATERIALIZED_VIEW':
@@ -55,21 +55,21 @@ const ObjectDetailPage = () => {
   const tabItems = [
     {
       key: 'overview',
-      label: 'Overview',
+      label: 'Обзор',
       children: (
         <Descriptions bordered column={2} size="small">
           <Descriptions.Item label="Описание" span={2}>
             {asset.description || '—'}
           </Descriptions.Item>
-          <Descriptions.Item label="Database">{asset.database || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Schema">{asset.schema_name || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Size">{formatBytes(asset.metrics.total_bytes)}</Descriptions.Item>
-          <Descriptions.Item label="Indexes">{formatBytes(asset.metrics.index_bytes)}</Descriptions.Item>
-          <Descriptions.Item label="Rows">{formatRows(asset.metrics.row_estimate)}</Descriptions.Item>
-          <Descriptions.Item label="Last scan">{formatDateTime(asset.last_seen_at)}</Descriptions.Item>
-          <Descriptions.Item label="Source">{asset.source_provider}</Descriptions.Item>
-          <Descriptions.Item label="Qualified name">{asset.qualified_name}</Descriptions.Item>
-          <Descriptions.Item label="Source files" span={2}>
+          <Descriptions.Item label="База данных">{asset.database || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Схема">{asset.schema_name || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Размер">{formatBytes(asset.metrics.total_bytes)}</Descriptions.Item>
+          <Descriptions.Item label="Индексы">{formatBytes(asset.metrics.index_bytes)}</Descriptions.Item>
+          <Descriptions.Item label="Строки">{formatRows(asset.metrics.row_estimate)}</Descriptions.Item>
+          <Descriptions.Item label="Последнее сканирование">{formatDateTime(asset.last_seen_at)}</Descriptions.Item>
+          <Descriptions.Item label="Источник">{asset.source_provider}</Descriptions.Item>
+          <Descriptions.Item label="Полное имя">{asset.qualified_name}</Descriptions.Item>
+          <Descriptions.Item label="Исходные файлы" span={2}>
             {asset.source_files && asset.source_files.length > 0
               ? asset.source_files.join(', ')
               : '—'}
@@ -79,7 +79,7 @@ const ObjectDetailPage = () => {
     },
     {
       key: 'columns',
-      label: 'Columns',
+      label: 'Колонки',
       children: (
         <Space direction="vertical" style={{ width: '100%' }}>
         {columnsQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить колонки" description={columnsQuery.error.message} /> : null}
@@ -92,13 +92,13 @@ const ObjectDetailPage = () => {
           dataSource={columnsQuery.data?.items ?? []}
           columns={[
             { title: '#', dataIndex: 'ordinal', width: 60 },
-            { title: 'Name', dataIndex: 'name' },
-            { title: 'Type', dataIndex: 'data_type', width: 180 },
+            { title: 'Имя', dataIndex: 'name' },
+            { title: 'Тип', dataIndex: 'data_type', width: 180 },
             {
               title: 'Nullable',
               dataIndex: 'nullable',
               width: 100,
-              render: (value: boolean | null | undefined) => (value == null ? '—' : value ? 'yes' : 'no'),
+              render: (value: boolean | null | undefined) => (value == null ? '—' : value ? 'да' : 'нет'),
             },
             {
               title: 'Описание',
@@ -147,19 +147,19 @@ const ObjectDetailPage = () => {
       : []),
     {
       key: 'storage',
-      label: 'Storage',
+      label: 'Хранение',
       children: (
         <Card>
           <Typography.Text>
-            Data {formatBytes(asset.metrics.table_bytes)} · Indexes {formatBytes(asset.metrics.index_bytes)} ·
-            Snapshot {formatDateTime(asset.metrics.snapshot_at)}
+            Данные: {formatBytes(asset.metrics.table_bytes)} · Индексы: {formatBytes(asset.metrics.index_bytes)} ·
+            Снимок: {formatDateTime(asset.metrics.snapshot_at)}
           </Typography.Text>
         </Card>
       ),
     },
     {
       key: 'changes',
-      label: 'Changes',
+      label: 'Изменения',
       children: (
         <Space direction="vertical" style={{ width: '100%' }}>
         {changesQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить изменения" description={changesQuery.error.message} /> : null}
@@ -177,7 +177,7 @@ const ObjectDetailPage = () => {
           })}
           columns={[
             {
-              title: 'Type',
+              title: 'Тип',
               dataIndex: 'change_type',
               render: (value) => (
                 <Space>
@@ -186,7 +186,7 @@ const ObjectDetailPage = () => {
                 </Space>
               ),
             },
-            { title: 'Detected', dataIndex: 'detected_at', render: (value) => formatDateTime(value) },
+            { title: 'Обнаружено', dataIndex: 'detected_at', render: (value) => formatDateTime(value) },
           ]}
         />
         </Space>

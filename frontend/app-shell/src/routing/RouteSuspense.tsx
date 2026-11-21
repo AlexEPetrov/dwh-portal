@@ -39,7 +39,7 @@ export function RouteSuspense({
 }: RouteSuspenseProps) {
   const location = useLocation();
   return (
-    <PageErrorBoundary key={location.key} fallback={errorFallback}>
+    <PageErrorBoundary key={location.pathname} fallback={errorFallback}>
       <Suspense fallback={fallback}>{children}</Suspense>
     </PageErrorBoundary>
   );

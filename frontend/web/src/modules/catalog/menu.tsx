@@ -7,7 +7,7 @@ const menuItems: MenuItem[] = [
     label: 'Каталог данных',
     icon: <DatabaseOutlined />,
     children: [
-      { path: '/', label: 'Overview' },
+      { path: '/', label: 'Обзор' },
       { path: '/objects', label: 'Схема БД' },
       { path: '/storage', label: 'Хранение' },
       { path: '/lineage', label: 'Lineage' },

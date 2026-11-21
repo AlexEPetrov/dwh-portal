@@ -12,8 +12,8 @@ const StoragePage = () => {
 
   if (!storage) {
     return storageQuery.isError
-      ? <Alert type="error" showIcon message="Не удалось загрузить storage" description={storageQuery.error.message} />
-      : <Spin tip="Загрузка storage…"><div style={{ minHeight: 160 }} /></Spin>;
+      ? <Alert type="error" showIcon message="Не удалось загрузить сведения о хранении" description={storageQuery.error.message} />
+      : <Spin tip="Загрузка сведений о хранении…"><div style={{ minHeight: 160 }} /></Spin>;
   }
 
   const maxSchema = Math.max(1, ...(storage?.by_schema || []).map((row) => row.total_bytes));
@@ -22,33 +22,33 @@ const StoragePage = () => {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <div>
         <Typography.Title level={2} style={{ marginBottom: 4 }}>
-          Storage
+          Хранение
         </Typography.Title>
-        <Typography.Text type="secondary">As of {formatDateTime(storage?.as_of)}</Typography.Text>
+        <Typography.Text type="secondary">По состоянию на {formatDateTime(storage?.as_of)}</Typography.Text>
         <div style={{ marginTop: 8 }}>
           <FreshnessBar items={storage?.collector_freshness} />
         </div>
       </div>
-      {storageQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить storage" description={storageQuery.error.message} /> : null}
+      {storageQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить сведения о хранении" description={storageQuery.error.message} /> : null}
       {storageQuery.isFetching ? <Spin size="small" /> : null}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Total" value={formatBytes(storage?.total_bytes)} />
+            <Statistic title="Общий объём" value={formatBytes(storage?.total_bytes)} />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Data" value={formatBytes(storage?.table_bytes)} />
+            <Statistic title="Данные" value={formatBytes(storage?.table_bytes)} />
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Indexes" value={formatBytes(storage?.index_bytes)} />
+            <Statistic title="Индексы" value={formatBytes(storage?.index_bytes)} />
           </Card>
         </Col>
       </Row>
-      <Card title="By schema">
+      <Card title="По схемам">
         {storage?.by_schema.length ? (
           storage.by_schema.map((row) => (
             <div key={row.schema_name} style={{ marginBottom: 12 }}>
@@ -63,7 +63,7 @@ const StoragePage = () => {
           <Empty />
         )}
       </Card>
-      <Card title="Largest objects">
+      <Card title="Самые крупные объекты">
         <Table
           rowKey="asset_id"
           size="small"
@@ -71,14 +71,14 @@ const StoragePage = () => {
           dataSource={storage?.largest_objects || []}
           onRow={(row) => ({ onClick: () => navigate(`/objects/${row.asset_id}`), style: { cursor: 'pointer' } })}
           columns={[
-            { title: 'Object', dataIndex: 'display_name' },
-            { title: 'Type', dataIndex: 'asset_type', width: 140 },
-            { title: 'Size', dataIndex: 'total_bytes', render: (value) => formatBytes(value), width: 140 },
-            { title: 'Rows', dataIndex: 'row_estimate', render: (value) => formatRows(value), width: 120 },
+            { title: 'Объект', dataIndex: 'display_name' },
+            { title: 'Тип', dataIndex: 'asset_type', width: 140 },
+            { title: 'Размер', dataIndex: 'total_bytes', render: (value) => formatBytes(value), width: 140 },
+            { title: 'Строки', dataIndex: 'row_estimate', render: (value) => formatRows(value), width: 120 },
           ]}
         />
       </Card>
-      <Card title="History">
+      <Card title="История">
         {historyQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить историю хранения" description={historyQuery.error.message} /> : null}
         {history ? <FreshnessBar items={history.collector_freshness} /> : null}
         <Table
@@ -89,10 +89,10 @@ const StoragePage = () => {
           pagination={false}
           dataSource={history?.items || []}
           columns={[
-            { title: 'Snapshot', dataIndex: 'snapshot_at', render: (value) => formatDateTime(value) },
-            { title: 'Total', dataIndex: 'total_bytes', render: (value) => formatBytes(value) },
-            { title: 'Data', dataIndex: 'table_bytes', render: (value) => formatBytes(value) },
-            { title: 'Indexes', dataIndex: 'index_bytes', render: (value) => formatBytes(value) },
+            { title: 'Снимок', dataIndex: 'snapshot_at', render: (value) => formatDateTime(value) },
+            { title: 'Общий объём', dataIndex: 'total_bytes', render: (value) => formatBytes(value) },
+            { title: 'Данные', dataIndex: 'table_bytes', render: (value) => formatBytes(value) },
+            { title: 'Индексы', dataIndex: 'index_bytes', render: (value) => formatBytes(value) },
           ]}
         />
       </Card>

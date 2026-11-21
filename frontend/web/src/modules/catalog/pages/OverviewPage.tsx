@@ -15,50 +15,50 @@ const OverviewPage = () => {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <div>
         <Typography.Title level={2} style={{ marginBottom: 4 }}>
-          DWH Overview
+          Обзор DWH
         </Typography.Title>
         {data ? <FreshnessBar items={data.collector_freshness} /> : null}
       </div>
       <OverviewSearch />
       {!data ? (
         overviewQuery.isError
-          ? <Alert type="error" showIcon message="Не удалось загрузить overview" description={overviewQuery.error.message} />
-          : <Spin tip="Загрузка overview…"><div style={{ minHeight: 160 }} /></Spin>
+          ? <Alert type="error" showIcon message="Не удалось загрузить обзор" description={overviewQuery.error.message} />
+          : <Spin tip="Загрузка обзора…"><div style={{ minHeight: 160 }} /></Spin>
       ) : (
       <>
-      {overviewQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить overview" description={overviewQuery.error.message} /> : null}
+      {overviewQuery.isError ? <Alert type="error" showIcon message="Не удалось обновить обзор" description={overviewQuery.error.message} /> : null}
       {overviewQuery.isFetching ? <Spin size="small" /> : null}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Objects" value={data?.asset_counts.total ?? '—'} />
+            <Statistic title="Объекты" value={data?.asset_counts.total ?? '—'} />
             <Typography.Text type="secondary">
-              {data?.asset_counts.tables ?? 0} tables · {data?.asset_counts.views ?? 0} views
+              Таблицы: {data?.asset_counts.tables ?? 0} · Представления: {data?.asset_counts.views ?? 0}
             </Typography.Text>
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Total storage" value={formatBytes(data?.storage_totals.total_bytes)} />
+            <Statistic title="Общий объём" value={formatBytes(data?.storage_totals.total_bytes)} />
             <Typography.Text type="secondary">
-              {formatBytes(data?.storage_totals.table_bytes)} data · {formatBytes(data?.storage_totals.index_bytes)} indexes
+              Данные: {formatBytes(data?.storage_totals.table_bytes)} · Индексы: {formatBytes(data?.storage_totals.index_bytes)}
             </Typography.Text>
           </Card>
         </Col>
         <Col xs={24} md={8}>
           <Card>
-            <Statistic title="Changes 24h" value={data?.recent_changes.total ?? '—'} />
+            <Statistic title="Изменения за 24 часа" value={data?.recent_changes.total ?? '—'} />
             <Space>
-              <Tag color="green">+{data?.recent_changes.added ?? 0} added</Tag>
-              <Tag>{data?.recent_changes.changed ?? 0} changed</Tag>
-              <Tag color="red">{data?.recent_changes.removed ?? 0} removed</Tag>
+              <Tag color="green">Добавлено: +{data?.recent_changes.added ?? 0}</Tag>
+              <Tag>Изменено: {data?.recent_changes.changed ?? 0}</Tag>
+              <Tag color="red">Удалено: {data?.recent_changes.removed ?? 0}</Tag>
             </Space>
           </Card>
         </Col>
       </Row>
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={14}>
-          <Card title="Storage by schema">
+          <Card title="Объём по схемам">
             {data?.storage_by_schema.length ? (
               data.storage_by_schema.map((row) => (
                 <div key={row.schema_name} style={{ marginBottom: 12 }}>
@@ -82,7 +82,7 @@ const OverviewPage = () => {
           </Card>
         </Col>
         <Col xs={24} lg={10}>
-          <Card title="Recent changes" extra={<Typography.Link onClick={() => navigate('/changes')}>Все</Typography.Link>}>
+          <Card title="Последние изменения" extra={<Typography.Link onClick={() => navigate('/changes')}>Все</Typography.Link>}>
             <List
               dataSource={data?.recent_changes.items || []}
               locale={{ emptyText: 'Нет изменений' }}

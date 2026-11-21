@@ -2,6 +2,36 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
+import { matchesCatalogSearch } from '../src/modules/catalog/search.ts';
+
+test('picker search ignores whitespace in both queries and names', () => {
+    for (const query of ['b ex', ' B  EX ', 'bex', 'B\tEx', 'b\u00a0ex']) {
+        assert.equal(matchesCatalogSearch(query, 'ADS-B Exchange'), true, query);
+    }
+    assert.equal(matchesCatalogSearch('ADS-BExchange', 'ADS-B Exchange'), true);
+    assert.equal(matchesCatalogSearch('ice_brent', 'ICE', 'dwh.raw.ice_brent'), true);
+    assert.equal(matchesCatalogSearch('   ', 'ADS-B Exchange'), true);
+    assert.equal(matchesCatalogSearch('unknown', 'ADS-B Exchange'), false);
+});
+
+test('query-only navigation preserves the mounted page and input focus', () => {
+    const source = readFileSync(new URL('../../app-shell/src/routing/RouteSuspense.tsx', import.meta.url), 'utf8');
+    assert.ok(source.includes('key={location.pathname}'));
+    assert.ok(!source.includes('key={location.key}'));
+});
+
+test('object search isolates query notifications and loading in the grid subtree', () => {
+    const source = readFileSync(new URL('../src/modules/catalog/pages/ObjectsPage.tsx', import.meta.url), 'utf8');
+    const grid = source.slice(source.indexOf('const ObjectsGrid ='), source.indexOf('const ObjectsHeader ='));
+    const page = source.slice(source.indexOf('const ObjectsPage ='));
+    assert.ok(grid.includes('useCatalogAssets('));
+    assert.ok(grid.includes('loading={assetsQuery.isPending || assetsQuery.isFetching}'));
+    assert.ok(grid.includes('if (freshness) onFreshness(freshness)'));
+    assert.ok(!page.includes('useCatalogAssets('));
+    assert.ok(!page.includes('assetsQuery'));
+    assert.ok(page.includes('<ObjectsGrid filters={filters} onFreshness={onFreshness} />'));
+    assert.ok(page.includes('<ObjectsHeader freshness={freshness} />'));
+});
 
 test('restores every server-authored search filter without changing identifiers', () => {
     const values = {

@@ -1,12 +1,12 @@
 import { ExportOutlined } from '@ant-design/icons';
 import type { ChangeSummaryItem } from '@shared/api/generated';
 import {
-    FilterChipGroup,
-    FilterClear,
-    FilterSep,
-    FilterToolbar,
-    FreshnessBar,
-    formatDateTime,
+  FilterChipGroup,
+  FilterClear,
+  FilterSep,
+  FilterToolbar,
+  FreshnessBar,
+  formatDateTime,
 } from '@shared/ui/portal';
 import { Alert, Button, Card, Col, Row, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { useMemo, useState } from 'react';
@@ -14,19 +14,19 @@ import { useNavigate } from 'react-router-dom';
 import { useCatalogPeriodChanges } from '../queries';
 
 const OP_TOGGLES = [
-  { key: 'ADDED', label: 'Added' },
-  { key: 'CHANGED', label: 'Changed' },
-  { key: 'REMOVED', label: 'Removed' },
+  { key: 'ADDED', label: 'Добавлено' },
+  { key: 'CHANGED', label: 'Изменено' },
+  { key: 'REMOVED', label: 'Удалено' },
 ] as const;
 
 const TYPE_TOGGLES = [
   { key: 'TABLE', label: 'Table' },
   { key: 'VIEW', label: 'View' },
   { key: 'MATERIALIZED_VIEW', label: 'MV' },
-  { key: 'DATA_SOURCE', label: 'Source' },
-  { key: 'EXTRACTION_SOURCE', label: 'Extract' },
+  { key: 'DATA_SOURCE', label: 'Источник' },
+  { key: 'EXTRACTION_SOURCE', label: 'Извлечение' },
   { key: 'PROCESS', label: 'Loader' },
-  { key: 'STORAGE_LOCATION', label: 'Storage' },
+  { key: 'STORAGE_LOCATION', label: 'Хранение' },
 ] as const;
 
 const ALL_OPS = OP_TOGGLES.map((item) => item.key);
@@ -124,7 +124,7 @@ const ChangesPage = () => {
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <div>
         <Typography.Title level={2} style={{ marginBottom: 4 }}>
-          Changes
+          Изменения
         </Typography.Title>
         <FreshnessBar items={data?.collector_freshness} />
       </div>
@@ -152,17 +152,17 @@ const ChangesPage = () => {
       <Row gutter={12}>
         <Col span={8}>
           <Card size="small">
-            <Statistic title="Added" value={data ? filteredStats.added : '—'} />
+            <Statistic title="Добавлено" value={data ? filteredStats.added : '—'} />
           </Card>
         </Col>
         <Col span={8}>
           <Card size="small">
-            <Statistic title="Changed" value={data ? filteredStats.changed : '—'} />
+            <Statistic title="Изменено" value={data ? filteredStats.changed : '—'} />
           </Card>
         </Col>
         <Col span={8}>
           <Card size="small">
-            <Statistic title="Removed" value={data ? filteredStats.removed : '—'} />
+            <Statistic title="Удалено" value={data ? filteredStats.removed : '—'} />
           </Card>
         </Col>
       </Row>
@@ -178,7 +178,7 @@ const ChangesPage = () => {
         })}
         columns={[
           {
-            title: 'Change',
+            title: 'Изменение',
             dataIndex: 'change_type',
             width: 180,
             render: (value) => value,
@@ -210,13 +210,13 @@ const ChangesPage = () => {
             },
           },
           {
-            title: 'Detected',
+            title: 'Обнаружено',
             dataIndex: 'detected_at',
             width: 180,
             render: (value) => formatDateTime(value),
           },
           {
-            title: 'Details',
+            title: 'Подробности',
             dataIndex: 'details',
             ellipsis: true,
             render: (value) => (value?.summary as string) || JSON.stringify(value || {}),

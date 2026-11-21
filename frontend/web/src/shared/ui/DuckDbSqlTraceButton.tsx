@@ -100,7 +100,7 @@ const DuckDbSqlTraceButton: React.FC<DuckDbSqlTraceButtonProps> = ({
         <div style={{ position: 'relative', height: '100%' }}>
           <div style={{ height: '100%', overflow: 'auto', paddingRight: 8 }}>
             {queries.length === 0 ? (
-              <Empty description="SQL will appear after applying filters" />
+              <Empty description="SQL появится после применения фильтров" />
             ) : (
               queries.map((query, index) => (
                 <div key={`${index}-${query.length}`} style={{ marginBottom: 16 }}>
@@ -114,7 +114,7 @@ const DuckDbSqlTraceButton: React.FC<DuckDbSqlTraceButtonProps> = ({
           </div>
           <div
             onMouseDown={handleResizeStart}
-            title="Resize"
+            title="Изменить размер"
             style={{
               position: 'absolute',
               right: -8,

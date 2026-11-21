@@ -1680,7 +1680,7 @@ const LineageUniverseScene = ({
         ctx.font = '12px "Segoe UI", system-ui, sans-serif';
         ctx.fillStyle = 'rgba(186, 210, 255, 0.72)';
         ctx.textAlign = 'center';
-        ctx.fillText('Каталог · острова по kind · клик — поток', caption.x, caption.y);
+        ctx.fillText('Каталог · острова по типу · клик — поток', caption.x, caption.y);
       } else {
         const zTop = fieldBounds.minZ;
         const zBottom = fieldBounds.maxZ;
@@ -2262,7 +2262,7 @@ const LineageUniverseScene = ({
         overlay.innerHTML = `<strong>${hoverGuide}</strong><span>KIND · ${
           guide?.count ?? '—'
         } источников</span><em>фильтр каталога</em><small>${
-          active ? 'Клик — снять фильтр kind' : 'Клик — фильтр только по этому kind'
+          active ? 'Клик — снять фильтр по типу' : 'Клик — фильтр только по этому типу'
         }</small>`;
       } else {
         const tipId = hoverId ?? listHighlight ?? focusId;
@@ -2552,7 +2552,7 @@ const LineageUniverseScene = ({
             {
               value: 'pan',
               icon: (
-                <Tooltip title="Move — перетаскивание сдвигает сцену">
+                <Tooltip title="Перемещение — перетаскивание сдвигает сцену">
                   <span className="lineage-universe-toolbar__seg">
                     <DragOutlined /> Move
                   </span>
@@ -2562,7 +2562,7 @@ const LineageUniverseScene = ({
             {
               value: 'orbit',
               icon: (
-                <Tooltip title="Orbit — в каталоге крутит галактику, в потоке — камеру">
+                <Tooltip title="Вращение — в каталоге крутит галактику, в потоке — камеру">
                   <span className="lineage-universe-toolbar__seg">
                     <RetweetOutlined /> Orbit
                   </span>
@@ -2572,39 +2572,39 @@ const LineageUniverseScene = ({
           ]}
         />
         <Space.Compact size="small">
-          <Tooltip title="Zoom out (−)">
+          <Tooltip title="Отдалить (−)">
             <Button
               icon={<MinusOutlined />}
-              aria-label="Zoom out"
+              aria-label="Отдалить"
               onClick={() => controlsRef.current.zoomOut()}
             />
           </Tooltip>
-          <Tooltip title="Zoom in (+)">
+          <Tooltip title="Приблизить (+)">
             <Button
               icon={<PlusOutlined />}
-              aria-label="Zoom in"
+              aria-label="Приблизить"
               onClick={() => controlsRef.current.zoomIn()}
             />
           </Tooltip>
         </Space.Compact>
         <Space.Compact size="small">
           <Tooltip title="Сдвинуть влево">
-            <Button aria-label="Pan left" onClick={() => controlsRef.current.nudge(48, 0)}>
+            <Button aria-label="Сдвинуть влево" onClick={() => controlsRef.current.nudge(48, 0)}>
               ←
             </Button>
           </Tooltip>
           <Tooltip title="Сдвинуть вверх">
-            <Button aria-label="Pan up" onClick={() => controlsRef.current.nudge(0, 48)}>
+            <Button aria-label="Сдвинуть вверх" onClick={() => controlsRef.current.nudge(0, 48)}>
               ↑
             </Button>
           </Tooltip>
           <Tooltip title="Сдвинуть вниз">
-            <Button aria-label="Pan down" onClick={() => controlsRef.current.nudge(0, -48)}>
+            <Button aria-label="Сдвинуть вниз" onClick={() => controlsRef.current.nudge(0, -48)}>
               ↓
             </Button>
           </Tooltip>
           <Tooltip title="Сдвинуть вправо">
-            <Button aria-label="Pan right" onClick={() => controlsRef.current.nudge(-48, 0)}>
+            <Button aria-label="Сдвинуть вправо" onClick={() => controlsRef.current.nudge(-48, 0)}>
               →
             </Button>
           </Tooltip>
@@ -2613,10 +2613,10 @@ const LineageUniverseScene = ({
           <Button
             size="small"
             icon={<ReloadOutlined />}
-            aria-label="Reset view"
+            aria-label="Сбросить вид"
             onClick={() => controlsRef.current.resetView()}
           >
-            Reset
+            Сбросить
           </Button>
         </Tooltip>
         <Tooltip title="Двойной клик по узлу — центр камеры на нём">

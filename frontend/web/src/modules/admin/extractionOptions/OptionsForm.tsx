@@ -31,7 +31,7 @@ const FIELD_META: Record<string, { title: string; description?: string }> = {
   },
   subject_patterns: {
     title: 'Шаблоны темы письма',
-    description: 'Regex по Subject',
+    description: 'Regex по теме письма',
   },
   filename_patterns: {
     title: 'Шаблоны имён файлов',

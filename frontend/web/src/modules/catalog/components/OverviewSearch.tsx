@@ -2,6 +2,7 @@ import { ArrowRightOutlined, DatabaseOutlined, SearchOutlined } from '@ant-desig
 import { Alert, Button, Empty, Select, Space, Spin, Tag, Typography, theme } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { LINEAGE_PICKER_TYPES, useCatalogLineagePicker } from '../queries';
+import { matchesCatalogSearch } from '../search';
 import './overviewSearch.css';
 
 const TYPE_ORDER = new Map(LINEAGE_PICKER_TYPES.map((type, index) => [type, index]));
@@ -37,7 +38,7 @@ const OverviewSearch = () => {
       }}
     >
       <div className="overview-search__eyebrow" style={{ color: token.colorPrimary }}>
-        <DatabaseOutlined /> EXPLORE YOUR DWH
+        <DatabaseOutlined /> АНАЛИЗИРУЙ
       </div>
       <Typography.Title id="overview-search-title" level={3} className="overview-search__title">
         Все начинается с поиска
@@ -54,7 +55,9 @@ const OverviewSearch = () => {
           showSearch
           allowClear
           size="large"
-          optionFilterProp="label"
+          filterOption={(input, option) => matchesCatalogSearch(
+            input, option?.name ?? '', option?.qualifiedName ?? '',
+          )}
           placeholder="Название источника, таблицы или процесса…"
           options={options}
           value={undefined}
