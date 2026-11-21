@@ -293,6 +293,14 @@ verification:
     run: sudo ufw delete allow in proto tcp from 172.19.0.0/16 to 172.17.0.1 port 5432
   PORTAL-HARNESS-NETWORK-ADDRESSING:
     run: docker network inspect dwh-portal-harness_harness --format '{{json .IPAM.Config}}'
+  PORTAL-HARNESS-NETWORK-INVENTORY:
+    run: docker network inspect $(docker network ls -q) --format '{{.Name}} {{json .IPAM.Config}}'
+  PORTAL-HARNESS-HOST-ROUTES:
+    run: ip -4 route show table all
+  PORTAL-HARNESS-UFW-FIXED-PG-ALLOW:
+    run: sudo ufw allow in proto tcp from 172.22.0.0/16 to 172.17.0.1 port 5432
+  PORTAL-HARNESS-UFW-FIXED-PG-ROLLBACK:
+    run: sudo ufw delete allow in proto tcp from 172.22.0.0/16 to 172.17.0.1 port 5432
   PORTAL-HARNESS-DB-DIAGNOSE:
     run_template: bash infra/environments/portal-harness/diagnose-db.sh "{env_file}"
   PORTAL-HARNESS-DB-SHELL-CHECK:

@@ -63,11 +63,22 @@ class ConfigurationTests(unittest.TestCase):
             'bash infra/environments/portal-harness/up.sh "{env_file}"',
         )
 
-    def test_yaml_conversion_preserves_values_except_approved_launch_selector(self):
+    def test_yaml_conversion_preserves_values_except_approved_launch_and_ipam(self):
         compose = yaml.safe_load(COMPOSE.read_text())
         self.assertEqual(
             compose["services"]["portal-harness"].pop("command"),
             ["${PORTAL_LAUNCH_MODE:-portal}"],
+        )
+        self.assertEqual(
+            compose["networks"]["harness"].pop("ipam"),
+            {
+                "config": [
+                    {
+                        "subnet": "${PORTAL_HARNESS_SUBNET:-172.22.0.0/16}",
+                        "gateway": "${PORTAL_HARNESS_GATEWAY:-172.22.0.1}",
+                    }
+                ]
+            },
         )
         normalized = json.dumps(compose, sort_keys=True, separators=(",", ":"))
         self.assertEqual(
@@ -86,9 +97,10 @@ class ConfigurationTests(unittest.TestCase):
         self.assertTrue(service["env_file"][0].startswith("${PORTAL_ENV_FILE:?"))
         self.assertTrue(all(port.startswith("127.0.0.1:") for port in service["ports"]))
         self.assertEqual(
-            compose["networks"],
-            {"harness": {"driver": "bridge"}},
+            set(compose["networks"]),
+            {"harness"},
         )
+        self.assertEqual(compose["networks"]["harness"]["driver"], "bridge")
         self.assertEqual(service["networks"], ["harness"])
         self.assertEqual(service["command"], ["${PORTAL_LAUNCH_MODE:-portal}"])
         self.assertNotIn("build", service)
@@ -123,6 +135,46 @@ class ConfigurationTests(unittest.TestCase):
             if line.startswith("APP_DB_PSG_HOST=")
         ]
         self.assertEqual(host_lines, ["APP_DB_PSG_HOST=host.docker.internal"])
+
+    def test_fixed_network_defaults_match_sample_and_narrow_firewall_registration(self):
+        import ipaddress
+
+        compose = yaml.safe_load(COMPOSE.read_text())
+        sample = dict(
+            line.split("=", 1)
+            for line in (ENVIRONMENT / "sample.env").read_text().splitlines()
+            if line and not line.startswith("#") and "=" in line
+        )
+        allocation = compose["networks"]["harness"]["ipam"]["config"]
+        self.assertEqual(len(allocation), 1)
+        for field, key in (
+            ("subnet", "PORTAL_HARNESS_SUBNET"),
+            ("gateway", "PORTAL_HARNESS_GATEWAY"),
+        ):
+            self.assertEqual(
+                allocation[0][field], "${" + key + ":-" + sample[key] + "}"
+            )
+            self.assertNotIn(key, compose["services"]["portal-harness"]["environment"])
+        network = ipaddress.ip_network(sample["PORTAL_HARNESS_SUBNET"], strict=True)
+        gateway = ipaddress.ip_address(sample["PORTAL_HARNESS_GATEWAY"])
+        self.assertIn(gateway, network)
+        self.assertNotIn(gateway, (network.network_address, network.broadcast_address))
+        self.assertEqual(network, ipaddress.ip_network("172.22.0.0/16"))
+        policy = yaml.safe_load((REPOSITORY / "rules/policy.yaml").read_text())
+        verification = policy["verification"]
+        allow = verification["PORTAL-HARNESS-UFW-FIXED-PG-ALLOW"]["run"]
+        self.assertEqual(
+            allow,
+            f"sudo ufw allow in proto tcp from {network} to 172.17.0.1 port 5432",
+        )
+        self.assertEqual(
+            verification["PORTAL-HARNESS-UFW-FIXED-PG-ROLLBACK"]["run"],
+            allow.replace("ufw allow", "ufw delete allow", 1),
+        )
+        # Networking stays in Compose: no fixed per-container IP or firewall side effects.
+        self.assertEqual(compose["services"]["portal-harness"]["networks"], ["harness"])
+        for name in ("up.sh", "down.sh", "compose.sh", "diagnose-db.sh"):
+            self.assertNotIn("ufw", (ENVIRONMENT / name).read_text())
 
     def test_build_composition_and_environment_files_have_separate_owners(self):
         self.assertTrue((SOURCE / "Dockerfile").is_file())

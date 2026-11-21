@@ -28,6 +28,55 @@ approval_policy: human_required
 
 # Workflow: experimental Portal and harness image
 
+## Approved fixed project network allocation
+
+On 2026-11-21 the user reported actual project IPAM `172.22.0.0/16`, gateway
+`172.22.0.1`, while the host's narrow UFW PostgreSQL rule allowed only the former
+`172.19.0.0/16` source. Portal failed startup on a TCP timeout to `172.17.0.1:5432`,
+leaving all four DSH catalog tools unregistered. The user approved implementing
+the fixed-subnet plan, not executing a host/deployment change.
+
+Add explicit Compose IPAM with `PORTAL_HARNESS_SUBNET` and
+`PORTAL_HARNESS_GATEWAY`, defaulting to the observed current range/gateway. Keep
+the project-owned bridge, automatic container addresses, host-gateway alias,
+project/volume identities, ports and launch behavior. These defaults are a
+candidate allocation for this host, not proof of no LAN/VPN overlap or portable
+address ownership. Operator overlap review remains mandatory before transition;
+another target may override both values in the same private env file.
+
+`PORTAL-HARNESS-NETWORK-INVENTORY` and `PORTAL-HARNESS-HOST-ROUTES` are user-run
+read-only allocation evidence on the target, including its active VPN routes.
+Do not execute Docker or infer that offline VPN/private ranges are free. Missing
+commands/evidence must not be replaced with guessed tools or ranges. Network
+addressing inspection after recreation uses the existing registered command.
+Retain the historical 172.19 rules; new `PORTAL-HARNESS-UFW-FIXED-PG-ALLOW` and
+`PORTAL-HARNESS-UFW-FIXED-PG-ROLLBACK` are user-run only, conditional on confirming
+the 172.22 source allocation and 172.17.0.1 destination. Never remove a preexisting
+rule if UFW skipped adding it. Other allocations need separately registered
+concrete firewall actions; do not widen to all sources or all ports.
+
+Update Compose, public example, operator guides, policy and source regression
+coverage. No private env, application/API, image recipe, generated release or
+published contract changes. An unchanged image can use the updated authoring
+configuration; do not hand-edit old generated releases. The operator uses the
+registered down/up with the same private env to recreate only this project's
+network, preserving named volumes. Existing attached one-off containers must be
+stopped by their owner; never force-disconnect unrelated containers or prune
+networks. Register no automatic firewall/network mutation in launchers.
+
+Run registered image/release Python, Node, shell and diff checks with mocked/fake
+Docker only. Real overlap review, network recreation, firewall action, DB
+diagnostic, Portal startup, MCP registration and model roundtrip remain user-run
+acceptance evidence. Do not call the outage fixed by source checks alone.
+
+Local source evidence: all 55 image/environment tests and 15 release tests passed.
+All 16 Node tests passed with one existing host-native stripping skip; registered
+shell syntax checks passed. The pre-IPAM configuration hash remains unchanged
+after removing only the explicitly approved launch selector and IPAM additions.
+No Docker, host route inspection, firewall mutation, private env edit, generated
+release edit, DB/model call or network recreation was executed. Allocation review
+and target-side recovery remain outstanding; these checks do not prove recovery.
+
 ## Approved external-chat presentation and navigation
 
 On 2026-11-21 the user selected external DSH chat, explicitly requested Portal

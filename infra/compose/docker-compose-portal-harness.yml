@@ -43,3 +43,8 @@ volumes:
 networks:
   harness:
     driver: bridge
+    # Reserve a non-overlapping range on each target before creating this network.
+    ipam:
+      config:
+        - subnet: "${PORTAL_HARNESS_SUBNET:-172.22.0.0/16}"
+          gateway: "${PORTAL_HARNESS_GATEWAY:-172.22.0.1}"

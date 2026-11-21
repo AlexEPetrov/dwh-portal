@@ -175,7 +175,11 @@ explicit approved TLS/forwarding setup; none is configured automatically.
 ### Existing SQL Portal configuration in the combined image
 
 An existing deployment is not required: a private configuration can be prepared
-from the public template. The standalone project creates its own bridge. For
+from the public template. The standalone project creates its own bridge with
+explicit, per-target subnet/gateway allocation (defaults `172.22.0.0/16` and
+`172.22.0.1`). Review Docker/LAN/VPN overlaps before use; see the
+[fixed-network transition guide](../../environments/portal-harness/README.md#fixed-project-subnet-and-firewall-alignment).
+The network must be recreated to change IPAM; volumes remain preserved. For
 an independent staged DB diagnostic that also works when Portal cannot start,
 use [diagnose-db.sh](../../environments/portal-harness/diagnose-db.sh) as described
 in the [environment guide](../../environments/portal-harness/README.md).

@@ -167,10 +167,98 @@ The host PostgreSQL must listen on an interface reachable from the Docker
 bridge, not only `127.0.0.1`. Its `pg_hba.conf` and host firewall must allow the
 actual container/bridge source range and the intended DB/user, using the normal
 authentication policy. Do not open access to all addresses or disable auth.
-Docker may choose the bridge subnet; this configuration does not assume a fixed
-CIDR. These server/firewall prerequisites are operator tasks, not changes made
-by this launcher or by the agent. A host-gateway alias alone cannot make a
-loopback-only PostgreSQL listener reachable.
+The bridge now has explicit IPAM, described below. These server/firewall
+prerequisites are operator tasks, not changes made by this launcher or by the
+agent. A host-gateway alias alone cannot make a loopback-only PostgreSQL listener
+reachable.
+
+### Fixed project subnet and firewall alignment
+
+Compose uses `PORTAL_HARNESS_SUBNET` (default `172.22.0.0/16`) and
+`PORTAL_HARNESS_GATEWAY` (default `172.22.0.1`). These Compose-only settings use
+the same private env file as up/down/diagnostics, not a second configuration
+protocol. Existing private files without the keys receive the explicit defaults.
+Changing either value requires recreating the project network; restarting a
+container does not change network IPAM. Container addresses remain automatic;
+there is no external/shared network or fixed global network name.
+
+**Before first use or migration**, reserve a non-overlapping range on the target.
+The defaults match the reported current Docker allocation, not a universal safe
+range. Review every Docker network and host LAN/VPN route on the Docker host:
+
+```sh
+docker network inspect $(docker network ls -q) --format '{{.Name}} {{json .IPAM.Config}}'
+ip -4 route show table all
+```
+
+The current project's own allocation/route is expected to match. Any overlap
+with another Docker network or LAN/VPN destination must be resolved before
+creation. Consult the operator's reserved/offline VPN ranges too; missing routes
+are not proof an allocation is free. If a command is unavailable, stop and obtain
+allocation evidence rather than installing tools or guessing another range.
+For a different target, set both keys in its private env file and coordinate
+corresponding PostgreSQL/firewall policy before launch. Gateway must be a usable
+address inside the chosen subnet. Do not change the global Docker address pools.
+
+For the reported host only, the PostgreSQL destination is `172.17.0.1:5432` via
+`host.docker.internal`. **It is not the project gateway `172.22.0.1`.** Preserve
+the host-gateway mapping and DB host setting. With the confirmed/reserved
+`172.22.0.0/16` source allocation, the registered user-run narrow allow is:
+
+```sh
+sudo ufw allow in proto tcp from 172.22.0.0/16 to 172.17.0.1 port 5432
+```
+
+This rule allows one destination/port, not all host services. Keep existing
+`172.19.0.0/16` rules until their ownership is established. Do not disable UFW
+or PostgreSQL authentication. If this operation actually added a new rule, its
+exact rollback is:
+
+```sh
+sudo ufw delete allow in proto tcp from 172.22.0.0/16 to 172.17.0.1 port 5432
+```
+
+If UFW skipped an already existing rule, do not delete that preexisting rule as
+rollback. These concrete firewall actions apply only to the observed source and
+destination; a changed target needs separately reviewed/registered commands.
+For a remote PostgreSQL server, the observed source may be host-NATed instead.
+
+#### Transition and acceptance (operator-run)
+
+Use the updated canonical checkout configuration or a newly generated release;
+never hand-edit an old generated release. No image rebuild is required by IPAM
+itself. Preserve the same project name and private env path. Record the previous
+allocation/settings and firewall changes locally for rollback, without sharing
+secrets. After allocation review and the narrow firewall change above:
+
+```sh
+bash infra/environments/portal-harness/down.sh infra/environments/portal-harness/.env
+bash infra/environments/portal-harness/diagnose-db.sh infra/environments/portal-harness/.env
+docker network inspect dwh-portal-harness_harness --format '{{json .IPAM.Config}}'
+bash infra/environments/portal-harness/up.sh infra/environments/portal-harness/.env
+```
+
+Run each step separately and inspect its result. Down removes only this project's
+containers/network and preserves the named DSH state volume. Stop if network
+removal fails due to attached containers: their owner must stop their one-off
+jobs; do not force-disconnect unrelated containers or prune networks. The
+diagnostic recreates the project network using the same explicit IPAM even when
+Portal cannot start. Confirm the allocation and all diagnostic stages before up.
+An allocation conflict or failed DB diagnostic blocks acceptance; do not bypass
+startup/migration checks. In a new transferred release use the sibling down,
+diagnostic and up helpers with the same private env, as below.
+
+Check successful Portal startup/health, all four actual DSH catalog registrations,
+then a real tool call in a new chat. For chat, explicitly select
+`PORTAL_LAUNCH_MODE=all`; the retained default `portal` intentionally does not
+start DSH. DB diagnostic success alone proves neither MCP nor model behavior.
+Repeat project down/diagnostic recreation when testing that IPAM stays stable.
+These are target-side checks, not actions performed by the agent.
+
+Rollback is an operator-reviewed recreation with the previous approved allocation
+and matching firewall policy, preserving volumes; the previous broken firewall
+alignment is not a known-good recovery target. Undo only the newly added UFW rule
+after abandoning this allocation and confirming no consumer still needs it.
 
 ### PostgreSQL on another internal server (future setup)
 
