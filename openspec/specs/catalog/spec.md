@@ -306,8 +306,8 @@ endpoint directions, unresolved targets and freshness. It SHALL be labeled as
 bounded static catalog evidence, not observed execution history. The interface
 SHALL NOT invent OpenLineage runs/events, timestamps or column lineage.
 
-Navigation tools SHALL verify object existence and return existing object and
-lineage UI routes. Links SHALL be relative unless an operator-configured HTTP(S)
+Navigation tools SHALL verify object existence and return existing object,
+lineage and object-focused Universe UI routes. Links SHALL be relative unless an operator-configured HTTP(S)
 public origin without credentials/query/fragment is supplied. Request headers
 SHALL NOT determine that public origin. Returning a link SHALL NOT open a browser.
 
@@ -385,6 +385,48 @@ SHALL NOT be broadened.
 - **AND** missing, stale or unknown registration does not count as catalog readiness
 - **AND** the model is instructed to report missing access without resources or execution fallbacks
 - **AND** no readiness observation is claimed to prove model selection or a completed read
+
+### Requirement: Compact external-chat answers and verified navigation
+
+Successful MCP envelopes SHALL preserve canonical `data` and `redacted_fields`
+and additionally expose typed `navigation.portal` and `navigation.universe` URLs.
+Search Portal links SHALL encode the same query, database, schema, type, source,
+status and changed-since filters and start at the first list page. Portal's
+objects view SHALL restore those filters from URL state using existing generated
+API calls and show removable active filter indicators. Object/column navigation
+SHALL target the object card; dependency navigation SHALL target its lineage
+view. Object Universe links SHALL focus the verified UUID. Search Universe links
+SHALL be identified as the unfiltered source overview, not a filtered search.
+
+Server and DSH profile guidance SHALL request a concise conclusion and compact
+Markdown tables with at most 20 displayed data rows each. For more results,
+guidance SHALL show the first 20 available rows, disclose shown/total or known
+incompleteness, and place an explicit "Open in Portal" link below the table.
+Selected-object responses SHALL offer explicit "Open in Portal" and "Open in
+Universe" links in the user's language, using server-authored URLs. Guidance
+SHALL NOT invent working buttons, browser actions, counts or completeness, fetch
+all pages automatically, or omit freshness/unresolved/redaction disclosures.
+
+This display rule SHALL NOT change canonical API/tool paging caps, graph bounds
+or ordered column data. Model compliance SHALL remain separately verified by a
+user-run chat; source fixtures SHALL NOT be claimed as a model roundtrip. Native
+DSH tool cards SHALL remain a separate client extension, not implied by Markdown.
+
+#### Scenario: More than twenty search results
+
+- **GIVEN** a permitted search returns more than twenty matching objects
+- **WHEN** an external catalog chat prepares its answer
+- **THEN** guidance requests at most twenty rows and an Open in Portal link below the table
+- **AND** that link restores the same supported filters in Portal without changing canonical results
+- **AND** remaining pages are not automatically fetched solely to expand the answer
+
+#### Scenario: Navigate an identified object and its dependencies
+
+- **GIVEN** a verified object UUID and its bounded graph or columns
+- **WHEN** a permitted client requests those results or object links
+- **THEN** the response includes existing Portal and object-focused Universe routes
+- **AND** the supplied guidance offers both explicit links without claiming a browser opened
+- **AND** unknown objects still fail instead of producing navigation success
 
 ### Requirement: Explicit MCP read access mode
 

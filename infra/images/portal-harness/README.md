@@ -397,6 +397,75 @@ remain unverified until the user runs the updated image in the target contour.
 
 ## Portal-owned MCP
 
+### External-chat answers and navigation
+
+DSH remains a separate client. Its catalog guidance now requests a short conclusion
+and compact Markdown tables for source/object lists, columns and dependencies.
+Display at most **20 data rows per table**. For a larger result, show the first
+20 available rows, disclose the shown/total or bounded/incomplete status, and put
+**Открыть на портале / Open in Portal** below the table. Do not automatically
+fetch all pages to make a larger answer. This is guidance, not deterministic UI
+enforcement or a changed API cap; model compliance still needs a user-run chat.
+
+Each successful result preserves canonical `data` and `redacted_fields` and adds
+typed `navigation.portal` and `navigation.universe`. Use server-returned URLs,
+never model-built paths. Search links open Objects with the same query, database,
+schema, type, source, status and changed-since filters, starting at page one.
+Portal restores those URL filters and displays removable active filter indicators.
+For an object/columns, the Portal link opens its card; for dependencies, its
+lineage view. The Universe link focuses the same verified object. Search Universe
+links instead open the unfiltered source overview and must be labeled honestly.
+Selected-object answers should show both explicit **Открыть на портале** and
+**Открыть в Universe** links. Returning links does not open a browser.
+
+Existing `data.links` and the navigation-only tool now include `universe` beside
+`object` and `lineage`. The four-tool allowlist, masking/auth/Host/Origin checks,
+canonical paging, graph bounds and complete ordered columns remain unchanged.
+Configure the actual public Portal origin for the user's browser: a relative link
+would otherwise be resolved against the separate DSH origin. Do not infer origins
+from request headers or place credentials in URLs. Applying these source changes
+requires rebuilding the image containing both Portal and DSH context; existing
+chat/model behavior is not established by source tests or SDK smoke alone.
+
+### Pinned DSH UI-extension research (not implemented)
+
+Read-only research used the pinned commit
+`9c2670d3bce5275e0d1610272958121af87787bb`, not a newer release:
+
+- [Tool UI documentation](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/client/ui-tool/README.md#registering-a-business-tool-view)
+  explicitly supports business-owned views keyed by exact wire Tool name, with a
+  generic fallback. A Portal plugin can target the four existing qualified names
+  without adding a callable model tool or modifying transcript pairing.
+- [Tool slot contract](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/client/ui-tool/src/client/contract/slots.ts)
+  declares the session-scoped `tool.call.toolview` slot and preparing/start/result
+  props. It exposes the recorded call/result, disclosure and optional Inspect,
+  not a free-form LLM-generated component or blanket backend-execution permission.
+- [Business-owned registration example](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/client/ui-skill/src/client/index.ts)
+  registers `SkillRow` through the same supported slot mechanism.
+- [MCP bridge](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/mcp/mcp-client/src/tools.ts)
+  preserves canonical structured MCP values but also makes a native content
+  projection. [Chat projection](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/client/ui-chat/src/client/conversation-nodes/tool.ts)
+  supplies UI result content/error/meta; it must not be assumed to expose the raw
+  `structuredContent` field directly. The next stage needs fixtures against this
+  actual projection, using validated Portal JSON result content or a proven typed
+  metadata path, never parsing the LLM's prose as authoritative catalog data.
+- [Browser loader](https://github.com/deepseek-ai/deepseek-harness/blob/9c2670d3bce5275e0d1610272958121af87787bb/packages/client/web/README.md)
+  loads the host-provided client plugin graph and uses shared module identities.
+  A client bundle/roster registration must be integrated into the pinned build;
+  merely copying our existing host guard plugin will not register browser UI.
+
+Conclusion: a native extension point EXISTS, so a separate browser plugin is a
+feasible next stage without replacing DSH or forking the chat renderer. It has
+not been built/activated here, and MCP Apps compatibility was not established.
+Proposed cards read successful logged catalog results, validate their shape, cap
+tables deterministically at 20, and provide trusted Portal/Universe links. Errors,
+unknown shapes or interrupted/truncated results retain the generic fallback.
+Navigation should use real anchors with safe URL validation, not arbitrary HTML,
+scripts, iframe embedding, credentials or automatic collection. No new model
+tool, guard broadening or Portal/DSH shared-auth claim is needed for link-only UI.
+
+### Transport and tools
+
 ```text
 DSH / OpenCode / another compatible MCP client
              │ Streamable HTTP

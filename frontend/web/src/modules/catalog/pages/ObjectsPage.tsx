@@ -12,7 +12,8 @@ import {
 import { Alert, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { readCatalogFilters, updateCatalogFilters, type CatalogFilters } from '../navigation';
 import { useCatalogAssets } from '../queries';
 
 const TYPE_TOGGLES = [
@@ -22,28 +23,35 @@ const TYPE_TOGGLES = [
   { key: 'STORAGE_LOCATION', label: 'Storage' },
   { key: 'TABLE', label: 'Table' },
   { key: 'VIEW', label: 'View' },
+  { key: 'MATERIALIZED_VIEW', label: 'Materialized view' },
+  { key: 'DATABASE', label: 'Database' },
+  { key: 'SCHEMA', label: 'Schema' },
 ] as const;
 
 const PAGE_SIZE_OPTIONS = ['10', '25', '50', '100'] as const;
 
 const ObjectsPage = () => {
   const navigate = useNavigate();
-  /** Empty = show all types. Client/UI state — stays in useState, not Query. */
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [q, setQ] = useState('');
-  const deferredQ = useDeferredValue(q.trim());
-  const [status, setStatus] = useState<'active' | 'deleted'>('active');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = useMemo(() => readCatalogFilters(searchParams), [searchParams]);
+  const selectedTypes = useMemo(() => filters.type?.split(',').filter(Boolean) ?? [], [filters.type]);
+  const q = filters.q ?? '';
+  const deferredQ = useDeferredValue(q);
+  const status = filters.status ?? 'active';
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const typeFilter = selectedTypes.length > 0 ? selectedTypes.join(',') : undefined;
+  const updateFilters = (updates: Partial<CatalogFilters>) => {
+    setPage(1);
+    setSearchParams((current) => updateCatalogFilters(current, updates), { replace: true });
+  };
 
   const assetsQuery = useCatalogAssets({
+    ...filters,
     status,
     page,
     pageSize,
     q: deferredQ || undefined,
-    type: typeFilter,
   });
 
   const items = assetsQuery.data?.items ?? [];
@@ -52,12 +60,11 @@ const ObjectsPage = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [selectedTypes, deferredQ, status]);
+  }, [filters, deferredQ]);
 
   const toggleType = (type: string) => {
-    setSelectedTypes((prev) =>
-      prev.includes(type) ? prev.filter((item) => item !== type) : [...prev, type]
-    );
+    updateFilters({ type: (selectedTypes.includes(type)
+      ? selectedTypes.filter((item) => item !== type) : [...selectedTypes, type]).join(',') });
   };
 
   const columns: ColumnsType<AssetListItem> = useMemo(
@@ -151,7 +158,7 @@ const ObjectsPage = () => {
           placeholder="Поиск…"
           style={{ width: 220 }}
           value={q}
-          onChange={(event) => setQ(event.target.value)}
+          onChange={(event) => updateFilters({ q: event.target.value })}
         />
         <Select
           size="small"
@@ -161,16 +168,27 @@ const ObjectsPage = () => {
             { value: 'active', label: 'Active' },
             { value: 'deleted', label: 'Deleted' },
           ]}
-          onChange={(value) => setStatus(value)}
+          onChange={(value) => updateFilters({ status: value })}
         />
         <FilterClear
-          visible={selectedTypes.length > 0 || Boolean(q.trim())}
+          visible={selectedTypes.length > 0 || Boolean(q) || Boolean(filters.database)
+            || Boolean(filters.schema) || Boolean(filters.source) || Boolean(filters.changedSince)}
           onClick={() => {
-            setSelectedTypes([]);
-            setQ('');
+            updateFilters({ type: undefined, q: undefined, database: undefined,
+              schema: undefined, source: undefined, changedSince: undefined });
           }}
         />
       </FilterToolbar>
+      <Space size={4} wrap>
+        {([
+          ['database', 'Database'], ['schema', 'Schema'], ['source', 'Source'],
+          ['changedSince', 'Changed since'],
+        ] as const).map(([key, label]) => filters[key] ? (
+          <Tag key={key} closable onClose={() => updateFilters({ [key]: undefined })}>
+            {label}: {filters[key]}
+          </Tag>
+        ) : null)}
+      </Space>
       <Table
         rowKey="id"
         loading={assetsQuery.isPending || assetsQuery.isFetching}

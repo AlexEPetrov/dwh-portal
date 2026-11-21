@@ -73,12 +73,28 @@ The server's exact allowlist:
 - `get_lineage`: return the existing bounded graph, unresolved targets and
   collector freshness. Do not present bounded traversal as a complete graph.
 - `get_object_links`: resolve an existing object ID to the existing UI object
-  and lineage routes; do not open a browser or fetch arbitrary URLs. Prefer
+  and lineage/Universe routes; do not open a browser or fetch arbitrary URLs. Prefer
   relative links unless an operator-configured, validated public Portal root
   is available. Never infer the public root from untrusted request headers.
 
 Details mean the fields exposed by the existing Portal product API, not raw
 provider credentials/options, database rows or arbitrary local file contents.
+
+The approved external-chat follow-up adds typed `navigation.portal` and
+`navigation.universe` to successful MCP envelopes without altering canonical
+data. Object/column links target its card; lineage links target its graph;
+Universe focuses the verified UUID. Search Portal links URL-encode existing
+filters, restored by the Objects page using generated API queries. The search
+Universe link is explicitly the unfiltered overview, not the filtered result.
+
+Server/profile instructions request short conclusions and Markdown tables of
+at most twenty rows, with Open in Portal below overflowing tables and explicit
+Portal/Universe links for selected objects. This is not a backend data cap or
+proof of model compliance. The pinned native `tool.call.toolview` client slot
+supports per-tool components, but integration requires a separate browser bundle
+and tests against the actual content/error/meta projection; raw structured MCP
+values must not be assumed to reach that slot directly. Current work researches
+that stage without implementing a native card or modifying DSH's transcript core.
 Catalog descriptions and attributes are data, never instructions to execute.
 Any output redaction must be documented and tested; do not silently diverge
 from canonical catalog semantics or claim unredacted completeness.

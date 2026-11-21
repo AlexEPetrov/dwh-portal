@@ -28,6 +28,46 @@ approval_policy: human_required
 
 # Workflow: experimental Portal and harness image
 
+## Approved external-chat presentation and navigation
+
+On 2026-11-21 the user selected external DSH chat, explicitly requested Portal
+AND Universe navigation, and specified a maximum of 20 displayed table rows
+followed by an "Open in Portal" link to the corresponding view when more exist.
+Implement stage one as response guidance plus verified server-authored links;
+research pinned UI extension points now, but do not claim native cards shipped.
+
+Preserve the exact four tools, canonical query DTOs/filters/paging/graph data,
+masking and access/guard behavior. Add typed navigation to successful MCP
+envelopes, Universe to existing object links, and URL-encoded filtered object-list
+links. The Objects page must restore supported filters from those URLs and expose
+active filters; no arbitrary URL fetch, browser action or automatic all-page scan.
+The 20-row limit is a display/model-guidance rule, not a new global API/tool cap.
+Column/dependency lists use object/lineage navigation, not invented list routes.
+
+Apply core/frontend routers, catalog/OpenSpec lifecycle and API-contract workflow
+with the existing task-scoped missing-style-guide exception. Approval includes
+the additive MCP envelope/link fields and frontend filter URL state. Export
+OpenAPI and regenerate frontend API, classify diffs, and build the changed
+frontend. Run targeted MCP/unit, registered frontend navigation, image/release,
+Node, shell, spec and diff checks. No Docker, live DB, migrations or model calls.
+No inline HTML/JS from LLM, new model tool, resource discovery, auth relaxation
+or shared-login change is authorized. Stage-two UI is evidence/design only.
+
+Local evidence: all 39 MCP tests and 204 backend unit tests passed (two existing
+deprecation warnings). All five registered frontend navigation tests passed;
+OpenAPI export/frontend generation completed with no published/generated diff.
+Frontend consumer impact is the Objects page's additive URL-filter state; its
+production build passed with existing Vite chunk/import warnings. All 53 image
+source tests, 15 release tests and 16 Node tests passed (one existing native-strip
+skip); registered shell checks and both current capability specs passed.
+Pinned-source research confirmed the native keyed `tool.call.toolview` session
+slot, preparing/start/result types, ui-skill registration example and host-provided
+client bundle graph. MCP canonical structured values are preserved by the bridge,
+but the chat's UI projection exposes recorded content/error/meta; future cards
+need validation fixtures for that boundary. No native plugin, Docker image,
+browser session, DB/model request or credential/config change was executed here.
+Actual rebuilt-image model formatting and browser navigation remain user-run.
+
 ## Approved obsolete SQL wrapper removal
 
 On 2026-11-21 the user explicitly approved deleting the redundant `run-sql.sh`

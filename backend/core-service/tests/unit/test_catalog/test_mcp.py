@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import json
 import uuid
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -88,6 +89,11 @@ def test_search_detail_columns_and_links_equal_rest():
         assert detail["data"]["links"] == {
             "object": f"/objects/{asset_id}",
             "lineage": f"/lineage/{asset_id}",
+            "universe": f"/lineage/universe/{asset_id}",
+        }
+        assert detail["navigation"] == {
+            "portal": f"/objects/{asset_id}",
+            "universe": f"/lineage/universe/{asset_id}",
         }
         links = call(client, "get_object_links", {"asset_id": asset_id})["structuredContent"]
         assert links["data"] == detail["data"]["links"]
@@ -116,7 +122,8 @@ def test_discovery_publishes_described_parameters_and_concrete_output_schemas():
             for parameter in tool["inputSchema"]["properties"].values():
                 assert len(parameter["description"]) > 20
             output = tool["outputSchema"]
-            assert {"data", "redacted_fields"} <= set(output["required"])
+            assert {"data", "redacted_fields", "navigation"} <= set(output["required"])
+            assert "CatalogNavigation" in output["$defs"]
             assert output["properties"]["data"].get("$ref")
             assert "additionalProperties" not in output["properties"]["data"]
             assert output["properties"]["redacted_fields"]["items"]["type"] == "string"
@@ -151,6 +158,77 @@ def test_initialization_describes_model_driven_multilingual_ambiguity_policy():
         assert "never choose the first arbitrarily" in instructions
         assert "do not silently translate identifiers" in instructions
         assert "Answer in the user's language" in instructions
+        assert "at most 20 data rows" in instructions
+        assert "BELOW the table" in instructions
+        assert "Открыть на портале" in instructions
+        assert "Открыть в Universe" in instructions
+        assert "do not fetch every page automatically" in instructions
+
+
+@pytest.mark.parametrize("base", ["", "https://catalog.example.invalid"])
+def test_search_navigation_preserves_filters_without_inventing_a_page_limit(monkeypatch, base):
+    from api.host import app
+
+    monkeypatch.setenv("APP_MCP_PUBLIC_BASE_URL", base)
+    arguments = {
+        "q": "Цена & 東京 / 100% +",
+        "database": "dwh/one",
+        "schema": "raw+market",
+        "asset_types": ["VIEW", "MATERIALIZED_VIEW"],
+        "source": "postgres_sql",
+        "status": "deleted",
+        "changed_since": "2026-11-21T10:00:00+03:00",
+        "page": 3,
+        "page_size": 7,
+    }
+    with TestClient(app) as client:
+        payload = call(client, "search_catalog", arguments)["structuredContent"]
+        navigation = payload["navigation"]
+        url = urlsplit(navigation["portal"])
+        assert url.path == "/objects"
+        assert url.netloc == ("catalog.example.invalid" if base else "")
+        assert parse_qs(url.query) == {
+            "q": [arguments["q"]],
+            "database": [arguments["database"]],
+            "schema": [arguments["schema"]],
+            "type": ["VIEW,MATERIALIZED_VIEW"],
+            "source": ["postgres_sql"],
+            "status": ["deleted"],
+            "changed_since": [arguments["changed_since"]],
+            "sort": ["qualified_name"],
+        }
+        assert navigation["universe"] == f"{base}/lineage/universe"
+        assert payload["data"]["page_size"] == 7
+        assert "page" not in parse_qs(url.query)
+
+
+def test_twenty_row_display_guidance_does_not_truncate_canonical_tool_data():
+    from api.host import app
+
+    with TestClient(app) as client:
+        store = get_portal_store()
+        asset_id = client.get("/api/v1/assets").json()["items"][0]["id"]
+        original = store.get_asset(uuid.UUID(asset_id))
+        for index in range(25):
+            store.upsert_asset(
+                original.model_copy(
+                    update={
+                        "id": uuid.uuid4(),
+                        "identity_key": f"display-limit-{index}",
+                        "name": f"preview_many_{index}",
+                        "qualified_name": f"raw.preview_many_{index}",
+                    }
+                )
+            )
+        result = call(client, "search_catalog", {"q": "preview_many", "page_size": 50})[
+            "structuredContent"
+        ]
+        assert result["data"]["total"] == 25
+        assert len(result["data"]["items"]) == 25
+        assert (
+            result["data"]
+            == client.get("/api/v1/assets", params={"q": "preview_many", "page_size": 50}).json()
+        )
 
 
 def test_all_successful_results_validate_against_typed_envelopes():
@@ -170,6 +248,11 @@ def test_all_successful_results_validate_against_typed_envelopes():
             result = call(client, name, {"asset_id": asset_id})
             assert not result.get("isError")
             model.model_validate(result["structuredContent"])
+            navigation = result["structuredContent"]["navigation"]
+            assert navigation["universe"] == f"/lineage/universe/{asset_id}"
+            assert navigation["portal"] == (
+                f"/lineage/{asset_id}" if name == "get_lineage" else f"/objects/{asset_id}"
+            )
 
 
 def test_unicode_search_preserves_multiple_matches_without_auto_selecting():

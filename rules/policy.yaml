@@ -209,6 +209,8 @@ contracts:
     escalate_if: business_semantic_change
     escalate_to: human_required
 verification:
+  FRONTEND-CATALOG-NAVIGATION-TESTS:
+    run: cd frontend/web && node --import tsx --test tests/catalog-navigation.test.mjs
   PORTAL-ENV-RENAME-HARNESS-SAMPLE:
     run: test ! -e infra/environments/portal-harness/sample.env && test ! -L infra/environments/portal-harness/sample.env && mv -n infra/environments/portal-harness/sql.env.example infra/environments/portal-harness/sample.env
   PORTAL-ENV-PREPARE-PRIVATE-HARNESS:

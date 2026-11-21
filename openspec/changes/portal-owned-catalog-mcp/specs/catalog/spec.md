@@ -80,6 +80,39 @@ fallbacks; resource discovery stays off and the exact guard stays unchanged.
 - **THEN** missing/unknown availability is reported rather than successful catalog readiness
 - **AND** model selection and actual catalog reads remain separately unproven
 
+### Requirement: Compact external-chat answers and verified navigation
+
+The existing four tools SHALL preserve canonical data/masking and additionally
+return typed Portal/Universe navigation. Object links SHALL include the verified
+object-focused Universe route. Search Portal links SHALL URL-encode existing
+filters and restore them in the objects view through generated API calls; search
+Universe links SHALL explicitly mean the unfiltered source overview. Dependency
+results SHALL link to the selected object's lineage view, columns to its card.
+
+Server/profile guidance SHALL request concise Markdown tables with at most 20
+displayed rows and an explicit Open in Portal link BELOW an overflowing table.
+Object answers SHALL explicitly offer Open in Portal and Open in Universe in the
+user's language. Counts, freshness, unresolved targets and masking SHALL remain
+honest; no automatic all-page fetching, invented routes/buttons or browser actions.
+Canonical tool/API paging, columns and graph data SHALL NOT be truncated by this
+presentation rule. Native DSH cards and actual model compliance remain separately
+verified, not claimed from source fixtures or Markdown alone.
+
+#### Scenario: A result exceeds twenty rows
+
+- **GIVEN** a search has more than twenty matches
+- **WHEN** the external chat prepares an answer
+- **THEN** guidance asks for the first twenty available rows and Open in Portal below the table
+- **AND** server-authored navigation restores the corresponding supported filters
+- **AND** canonical data and existing page-size bounds are unchanged
+
+#### Scenario: Explicit object navigation
+
+- **GIVEN** a verified object and its details or bounded lineage
+- **WHEN** the client requests data or links
+- **THEN** explicit Portal and object-focused Universe destinations are returned
+- **AND** unknown UUIDs remain errors rather than successful invented links
+
 ### Requirement: Explicit MCP read access mode
 
 MCP SHALL have distinct interface-enablement and anonymous-read settings.

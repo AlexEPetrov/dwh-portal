@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
+
+test('restores every server-authored search filter without changing identifiers', () => {
+    const values = {
+        q: 'Цена & 東京 | 100%', database: 'dwh/one', schema: 'raw+market',
+        type: 'TABLE,MATERIALIZED_VIEW', source: 'postgres_sql', status: 'deleted',
+        changed_since: '2026-11-21T10:00:00+03:00', sort: 'qualified_name',
+    };
+    const restored = readCatalogFilters(new URLSearchParams(values));
+    assert.deepEqual(restored, {
+        q: values.q, database: values.database, schema: values.schema, type: values.type,
+        source: values.source, status: 'deleted', changedSince: values.changed_since,
+        sort: 'qualified_name',
+    });
+});
+
+test('plain objects route retains active browsing defaults and no extra filters', () => {
+    const filters = readCatalogFilters(new URLSearchParams());
+    assert.equal(filters.status, 'active');
+    assert.equal(filters.sort, 'qualified_name');
+    for (const key of ['q', 'database', 'schema', 'type', 'source', 'changedSince']) {
+        assert.equal(filters[key], undefined);
+    }
+});
+
+test('updates preserve other filters and clear resets the first page without mutating input', () => {
+    const original = new URLSearchParams('type=VIEW&database=dwh&page=4&other=keep');
+    const updated = updateCatalogFilters(original, { q: 'ice_brent', changedSince: '2026-11-21T00:00:00Z' });
+    assert.equal(updated.get('type'), 'VIEW');
+    assert.equal(updated.get('database'), 'dwh');
+    assert.equal(updated.get('changed_since'), '2026-11-21T00:00:00Z');
+    assert.equal(updated.get('other'), 'keep');
+    assert.equal(updated.has('page'), false);
+    assert.equal(original.get('page'), '4');
+    const cleared = updateCatalogFilters(updated, { type: '', q: undefined, database: null, changedSince: '' });
+    assert.equal(cleared.toString(), 'other=keep');
+});
+
+test('status cannot inject unrelated request options or claim a model-defined endpoint', () => {
+    const result = readCatalogFilters(new URLSearchParams('status=invalid&url=https://evil.invalid&sort=arbitrary'));
+    assert.equal(result.status, 'active');
+    assert.equal(result.sort, 'qualified_name');
+    assert.equal('url' in result, false);
+});
+
+test('server navigation destinations correspond to registered Portal/Universe routes', () => {
+    const routes = readFileSync(new URL('../src/modules/catalog/index.tsx', import.meta.url), 'utf8');
+    for (const path of ['/objects', '/objects/:assetId', '/lineage/:assetId',
+        '/lineage/universe', '/lineage/universe/:assetId']) {
+        assert.ok(routes.includes(`path: '${path}'`), `Missing verified route: ${path}`);
+    }
+});

@@ -14,6 +14,8 @@ const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1:50
 function payload(result) {
     assert.notEqual(result.isError, true)
     assert.ok(result.structuredContent, 'SDK must preserve structured catalog output')
+    assert.equal(typeof result.structuredContent.navigation?.portal, 'string')
+    assert.equal(typeof result.structuredContent.navigation?.universe, 'string')
     return result.structuredContent.data
 }
 
@@ -43,6 +45,7 @@ try {
     const links = payload(await client.callTool({ name: 'get_object_links', arguments: { asset_id: assetId } }))
     assert.ok(links.object.endsWith(`/objects/${assetId}`))
     assert.ok(links.lineage.endsWith(`/lineage/${assetId}`))
+    assert.ok(links.universe.endsWith(`/lineage/universe/${assetId}`))
     assert.equal(typeof catalogGuard({ name: 'bash' }), 'string')
     console.log('PASS: pinned DSH MCP SDK → Portal HTTP catalog tools (no model/provider call)')
 } finally {

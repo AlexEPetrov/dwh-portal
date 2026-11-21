@@ -36,6 +36,23 @@ with patch.dict(sys.modules, {"launch": launcher}):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_catalog_response_guidance_has_twenty_row_limit_and_explicit_navigation(
+        self,
+    ):
+        context = (SOURCE / "agent-context.md").read_text()
+        for requirement in (
+            "at most 20 data rows",
+            "BELOW the table",
+            "navigation.portal",
+            "navigation.universe",
+            "Открыть на портале",
+            "Открыть в Universe",
+            "not native interactive cards",
+            "unfiltered source overview",
+        ):
+            self.assertIn(requirement, context)
+        self.assertIn("do not", context.lower())
+
     def test_obsolete_sql_wrapper_has_no_registered_execution_path(self):
         policy = yaml.safe_load((REPOSITORY / "rules/policy.yaml").read_text())
         verification = policy["verification"]

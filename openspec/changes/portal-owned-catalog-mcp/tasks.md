@@ -46,3 +46,15 @@
 - [x] Reconcile the approved behavior into the catalog delta/current spec and operator guidance.
 - [x] Run follow-up registered unit/source/Node/shell/spec checks and API reconciliation.
 - [ ] Verify the updated image's actual pinned-host registration and natural-language Ollama tool roundtrip (user-run).
+
+## 6. Approved external-DSH presentation and navigation
+
+- [x] Record external-client direction, explicit Portal/Universe links and the twenty-row display requirement.
+- [x] Add typed server-authored navigation while preserving canonical result data and four-tool guard.
+- [x] Restore supported filters in Objects URL state through existing generated API queries.
+- [x] Add compact table/link guidance without changing tool/API paging or claiming native UI enforcement.
+- [x] Verify exact pinned native toolview extension, example registration, result projection and client-bundle boundary.
+- [x] Reconcile catalog current/delta specs, navigation tests and operator/research guidance.
+- [x] Run MCP/unit, frontend navigation/build, OpenAPI export/generation and source/spec checks.
+- [ ] Verify rebuilt-image answers obey the display rule and both links navigate correctly in the user's browser (user-run).
+- [ ] Implement/activate a trusted native DSH browser toolview plugin as a separate stage; current work is research only.
