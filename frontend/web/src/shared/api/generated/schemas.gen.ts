@@ -74,6 +74,13 @@ export const $AssetCounts = {
         views: {
             type: 'integer',
             title: 'Views'
+        },
+        by_type: {
+            additionalProperties: {
+                type: 'integer'
+            },
+            type: 'object',
+            title: 'By Type'
         }
     },
     type: 'object',
@@ -1236,6 +1243,142 @@ export const $RecentChanges = {
     type: 'object',
     required: ['total', 'added', 'changed', 'removed', 'items'],
     title: 'RecentChanges'
+} as const;
+
+export const $RecentLoadFileItem = {
+    properties: {
+        id: {
+            type: 'string',
+            title: 'Id'
+        },
+        file_name: {
+            type: 'string',
+            title: 'File Name'
+        },
+        loaded_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Loaded At'
+        },
+        status: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Status'
+        },
+        file_size: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'File Size'
+        },
+        checksum: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Checksum'
+        },
+        load_duration_sec: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Load Duration Sec'
+        },
+        doc_date_actual: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Doc Date Actual'
+        },
+        database: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Database'
+        },
+        extraction_source_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Extraction Source Id'
+        }
+    },
+    type: 'object',
+    required: ['id', 'file_name'],
+    title: 'RecentLoadFileItem',
+    description: 'Live log entry attributed to its DWH, never a standalone catalog asset.'
+} as const;
+
+export const $RecentLoadFileListResponse = {
+    properties: {
+        items: {
+            items: {
+                '$ref': '#/components/schemas/RecentLoadFileItem'
+            },
+            type: 'array',
+            title: 'Items'
+        },
+        available: {
+            type: 'boolean',
+            title: 'Available'
+        },
+        limit: {
+            type: 'integer',
+            title: 'Limit'
+        },
+        has_more: {
+            type: 'boolean',
+            title: 'Has More',
+            default: false
+        }
+    },
+    type: 'object',
+    required: ['items', 'available', 'limit'],
+    title: 'RecentLoadFileListResponse',
+    description: 'Bounded latest load-log entries without an expensive history count.'
 } as const;
 
 export const $SchemaStorageRow = {

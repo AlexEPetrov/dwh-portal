@@ -21,6 +21,9 @@ export type AssetCounts = {
     total: number;
     tables: number;
     views: number;
+    by_type?: {
+        [key: string]: (number);
+    };
 };
 
 export type AssetDetailResponse = {
@@ -262,6 +265,32 @@ export type RecentChanges = {
     items: Array<ChangeSummaryItem>;
 };
 
+/**
+ * Live log entry attributed to its DWH, never a standalone catalog asset.
+ */
+export type RecentLoadFileItem = {
+    id: string;
+    file_name: string;
+    loaded_at?: string | null;
+    status?: number | null;
+    file_size?: number | null;
+    checksum?: string | null;
+    load_duration_sec?: number | null;
+    doc_date_actual?: string | null;
+    database?: string | null;
+    extraction_source_id?: string | null;
+};
+
+/**
+ * Bounded latest load-log entries without an expensive history count.
+ */
+export type RecentLoadFileListResponse = {
+    items: Array<RecentLoadFileItem>;
+    available: boolean;
+    limit: number;
+    has_more?: boolean;
+};
+
 export type SchemaStorageRow = {
     schema_name: string;
     total_bytes: number;
@@ -359,6 +388,12 @@ export type ChatWithAiStreamApiAiChatStreamPostResponse = unknown;
 export type GetVersionApiSystemVersionGetResponse = string;
 
 export type GetOverviewResponse = OverviewResponse;
+
+export type ListRecentLoadsData = {
+    limit?: number;
+};
+
+export type ListRecentLoadsResponse = RecentLoadFileListResponse;
 
 export type ListLineageRootsResponse = LineageRootsResponse;
 
@@ -550,6 +585,21 @@ export type $OpenApiTs = {
                  * Successful Response
                  */
                 200: OverviewResponse;
+            };
+        };
+    };
+    '/api/v1/loads/recent': {
+        get: {
+            req: ListRecentLoadsData;
+            res: {
+                /**
+                 * Successful Response
+                 */
+                200: RecentLoadFileListResponse;
+                /**
+                 * Validation Error
+                 */
+                422: HTTPValidationError;
             };
         };
     };

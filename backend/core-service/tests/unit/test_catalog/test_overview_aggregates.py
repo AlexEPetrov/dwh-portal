@@ -57,6 +57,9 @@ def test_overview_counts_every_active_asset(store, now):
     assert overview["asset_counts"]["total"] == 13
     assert overview["asset_counts"]["tables"] == 12
     assert overview["asset_counts"]["views"] == 1
+    assert overview["asset_counts"]["by_type"]["TABLE"] == 12
+    assert overview["asset_counts"]["by_type"]["VIEW"] == 1
+    assert overview["asset_counts"]["by_type"]["PROCESS"] == 0
     assert overview["storage_totals"]["total_bytes"] == 1_200
 
 
@@ -92,3 +95,24 @@ def test_overview_change_totals_are_not_capped_by_recent_list(store, now):
     assert overview["recent_changes"]["changed"] == 12
     assert overview["recent_changes"]["removed"] == 0
     assert len(overview["recent_changes"]["items"]) == 8
+
+
+def test_counts_break_down_every_type_and_exclude_deleted_assets(store, now):
+    for kind in AssetType:
+        for deleted in (False, True):
+            store.upsert_asset(
+                Asset(
+                    asset_type=kind,
+                    qualified_name=f"{kind.value}.{deleted}",
+                    name=kind.value,
+                    source_provider="test",
+                    identity_key=f"{kind.value}.{deleted}",
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    deleted_at=now if deleted else None,
+                )
+            )
+    counts = store.count_assets()
+    assert counts.by_type == {kind.value: 1 for kind in AssetType}
+    assert counts.total == sum(counts.by_type.values()) == len(AssetType)
+    assert counts.views == 2  # Legacy aggregate still includes materialized views.

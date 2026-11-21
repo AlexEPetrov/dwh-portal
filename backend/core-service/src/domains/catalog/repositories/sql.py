@@ -203,12 +203,15 @@ class SqlPortalStore:
                 .where(PortalAssetDbModel.deleted_at.is_(None))
                 .group_by(PortalAssetDbModel.asset_type)
             ).all()
-        by_type = {asset_type: int(count) for asset_type, count in rows}
+        by_type = {kind.value: 0 for kind in AssetType}
+        by_type.update({asset_type: int(count) for asset_type, count in rows})
         tables = by_type.get(AssetType.TABLE.value, 0)
         views = by_type.get(AssetType.VIEW.value, 0) + by_type.get(
             AssetType.MATERIALIZED_VIEW.value, 0
         )
-        return AssetCountSummary(total=sum(by_type.values()), tables=tables, views=views)
+        return AssetCountSummary(
+            total=sum(by_type.values()), tables=tables, views=views, by_type=by_type
+        )
 
     def summarize_storage(self, *, largest_limit: int = 20) -> StorageSummary:
         """Aggregate the latest snapshot of each sized active object."""

@@ -139,6 +139,7 @@ class AssetCountSummary(BaseModel):
     total: int
     tables: int
     views: int
+    by_type: dict[str, int] = Field(default_factory=dict)
 
 
 class ChangeCountSummary(BaseModel):

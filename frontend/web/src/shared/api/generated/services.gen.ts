@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { HealthCheckHealthGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListLineageRootsResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, ListAssetLoadsData, ListAssetLoadsResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse, RunPortalCollectData, RunPortalCollectResponse } from './types.gen';
+import type { HealthCheckHealthGetResponse, LoginApiAuthLoginPostData, LoginApiAuthLoginPostResponse, LogoutApiAuthLogoutPostResponse, GetSessionApiAuthSessionGetData, GetSessionApiAuthSessionGetResponse, ChatWithAiApiAiChatPostData, ChatWithAiApiAiChatPostResponse, ChatWithAiStreamApiAiChatStreamPostData, ChatWithAiStreamApiAiChatStreamPostResponse, GetVersionApiSystemVersionGetResponse, GetOverviewResponse, ListRecentLoadsData, ListRecentLoadsResponse, ListLineageRootsResponse, ListAssetsData, ListAssetsResponse, GetAssetData, GetAssetResponse, GetAssetColumnsData, GetAssetColumnsResponse, GetAssetLineageData, GetAssetLineageResponse, ListAssetLoadsData, ListAssetLoadsResponse, GetStorageResponse, GetStorageHistoryData, GetStorageHistoryResponse, ListChangesData, ListChangesResponse, GetChangeData, GetChangeResponse, GetCollectionStatusResponse, RunPortalCollectData, RunPortalCollectResponse } from './types.gen';
 
 /**
  * Health Check
@@ -113,6 +113,25 @@ export const getVersionApiSystemVersionGet = (): CancelablePromise<GetVersionApi
 export const getOverview = (): CancelablePromise<GetOverviewResponse> => { return __request(OpenAPI, {
     method: 'GET',
     url: '/api/v1/overview'
+}); };
+
+/**
+ * List Recent Loads
+ * Read recent log files independently from the snapshot-only overview.
+ * @param data The data for the request.
+ * @param data.limit
+ * @returns RecentLoadFileListResponse Successful Response
+ * @throws ApiError
+ */
+export const listRecentLoads = (data: ListRecentLoadsData = {}): CancelablePromise<ListRecentLoadsResponse> => { return __request(OpenAPI, {
+    method: 'GET',
+    url: '/api/v1/loads/recent',
+    query: {
+        limit: data.limit
+    },
+    errors: {
+        422: 'Validation Error'
+    }
 }); };
 
 /**

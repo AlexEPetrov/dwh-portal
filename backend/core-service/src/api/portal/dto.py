@@ -21,6 +21,7 @@ class AssetCounts(BaseModel):
     total: int
     tables: int
     views: int
+    by_type: dict[str, int] = Field(default_factory=dict)
 
 
 class StorageTotals(BaseModel):
@@ -151,6 +152,22 @@ class LoadFileListResponse(BaseModel):
     page: int
     page_size: int
     available: bool
+    has_more: bool = False
+
+
+class RecentLoadFileItem(LoadFileItem):
+    """Live log entry attributed to its DWH, never a standalone catalog asset."""
+
+    database: str | None = None
+    extraction_source_id: str | None = None
+
+
+class RecentLoadFileListResponse(BaseModel):
+    """Bounded latest load-log entries without an expensive history count."""
+
+    items: list[RecentLoadFileItem]
+    available: bool
+    limit: int
     has_more: bool = False
 
 

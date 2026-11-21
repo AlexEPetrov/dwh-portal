@@ -241,3 +241,43 @@ def test_demo_table_loads_are_unavailable_without_dwh_query():
     assert body["available"] is False
     assert body["items"] == []
     assert body["total"] == 0
+
+
+def test_recent_loads_api_is_bounded_independent_and_attributes_the_database():
+    from domains.catalog.providers.log_files import LoadFilePage, LoadFileRecord
+
+    calls = []
+
+    class RecentService:
+        def list_recent_loads(self, limit):
+            calls.append(limit)
+            return LoadFilePage(
+                items=[
+                    LoadFileRecord(
+                        id="file-1",
+                        file_name="prices.xlsx",
+                        loaded_at=datetime.datetime.now(datetime.timezone.utc),
+                        database="warehouse_b",
+                        extraction_source_id="native-source-id",
+                    )
+                ],
+                total=None,
+                available=True,
+                has_more=True,
+            )
+
+    client = _client()
+    client.app.dependency_overrides[get_extraction_load_service] = lambda: RecentService()
+    response = client.get("/api/v1/loads/recent", params={"limit": 10})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["limit"] == 10 and body["has_more"] is True
+    assert "total" not in body
+    assert body["items"][0]["database"] == "warehouse_b"
+    assert body["items"][0]["extraction_source_id"] == "native-source-id"
+    for limit in (0, 51, -1):
+        assert client.get("/api/v1/loads/recent", params={"limit": limit}).status_code == 422
+    assert calls == [10]
+    counts = client.get("/api/v1/overview").json()["asset_counts"]
+    assert sum(counts["by_type"].values()) == counts["total"]
+    assert calls == [10]  # Snapshot overview never consults the live log.

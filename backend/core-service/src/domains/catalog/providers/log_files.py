@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
 
@@ -52,6 +52,8 @@ class LoadFileRecord:
     checksum: str | None = None
     load_duration_sec: float | None = None
     doc_date_actual: datetime.datetime | None = None
+    database: str | None = None
+    extraction_source_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,15 @@ class LogFilesProvider:
         self, extraction_source_id: str, page: int, page_size: int, *, include_total: bool = True
     ) -> LoadFilePage:
         """Return newest files, optionally without counting the complete source history."""
+        return self._list_files(extraction_source_id, page, page_size, include_total)
+
+    def list_recent_files(self, limit: int) -> LoadFilePage:
+        """Read the latest entries across all sources in the configured DWH in one query."""
+        return self._list_files(None, 1, limit, False)
+
+    def _list_files(
+        self, extraction_source_id: str | None, page: int, page_size: int, include_total: bool
+    ) -> LoadFilePage:
         if self._connection is None and (not self._settings.psg_host or not self._settings.psg_db):
             return LoadFilePage(items=[], total=0, available=False)
         connection = self._connection or self._connect()
@@ -101,7 +112,7 @@ class LogFilesProvider:
     def _read_page(
         self,
         connection,
-        extraction_source_id: str,
+        extraction_source_id: str | None,
         page: int,
         page_size: int,
         include_total: bool,
@@ -118,7 +129,12 @@ class LogFilesProvider:
         if not selected:
             return LoadFilePage(items=[], total=0, available=False)
         source_ident = _quote_ident(source_col)
+        if extraction_source_id is None:
+            selected.append(("extraction_source_id", source_ident))
         time_ident = next((ident for field, ident in selected if field == "loaded_at"), None)
+        # Without a timestamp the global panel cannot truthfully claim these are recent loads.
+        if extraction_source_id is None and time_ident is None:
+            return LoadFilePage(items=[], total=0, available=False)
         order_ident = time_ident or next(
             (ident for field, ident in selected if field == "id"), source_ident
         )
@@ -129,6 +145,8 @@ class LogFilesProvider:
         select_sql = ", ".join(ident for _, ident in selected)
         offset = max(page - 1, 0) * page_size
         total = None
+        where_sql = f"WHERE {source_ident} = %s" if extraction_source_id is not None else ""
+        source_params = (extraction_source_id,) if extraction_source_id is not None else ()
         with connection.cursor() as cursor:
             if include_total:
                 cursor.execute(
@@ -140,15 +158,18 @@ class LogFilesProvider:
                 f"""
                 SELECT {select_sql}
                 FROM sys.log_files
-                WHERE {source_ident} = %s
+                {where_sql}
                 ORDER BY {order_sql}
                 LIMIT %s OFFSET %s
                 """,
-                (extraction_source_id, page_size if include_total else page_size + 1, offset),
+                (*source_params, page_size if include_total else page_size + 1, offset),
             )
             rows = cursor.fetchall()
             has_more = offset + page_size < total if total is not None else len(rows) > page_size
-            items = [self._record(selected, row) for row in rows[:page_size]]
+            items = [
+                replace(self._record(selected, row), database=self._settings.psg_db)
+                for row in rows[:page_size]
+            ]
         return LoadFilePage(items=items, total=total, available=True, has_more=has_more)
 
     @staticmethod
@@ -172,6 +193,11 @@ class LogFilesProvider:
             checksum=None if values.get("checksum") is None else str(values.get("checksum")),
             load_duration_sec=_as_float(duration),
             doc_date_actual=doc_date if isinstance(doc_date, datetime.datetime) else None,
+            extraction_source_id=(
+                str(values["extraction_source_id"])
+                if values.get("extraction_source_id") is not None
+                else None
+            ),
         )
 
     def _table_columns(self, connection, schema: str, table: str) -> set[str]:

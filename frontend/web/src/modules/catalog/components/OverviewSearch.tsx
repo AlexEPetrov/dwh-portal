@@ -3,7 +3,7 @@ import { Alert, Button, Empty, Select, Space, Spin, Tag, Typography, theme } fro
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCatalogAssets } from '../queries';
-import { overviewSearchParams, overviewSearchUrl } from '../search';
+import { matchingResultsOption, overviewSearchParams, overviewSearchUrl } from '../search';
 import './overviewSearch.css';
 
 const OverviewSearch = () => {
@@ -17,11 +17,12 @@ const OverviewSearch = () => {
     const timer = setTimeout(() => setQueryText(currentText), 300);
     return () => clearTimeout(timer);
   }, [currentText]);
-  const assetsQuery = useCatalogAssets(overviewSearchParams(queryText), !isDebouncing);
-  const isLoading = isDebouncing || assetsQuery.isPending || assetsQuery.isFetching;
-  const hasError = !isDebouncing && assetsQuery.isError;
+  const assetsQuery = useCatalogAssets(overviewSearchParams(queryText), Boolean(currentText) && !isDebouncing);
+  const isLoading = Boolean(currentText) && (isDebouncing || assetsQuery.isPending || assetsQuery.isFetching);
+  const hasError = Boolean(currentText) && !isDebouncing && assetsQuery.isError;
   // Never offer selectable results for text that the user has already replaced.
-  const options = (isDebouncing ? [] : assetsQuery.data?.items ?? []).map((item) => ({
+  const assetOptions = (!currentText || isDebouncing ? [] : assetsQuery.data?.items ?? []).map((item) => ({
+    kind: 'asset' as const,
       value: item.id,
       type: item.asset_type,
       name: item.display_name || item.name || item.qualified_name,
@@ -30,6 +31,10 @@ const OverviewSearch = () => {
       label: `[${item.asset_type}] ${item.display_name || item.name || item.qualified_name}`,
     }));
   const total = isDebouncing ? undefined : assetsQuery.data?.total;
+  const options = [
+    ...matchingResultsOption(currentText, total, !isLoading && !hasError),
+    ...assetOptions,
+  ];
 
   return (
     <section
@@ -68,10 +73,13 @@ const OverviewSearch = () => {
           value={undefined}
           loading={isLoading}
           listHeight={320}
-          onSelect={(value) => {
-            if (!isDebouncing) navigate(`/lineage/${value}`);
+          onSelect={(value, option) => {
+            if (isDebouncing) return;
+            navigate(option.kind === 'matches' ? overviewSearchUrl(queryText) : `/lineage/${value}`);
           }}
-          optionRender={(option) => (
+          optionRender={(option) => option.data.kind === 'matches' ? (
+            <Space><SearchOutlined /><Typography.Text strong>{option.data.label}</Typography.Text><ArrowRightOutlined /></Space>
+          ) : (
             <div className="overview-search__option">
               <Space size={8}>
                 <Tag color="blue">{option.data.type}</Tag>
@@ -87,7 +95,7 @@ const OverviewSearch = () => {
               ) : null}
             </div>
           )}
-          notFoundContent={isLoading ? (
+          notFoundContent={!currentText ? 'Введите название или описание для поиска' : isLoading ? (
             <Space><Spin size="small" /> Загрузка объектов…</Space>
           ) : hasError ? (
             'Список недоступен. Попробуйте повторить загрузку.'
@@ -96,14 +104,6 @@ const OverviewSearch = () => {
           )}
         />
       </div>
-      <Space wrap>
-        <Typography.Text type="secondary">
-          {total === undefined ? 'Поиск по всему каталогу' : `Показано ${options.length} из ${total}`}
-        </Typography.Text>
-        <Button type="link" onClick={() => navigate(overviewSearchUrl(searchText))}>
-          Все результаты <ArrowRightOutlined />
-        </Button>
-      </Space>
       <div className="overview-search__footer">
         <Typography.Text id="overview-search-hint" type="secondary">Выберите объект, чтобы открыть его связи и зависимости</Typography.Text>
         <Button type="link" onClick={() => navigate('/lineage')}>

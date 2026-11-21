@@ -57,11 +57,17 @@ class FakeCursor:
                 )
             ]
             return
-        source_id = str(params[0])
-        limit, offset = int(params[1]), int(params[2])
-        matched = [
-            row for row in self._connection.rows if str(row["extraction_source_id"]) == source_id
-        ]
+        if "where" in normalized:
+            source_id = str(params[0])
+            limit, offset = int(params[1]), int(params[2])
+            matched = [
+                row
+                for row in self._connection.rows
+                if str(row["extraction_source_id"]) == source_id
+            ]
+        else:
+            limit, offset = int(params[0]), int(params[1])
+            matched = list(self._connection.rows)
         matched.sort(key=lambda row: (row["timestamp"], row["rid"]), reverse=True)
         page_rows = matched[offset : offset + limit]
         select_part = sql.split("FROM", 1)[0].replace("SELECT", "", 1)
@@ -306,3 +312,55 @@ def test_injected_connection_ignores_column_cache():
 def test_unknown_asset_returns_none(store):
     service = ExtractionLoadService(store, ExplodingProvider())  # type: ignore[arg-type]
     assert service.list_loads(uuid.uuid4(), 1, 50) is None
+
+
+def test_recent_files_reads_all_sources_with_one_bounded_query_and_database_identity():
+    from settings.portal import DwhCollectorSettings
+
+    old = _file_row("old.xlsx", TS_OLD, str(uuid.UUID(int=1)))
+    new = _file_row("other-source.xlsx", TS_NEW, str(uuid.UUID(int=2)))
+    new["extraction_source_id"] = uuid.uuid4()
+    newest_tie = _file_row("tie.xlsx", TS_NEW, str(uuid.UUID(int=3)))
+    connection = FakeConnection(LOG_COLUMNS, [old, new, newest_tie])
+    provider = LogFilesProvider(
+        settings=DwhCollectorSettings.model_construct(psg_db="warehouse_b"),
+        connection=connection,
+    )
+    page = provider.list_recent_files(2)
+    assert page.available and page.has_more
+    assert page.total is None
+    assert [item.file_name for item in page.items] == ["tie.xlsx", "other-source.xlsx"]
+    assert page.items[1].extraction_source_id == str(new["extraction_source_id"])
+    assert all(item.database == "warehouse_b" for item in page.items)
+    reads = [(sql, params) for sql, params in connection.executed if "from sys.log_files" in sql]
+    assert len(reads) == 1
+    sql, params = reads[0]
+    assert "where" not in sql and "count(" not in sql
+    assert 'order by "timestamp" desc nulls last, "rid" desc' in sql
+    assert params == (3, 0)
+
+
+def test_recent_files_distinguishes_empty_and_unavailable_logs():
+    assert (
+        LogFilesProvider(connection=FakeConnection(LOG_COLUMNS, [])).list_recent_files(10).available
+    )
+    assert (
+        not LogFilesProvider(connection=FakeConnection(set(), [])).list_recent_files(10).available
+    )
+    assert (
+        not LogFilesProvider(connection=FakeConnection(LOG_COLUMNS - {"timestamp"}, []))
+        .list_recent_files(10)
+        .available
+    )
+
+
+def test_recent_files_unconfigured_dwh_never_connects(monkeypatch):
+    from settings.portal import DwhCollectorSettings
+
+    provider = LogFilesProvider(
+        settings=DwhCollectorSettings.model_construct(psg_host=None, psg_db=None)
+    )
+    monkeypatch.setattr(
+        provider, "_connect", lambda: (_ for _ in ()).throw(AssertionError("no connection"))
+    )
+    assert not provider.list_recent_files(10).available

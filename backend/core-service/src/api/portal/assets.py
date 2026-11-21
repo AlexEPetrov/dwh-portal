@@ -14,6 +14,8 @@ from api.portal.dto import (
     LineageRootsResponse,
     LoadFileItem,
     LoadFileListResponse,
+    RecentLoadFileItem,
+    RecentLoadFileListResponse,
     UnresolvedTarget,
     asset_list_item,
     column_item,
@@ -39,6 +41,23 @@ from domains.catalog.services.extraction_load_service import ExtractionLoadServi
 from domains.catalog.services.lineage_service import LineageService
 
 assets_router = APIRouter()
+
+
+@assets_router.get(
+    "/loads/recent", response_model=RecentLoadFileListResponse, operation_id="listRecentLoads"
+)
+def list_recent_loads(
+    service: Annotated[ExtractionLoadService, Depends(get_extraction_load_service)],
+    limit: int = Query(default=10, ge=1, le=50),
+) -> RecentLoadFileListResponse:
+    """Read recent log files independently from the snapshot-only overview."""
+    payload = service.list_recent_loads(limit)
+    return RecentLoadFileListResponse(
+        items=[RecentLoadFileItem(**vars(item)) for item in payload.items],
+        available=payload.available,
+        limit=limit,
+        has_more=payload.has_more,
+    )
 
 
 def _parse_asset_types(raw: str | None) -> list[AssetType] | None:

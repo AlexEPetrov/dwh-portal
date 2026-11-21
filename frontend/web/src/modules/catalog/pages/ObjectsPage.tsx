@@ -163,7 +163,7 @@ const ObjectsGrid = memo(({ filters, onFreshness }: ObjectsGridProps) => {
 const ObjectsHeader = memo(({ freshness }: { freshness: FreshnessItem[] }) => (
   <div>
     <Typography.Title level={2} style={{ marginBottom: 4 }}>
-      Объекты
+          Все объекты
     </Typography.Title>
     <FreshnessBar items={freshness} />
   </div>

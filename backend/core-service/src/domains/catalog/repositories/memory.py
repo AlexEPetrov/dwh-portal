@@ -169,7 +169,10 @@ class InMemoryPortalStore:
         views = sum(
             1 for item in active if item.asset_type in {AssetType.VIEW, AssetType.MATERIALIZED_VIEW}
         )
-        return AssetCountSummary(total=len(active), tables=tables, views=views)
+        by_type = {kind.value: 0 for kind in AssetType}
+        for item in active:
+            by_type[item.asset_type.value] += 1
+        return AssetCountSummary(total=len(active), tables=tables, views=views, by_type=by_type)
 
     def summarize_storage(self, *, largest_limit: int = 20) -> StorageSummary:
         by_schema: dict[str, int] = defaultdict(int)

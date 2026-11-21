@@ -16,6 +16,10 @@ class ExtractionLoadService:
         self._store = store
         self._provider = provider or LogFilesProvider()
 
+    def list_recent_loads(self, limit: int) -> LoadFilePage:
+        """Return a bounded cross-source live log without catalog scans or history counts."""
+        return self._provider.list_recent_files(limit)
+
     def list_loads(
         self, asset_id: uuid.UUID, page: int, page_size: int, *, include_total: bool = True
     ) -> LoadFilePage | None:

@@ -33,6 +33,7 @@ class OverviewService:
                 "total": counts.total,
                 "tables": counts.tables,
                 "views": counts.views,
+                "by_type": counts.by_type,
             },
             "storage_totals": {
                 "total_bytes": storage["total_bytes"],

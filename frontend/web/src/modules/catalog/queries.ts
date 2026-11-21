@@ -15,6 +15,7 @@ import {
     listAssets,
     listChanges,
     listLineageRoots,
+    listRecentLoads,
 } from '@shared/api/generated';
 import type { CancelablePromise } from '@shared/api/generated/core/CancelablePromise';
 import { useQueries, useQuery } from '@tanstack/react-query';
@@ -39,6 +40,7 @@ const catalogScope = ['portal', 'catalog'] as const;
 export const catalogKeys = {
     all: catalogScope,
     overview: [...catalogScope, 'overview'] as const,
+    recentLoads: [...catalogScope, 'loads', 'recent', { limit: 10 }] as const,
     storage: [...catalogScope, 'storage'] as const,
     storageHistory: [...catalogScope, 'storage', 'history'] as const,
     assets: (params: ListAssetsData) => [...catalogScope, 'assets', params] as const,
@@ -56,6 +58,12 @@ export const useCatalogOverview = () => useQuery({
     ...lifecycle,
     queryKey: catalogKeys.overview,
     queryFn: ({ signal }) => requestWithSignal(signal, getOverview()),
+});
+
+export const useCatalogRecentLoads = () => useQuery({
+    ...lifecycle,
+    queryKey: catalogKeys.recentLoads,
+    queryFn: ({ signal }) => requestWithSignal(signal, listRecentLoads({ limit: 10 })),
 });
 
 export const useCatalogStorage = () => useQuery({

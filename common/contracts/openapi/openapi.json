@@ -259,6 +259,52 @@
         }
       }
     },
+    "/api/v1/loads/recent": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List Recent Loads",
+        "description": "Read recent log files independently from the snapshot-only overview.",
+        "operationId": "listRecentLoads",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentLoadFileListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lineage/roots": {
       "get": {
         "tags": [
@@ -1124,6 +1170,13 @@
           "views": {
             "type": "integer",
             "title": "Views"
+          },
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Type"
           }
         },
         "type": "object",
@@ -2396,6 +2449,147 @@
           "items"
         ],
         "title": "RecentChanges"
+      },
+      "RecentLoadFileItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "loaded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loaded At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "load_duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Duration Sec"
+          },
+          "doc_date_actual": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Date Actual"
+          },
+          "database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
+          },
+          "extraction_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Source Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "file_name"
+        ],
+        "title": "RecentLoadFileItem",
+        "description": "Live log entry attributed to its DWH, never a standalone catalog asset."
+      },
+      "RecentLoadFileListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecentLoadFileItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "available",
+          "limit"
+        ],
+        "title": "RecentLoadFileListResponse",
+        "description": "Bounded latest load-log entries without an expensive history count."
       },
       "SchemaStorageRow": {
         "properties": {
