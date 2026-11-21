@@ -101,7 +101,10 @@ def test_search_detail_columns_and_links_equal_rest():
 
 
 @pytest.mark.parametrize("description_location", ["object", "column"])
-def test_topic_search_finds_description_only_matches_and_equals_rest(description_location):
+@pytest.mark.parametrize("query_text", ["АРГУС", "А Р Г У С"])
+def test_topic_search_finds_description_only_matches_and_equals_rest(
+    description_location, query_text
+):
     from api.host import app
 
     with TestClient(app) as client:
@@ -132,8 +135,8 @@ def test_topic_search_finds_description_only_matches_and_equals_rest(description
                     )
                 ],
             )
-        rest = client.get("/api/v1/assets", params={"q": "АРГУС"}).json()
-        result = call(client, "search_catalog", {"q": "АРГУС"})["structuredContent"]
+        rest = client.get("/api/v1/assets", params={"q": query_text}).json()
+        result = call(client, "search_catalog", {"q": query_text})["structuredContent"]
         assert result["data"] == rest
         assert str(asset.id) in {item["id"] for item in rest["items"]}
 

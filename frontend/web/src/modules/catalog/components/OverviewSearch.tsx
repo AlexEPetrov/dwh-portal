@@ -1,32 +1,35 @@
 import { ArrowRightOutlined, DatabaseOutlined, SearchOutlined } from '@ant-design/icons';
 import { Alert, Button, Empty, Select, Space, Spin, Tag, Typography, theme } from 'antd';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LINEAGE_PICKER_TYPES, useCatalogLineagePicker } from '../queries';
-import { matchesCatalogSearch } from '../search';
+import { useCatalogAssets } from '../queries';
+import { overviewSearchParams, overviewSearchUrl } from '../search';
 import './overviewSearch.css';
-
-const TYPE_ORDER = new Map(LINEAGE_PICKER_TYPES.map((type, index) => [type, index]));
 
 const OverviewSearch = () => {
   const navigate = useNavigate();
   const { token } = theme.useToken();
-  const pickerQueries = useCatalogLineagePicker();
-  const isLoading = pickerQueries.some((query) => query.isPending);
-  const hasError = pickerQueries.some((query) => query.isError);
-  const options = pickerQueries.flatMap((query) =>
-    (query.data?.items ?? []).map((item) => ({
+  const [searchText, setSearchText] = useState('');
+  const [queryText, setQueryText] = useState('');
+  const currentText = searchText.trim();
+  const isDebouncing = currentText !== queryText;
+  useEffect(() => {
+    const timer = setTimeout(() => setQueryText(currentText), 300);
+    return () => clearTimeout(timer);
+  }, [currentText]);
+  const assetsQuery = useCatalogAssets(overviewSearchParams(queryText), !isDebouncing);
+  const isLoading = isDebouncing || assetsQuery.isPending || assetsQuery.isFetching;
+  const hasError = !isDebouncing && assetsQuery.isError;
+  // Never offer selectable results for text that the user has already replaced.
+  const options = (isDebouncing ? [] : assetsQuery.data?.items ?? []).map((item) => ({
       value: item.id,
       type: item.asset_type,
       name: item.display_name || item.name || item.qualified_name,
       qualifiedName: item.qualified_name,
       description: item.description ?? '',
       label: `[${item.asset_type}] ${item.display_name || item.name || item.qualified_name}`,
-    }))
-  ).sort((a, b) => {
-    const typeDiff = (TYPE_ORDER.get(a.type as (typeof LINEAGE_PICKER_TYPES)[number]) ?? 99)
-      - (TYPE_ORDER.get(b.type as (typeof LINEAGE_PICKER_TYPES)[number]) ?? 99);
-    return typeDiff || a.label.localeCompare(b.label);
-  });
+    }));
+  const total = isDebouncing ? undefined : assetsQuery.data?.total;
 
   return (
     <section
@@ -56,15 +59,18 @@ const OverviewSearch = () => {
           showSearch
           allowClear
           size="large"
-          filterOption={(input, option) => matchesCatalogSearch(
-            input, option?.name ?? '', option?.qualifiedName ?? '', option?.description ?? '',
-          )}
-          placeholder="Название источника, таблицы или процесса…"
+          filterOption={false}
+          searchValue={searchText}
+          onSearch={setSearchText}
+          onClear={() => setSearchText('')}
+          placeholder="Название или описание объекта во всём каталоге…"
           options={options}
           value={undefined}
-          loading={pickerQueries.some((query) => query.isFetching)}
+          loading={isLoading}
           listHeight={320}
-          onSelect={(value) => navigate(`/lineage/${value}`)}
+          onSelect={(value) => {
+            if (!isDebouncing) navigate(`/lineage/${value}`);
+          }}
           optionRender={(option) => (
             <div className="overview-search__option">
               <Space size={8}>
@@ -74,6 +80,11 @@ const OverviewSearch = () => {
               <Typography.Text type="secondary" ellipsis className="overview-search__qualified-name">
                 {option.data.qualifiedName}
               </Typography.Text>
+              {option.data.description ? (
+                <Typography.Text type="secondary" ellipsis className="overview-search__qualified-name">
+                  {option.data.description}
+                </Typography.Text>
+              ) : null}
             </div>
           )}
           notFoundContent={isLoading ? (
@@ -85,6 +96,14 @@ const OverviewSearch = () => {
           )}
         />
       </div>
+      <Space wrap>
+        <Typography.Text type="secondary">
+          {total === undefined ? 'Поиск по всему каталогу' : `Показано ${options.length} из ${total}`}
+        </Typography.Text>
+        <Button type="link" onClick={() => navigate(overviewSearchUrl(searchText))}>
+          Все результаты <ArrowRightOutlined />
+        </Button>
+      </Space>
       <div className="overview-search__footer">
         <Typography.Text id="overview-search-hint" type="secondary">Выберите объект, чтобы открыть его связи и зависимости</Typography.Text>
         <Button type="link" onClick={() => navigate('/lineage')}>
@@ -95,9 +114,9 @@ const OverviewSearch = () => {
         <Alert
           type="warning"
           showIcon
-          message="Часть объектов не удалось загрузить. Результаты поиска могут быть неполными."
+          message="Не удалось выполнить поиск по каталогу."
           action={<Button size="small" onClick={() => {
-            pickerQueries.filter((query) => query.isError).forEach((query) => { void query.refetch(); });
+            void assetsQuery.refetch();
           }}>Повторить</Button>}
         />
       ) : null}

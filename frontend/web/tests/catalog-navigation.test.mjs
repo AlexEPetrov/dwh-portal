@@ -2,23 +2,35 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
-import { matchesCatalogSearch } from '../src/modules/catalog/search.ts';
+import { overviewSearchParams, overviewSearchUrl } from '../src/modules/catalog/search.ts';
 
-test('picker search ignores whitespace in both queries and names', () => {
-    for (const query of ['b ex', ' B  EX ', 'bex', 'B\tEx', 'b\u00a0ex']) {
-        assert.equal(matchesCatalogSearch(query, 'ADS-B Exchange'), true, query);
+test('overview searches all databases and types with bounded server-side suggestions', () => {
+    assert.deepEqual(overviewSearchParams('  Аргус & 東京  '), {
+        q: 'Аргус & 東京', status: 'active', sort: 'qualified_name', page: 1, pageSize: 20,
+    });
+    assert.equal(overviewSearchParams('   ').q, undefined);
+    for (const filter of ['database', 'schema', 'type', 'source']) {
+        assert.equal(filter in overviewSearchParams('prices'), false);
     }
-    assert.equal(matchesCatalogSearch('ADS-BExchange', 'ADS-B Exchange'), true);
-    assert.equal(matchesCatalogSearch('ice_brent', 'ICE', 'dwh.raw.ice_brent'), true);
-    assert.equal(matchesCatalogSearch('   ', 'ADS-B Exchange'), true);
-    assert.equal(matchesCatalogSearch('unknown', 'ADS-B Exchange'), false);
-    assert.equal(matchesCatalogSearch('Аргус', 'assessments', 'dwh.raw.assessments', 'Цены АРГУС'), true);
 });
 
-test('overview picker includes descriptions in its searchable fields', () => {
+test('full results navigation preserves the same query without restricting a database', () => {
+    const url = new URL(overviewSearchUrl(' Аргус & 東京 / 100% + '), 'https://portal.invalid');
+    assert.equal(url.pathname, '/objects');
+    assert.deepEqual(Object.fromEntries(url.searchParams), { q: 'Аргус & 東京 / 100% +', status: 'active' });
+});
+
+test('overview uses debounced server search without local filtering or type preloading', () => {
     const source = readFileSync(new URL('../src/modules/catalog/components/OverviewSearch.tsx', import.meta.url), 'utf8');
+    assert.ok(source.includes('useCatalogAssets(overviewSearchParams(queryText), !isDebouncing)'));
+    assert.ok(source.includes('filterOption={false}'));
+    assert.ok(source.includes('searchValue={searchText}'));
+    assert.ok(source.includes('isDebouncing ? [] : assetsQuery.data?.items'));
+    assert.ok(source.includes('clearTimeout(timer)'));
+    assert.ok(!source.includes('useCatalogLineagePicker'));
+    assert.ok(source.includes('overviewSearchUrl(searchText)'));
     assert.ok(source.includes("description: item.description ?? ''"));
-    assert.ok(source.includes("option?.description ?? ''"));
+    assert.ok(source.includes('option.data.qualifiedName'));
 });
 
 test('query-only navigation preserves the mounted page and input focus', () => {

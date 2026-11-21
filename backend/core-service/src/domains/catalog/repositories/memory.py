@@ -26,6 +26,7 @@ from domains.catalog.models import (
     StorageObjectRow,
     StorageSummary,
 )
+from domains.catalog.search import compact_catalog_text
 
 _STORAGE_TYPES = {
     AssetType.TABLE,
@@ -124,15 +125,15 @@ class InMemoryPortalStore:
                 or f".{query.schema_name}." in f".{item.qualified_name}."
             ]
         if query.q:
-            needle = query.q.lower()
+            needle = compact_catalog_text(query.q)
             items = [
                 item
                 for item in items
-                if needle in item.qualified_name.lower()
-                or needle in item.name.lower()
-                or (item.description and needle in item.description.lower())
+                if needle in compact_catalog_text(item.qualified_name)
+                or needle in compact_catalog_text(item.name)
+                or needle in compact_catalog_text(item.description)
                 or any(
-                    column.description and needle in column.description.lower()
+                    needle in compact_catalog_text(column.description)
                     for column in self.columns.get(item.id, [])
                 )
             ]

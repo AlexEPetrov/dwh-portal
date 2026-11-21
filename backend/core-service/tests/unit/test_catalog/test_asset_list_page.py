@@ -12,6 +12,7 @@ from domains.catalog.models import (
     ChangeType,
 )
 from domains.catalog.repositories.sql import SqlPortalStore
+from domains.catalog.search import SEARCH_WHITESPACE, compact_catalog_text
 from domains.catalog.services.asset_service import AssetService
 from infrastructure.db.models.portal import PORTAL_SCHEMA
 
@@ -147,3 +148,57 @@ def test_sql_description_search_uses_correlated_exists_without_duplicate_assets(
     assert "EXISTS (SELECT" in sql
     assert "JOIN" not in sql
     assert "%аргус%" in compiled.params.values()
+
+
+def test_search_covers_multiple_databases_and_objects_beyond_preload_limit(store, now):
+    for index in range(125):
+        store.upsert_asset(
+            Asset(
+                asset_type=AssetType.TABLE,
+                qualified_name=f"warehouse_a.raw.a_{index:03}",
+                name=f"a_{index:03}",
+                source_provider="postgres",
+                identity_key=f"warehouse_a-{index}",
+                first_seen_at=now,
+                last_seen_at=now,
+                attributes={"database": "warehouse_a", "schema": "raw"},
+            )
+        )
+    expected = set()
+    for database in ("warehouse_a", "warehouse_b"):
+        asset = store.upsert_asset(
+            Asset(
+                asset_type=AssetType.TABLE,
+                qualified_name=f"{database}.raw.z_prices",
+                name="z_prices",
+                description="ADS-B Exchange",
+                source_provider="postgres",
+                identity_key=f"{database}-prices",
+                first_seen_at=now,
+                last_seen_at=now,
+                attributes={"database": database, "schema": "raw"},
+            )
+        )
+        expected.add(asset.id)
+    rows, total = store.list_asset_page(AssetQuery(q=" b\u00a0EX ", page_size=20))
+    assert total == 2
+    assert {row.asset.id for row in rows} == expected
+    assert {row.asset.qualified_name for row in rows} == {
+        "warehouse_a.raw.z_prices",
+        "warehouse_b.raw.z_prices",
+    }
+    rows, total = store.list_asset_page(AssetQuery(q="bex", database="warehouse_b"))
+    assert total == 1
+    assert rows[0].asset.qualified_name == "warehouse_b.raw.z_prices"
+
+
+def test_sql_and_memory_search_use_the_same_whitespace_normalization():
+    store = SqlPortalStore(session_factory=lambda: None)
+    compiled = store._filtered_assets(AssetQuery(q=" B\u00a0 EX ")).compile(
+        dialect=postgresql.dialect()
+    )
+    assert "translate(" in str(compiled)
+    assert "%bex%" in compiled.params.values()
+    assert SEARCH_WHITESPACE in compiled.params.values()
+    assert compact_catalog_text("ADS-B Exchange") == "ads-bexchange"
+    assert compact_catalog_text("B\t\u00a0Ex") == "bex"

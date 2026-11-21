@@ -70,8 +70,9 @@ export const useCatalogStorageHistory = () => useQuery({
     queryFn: ({ signal }) => requestWithSignal(signal, getStorageHistory()),
 });
 
-export const useCatalogAssets = (params: ListAssetsData) => useQuery({
+export const useCatalogAssets = (params: ListAssetsData, enabled = true) => useQuery({
     ...lifecycle,
+    enabled,
     queryKey: catalogKeys.assets(params),
     queryFn: ({ signal }) => requestWithSignal(signal, listAssets(params)),
 });

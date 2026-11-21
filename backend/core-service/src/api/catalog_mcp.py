@@ -227,7 +227,7 @@ def create_catalog_server(settings: CatalogMcpSettings):
         q: Annotated[
             str | None,
             Field(
-                description="Case-insensitive string search across object names, qualified names, "
+                description="Case- and whitespace-insensitive string search across object names, qualified names, "
                 "object descriptions and column descriptions. Extract the topic from a question "
                 "while preserving its spelling; not semantic or translated-language search. "
                 "Omit to browse with filters."

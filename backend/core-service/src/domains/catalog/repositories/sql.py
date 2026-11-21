@@ -31,6 +31,7 @@ from domains.catalog.models import (
     StorageObjectRow,
     StorageSummary,
 )
+from domains.catalog.search import SEARCH_WHITESPACE, compact_catalog_text
 from infrastructure.db.models.portal import (
     PORTAL_SCHEMA,
     PortalAssetColumnDbModel,
@@ -400,18 +401,22 @@ class SqlPortalStore:
         if query.source:
             clauses.append(model.source_provider == query.source)
         if query.q:
-            needle = f"%{query.q.lower()}%"
+            needle = f"%{compact_catalog_text(query.q)}%"
+
+            def matches(column):
+                return func.translate(
+                    func.lower(func.coalesce(column, "")), SEARCH_WHITESPACE, ""
+                ).like(needle)
+
             clauses.append(
                 or_(
-                    func.lower(model.qualified_name).like(needle),
-                    func.lower(model.name).like(needle),
-                    func.lower(func.coalesce(model.description, "")).like(needle),
+                    matches(model.qualified_name),
+                    matches(model.name),
+                    matches(model.description),
                     select(PortalAssetColumnDbModel.asset_id)
                     .where(
                         PortalAssetColumnDbModel.asset_id == model.id,
-                        func.lower(func.coalesce(PortalAssetColumnDbModel.description, "")).like(
-                            needle
-                        ),
+                        matches(PortalAssetColumnDbModel.description),
                     )
                     .exists(),
                 )
