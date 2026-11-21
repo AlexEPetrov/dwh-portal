@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run build:packages --prefix ..",
+    "prebuild": "npm run build:packages --prefix ..",
+    "premock": "npm run build:packages --prefix ..",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

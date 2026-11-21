@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import type { RouteObject } from 'react-router-dom';
-import { ApplicationAuthBoundary, ApplicationLoginPage } from '../auth';
 import type { ApplicationAuthBoundaryProps, ApplicationLoginPageProps } from '../auth';
+import { ApplicationAuthBoundary, ApplicationLoginPage } from '../auth';
 import { ApplicationLayout, type ApplicationLayoutProps } from '../layout';
 import { createApplicationRouter } from './createApplicationRouter';
 
@@ -25,7 +25,7 @@ export function createStandardApplicationRouter({
   layout,
   login,
   auth,
-}: CreateStandardApplicationRouterOptions) {
+}: CreateStandardApplicationRouterOptions): ReturnType<typeof createApplicationRouter> {
   return createApplicationRouter({
     loginPath,
     loginElement: <ApplicationLoginPage {...login} />,

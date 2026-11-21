@@ -35,6 +35,16 @@ change_classes:
   business_or_contract_semantic:
     approval: human_required
 topics:
+  frontend-packages:
+    paths:
+    - frontend/ui-kit/**
+    - frontend/app-shell/**
+    - frontend/scripts/**
+    - frontend/package.json
+    - frontend/package-lock.json
+    - rules/workflows/frontend-packages.md
+    approval: workflow_allowed
+    workflow: frontend-packages
   portal-harness-image:
     paths:
     - infra/images/portal/**
@@ -209,6 +219,18 @@ contracts:
     escalate_if: business_semantic_change
     escalate_to: human_required
 verification:
+  FRONTEND-PACKAGE-STATE:
+    run: git status --short
+  FRONTEND-PACKAGES-BUILD:
+    run: cd frontend && npm run build:packages
+  FRONTEND-PACKAGES-VERIFY:
+    run: cd frontend && npm run verify:packages
+  FRONTEND-PACKAGES-PACK:
+    run: cd frontend && npm run pack:packages
+  FRONTEND-LOCK-RECONCILE:
+    run: cd frontend && npm install --package-lock-only --ignore-scripts --offline
+  FRONTEND-PACKAGE-DIFF:
+    run: git diff --check && git diff --stat && git status --short
   FRONTEND-CATALOG-NAVIGATION-TESTS:
     run: cd frontend/web && node --import tsx --test tests/catalog-navigation.test.mjs
   PORTAL-ENV-RENAME-HARNESS-SAMPLE:

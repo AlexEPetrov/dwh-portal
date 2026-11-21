@@ -1,9 +1,9 @@
 # Developer Guide: UI Kit и Application Shell
 
-**Область:** `frontend/ui-kit`, `frontend/app-shell`, `frontend/web`  
-**Для кого:** разработчики, которые добавляют business-модули, создают новые intranet-приложения, расширяют общий UI или интегрируют auth / permissions / help / AI capabilities.  
-**Применимо к:** текущему workspace после выделения `ui-kit` / `app-shell` и исправления Vite `import.meta.glob`.  
-**Текущий статус архитектуры:** `ui-kit` и `app-shell` используются как source-workspace packages; отдельная сборка и публикация этих пакетов пока не обязательны.
+**Область:** `frontend/ui-kit`, `frontend/app-shell`, `frontend/web`
+**Для кого:** разработчики, которые добавляют business-модули, создают новые intranet-приложения, расширяют общий UI или интегрируют auth / permissions / help / AI capabilities.
+**Применимо к:** текущему workspace после выделения `ui-kit` / `app-shell` и исправления Vite `import.meta.glob`.
+**Текущий статус архитектуры:** `ui-kit` и `app-shell` — отдельно собираемые ESM-пакеты с декларациями типов и CSS; публичные exports ведут в `dist`. Портал использует те же собранные exports. Registry-публикация не выполнялась, пакеты остаются private. Актуальные команды сборки, проверки архивов и передачи: [frontend/README.md](../../frontend/README.md).
 
 ---
 
@@ -151,7 +151,7 @@ import { appTheme } from '@asset-management/ui-kit/theme';
 import { appTheme } from '@asset-management/ui-kit';
 ```
 
-Это позволит позднее перейти с exports из `src` на exports из `dist` без массового изменения consumer-кода.
+Переход с exports из `src` на exports из `dist` выполнен без изменения публичных import-путей. Перед запуском development/mock/build пакеты собираются автоматически в порядке UI Kit → App Shell. После изменения исходников библиотек в уже запущенной dev-сессии повторите `npm run build:packages` из `frontend/`: автоматический HMR исходников библиотек в этом режиме не предоставляется.
 
 ---
 

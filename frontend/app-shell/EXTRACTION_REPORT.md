@@ -1,5 +1,14 @@
 # App Shell extraction report
 
+## Packaging follow-up — 2026-11-21
+
+The earlier source-package and incomplete-build observations below are historical.
+App Shell now exports generated ESM, declarations and CSS from `dist/` and consumes
+built UI Kit exports. Both library builds, isolated archive consumer verification
+and the portal production build succeeded. Two upstream declaration diagnostics
+are reported separately; browser interactions were not exercised. See
+[current build and delivery instructions](../README.md).
+
 ## Source of truth
 
 This revision is based on the latest `frontend3-app-shell-cleanup-tsfix` state derived from the uploaded `frontend(3).zip`.

@@ -3,6 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "build": "node ../scripts/build-package.mjs",
+    "prepack": "npm run build"
+  },
   "peerDependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -17,10 +27,26 @@
     "typescript": "^5.5.4"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./theme": "./src/theme/index.ts",
-    "./data-grid": "./src/data-grid/index.ts",
-    "./json-schema": "./src/json-schema/index.ts",
-    "./styles.css": "./src/styles.css"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./theme": {
+      "types": "./dist/theme/index.d.ts",
+      "import": "./dist/theme/index.js",
+      "default": "./dist/theme/index.js"
+    },
+    "./data-grid": {
+      "types": "./dist/data-grid/index.d.ts",
+      "import": "./dist/data-grid/index.js",
+      "default": "./dist/data-grid/index.js"
+    },
+    "./json-schema": {
+      "types": "./dist/json-schema/index.d.ts",
+      "import": "./dist/json-schema/index.js",
+      "default": "./dist/json-schema/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
   }
 }

@@ -45,7 +45,16 @@ web module state registration -> contribution adapter -/
 
 Plugin contributions are state-manager agnostic. A consuming application may define a contribution slot for Zustand slices, Redux reducers, services, widgets, or other extension data without making those technologies part of the shell contract.
 
-The package is source-level in this stage and has no independent library build yet.
+The package exports independently built ESM, TypeScript declarations and CSS from
+`dist/`. Build UI Kit first, then App Shell. Public subpaths and application
+adapters are unchanged. See [workspace delivery instructions](../README.md) for
+builds, isolated archive verification and transfer of both packages. The package
+remains private; registry publication is not part of this extraction.
+
+Standard bootstrap still imports UI Kit and shell CSS automatically. Applications
+composing providers/layouts without the bootstrap should import both packages'
+`styles.css` subpaths explicitly. The shell styles assume a full-viewport `#root`
+and affect Ant Design layouts globally; no embedded-widget isolation is promised.
 
 ## Standard capabilities
 

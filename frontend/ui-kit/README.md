@@ -1,8 +1,17 @@
-# UI Kit — Stage 1 source package
+# UI Kit
 
 `frontend/ui-kit` owns generic presentation: theme, common styles, data-grid infrastructure and generic JSON-schema layouts.
 
-It is an npm workspace source package, not yet an independently built/published library.
+It is an independently built ESM library with TypeScript declarations and CSS.
+Existing public subpaths resolve to `dist/`, not TypeScript source. Runtime
+dependencies remain external peers; no React or component-library copy is bundled.
+See [workspace delivery instructions](../README.md) for builds, archive verification
+and transfer. The package remains private; registry publication is out of scope.
+
+Import `@asset-management/ui-kit/styles.css` when using UI Kit without App Shell.
+App Shell's standard bootstrap imports these foundation styles automatically.
+The current foundation includes global styles and an external Google Fonts import;
+packaging preserves them, and restricted-network consumers must account for this.
 
 ## Public imports
 

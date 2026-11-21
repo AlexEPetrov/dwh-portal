@@ -1,5 +1,12 @@
 # UI Kit extraction report
 
+## Packaging follow-up — 2026-11-21
+
+This report's original Stage-1 source-package/build limitations below are
+historical. The package now exports generated ESM, declarations and CSS from
+`dist/`. See [current build and delivery instructions](../README.md).
+The extraction did not change component behavior or public import subpaths.
+
 ## Scope
 
 Source: `frontend/web`

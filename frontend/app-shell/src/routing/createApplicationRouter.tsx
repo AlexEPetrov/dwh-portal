@@ -1,5 +1,5 @@
-import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import type { ReactElement } from 'react';
+import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 
 export interface CreateApplicationRouterOptions {
   loginPath?: string;
@@ -17,7 +17,7 @@ export function createApplicationRouter({
   layoutElement,
   homeElement,
   routes,
-}: CreateApplicationRouterOptions) {
+}: CreateApplicationRouterOptions): ReturnType<typeof createBrowserRouter> {
   return createBrowserRouter([
     {
       path: loginPath,

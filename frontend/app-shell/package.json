@@ -3,6 +3,18 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "**/*.css",
+    "./dist/application/renderApplication.js",
+    "./dist/index.js"
+  ],
+  "scripts": {
+    "build": "node ../scripts/build-package.mjs",
+    "prepack": "npm run build"
+  },
   "dependencies": {
     "@asset-management/ui-kit": "0.1.0"
   },
@@ -22,16 +34,56 @@
     "typescript": "^5.5.4"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./auth": "./src/auth/index.ts",
-    "./layout": "./src/layout/index.ts",
-    "./plugin": "./src/plugin/index.ts",
-    "./routing": "./src/routing/index.ts",
-    "./styles.css": "./src/styles.css",
-    "./navigation": "./src/navigation/index.ts",
-    "./runtime": "./src/runtime/index.ts",
-    "./theme": "./src/theme/index.ts",
-    "./user": "./src/user/index.ts",
-    "./help": "./src/help/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js",
+      "default": "./dist/auth/index.js"
+    },
+    "./layout": {
+      "types": "./dist/layout/index.d.ts",
+      "import": "./dist/layout/index.js",
+      "default": "./dist/layout/index.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin/index.d.ts",
+      "import": "./dist/plugin/index.js",
+      "default": "./dist/plugin/index.js"
+    },
+    "./routing": {
+      "types": "./dist/routing/index.d.ts",
+      "import": "./dist/routing/index.js",
+      "default": "./dist/routing/index.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./navigation": {
+      "types": "./dist/navigation/index.d.ts",
+      "import": "./dist/navigation/index.js",
+      "default": "./dist/navigation/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js",
+      "default": "./dist/runtime/index.js"
+    },
+    "./theme": {
+      "types": "./dist/theme/index.d.ts",
+      "import": "./dist/theme/index.js",
+      "default": "./dist/theme/index.js"
+    },
+    "./user": {
+      "types": "./dist/user/index.d.ts",
+      "import": "./dist/user/index.js",
+      "default": "./dist/user/index.js"
+    },
+    "./help": {
+      "types": "./dist/help/index.d.ts",
+      "import": "./dist/help/index.js",
+      "default": "./dist/help/index.js"
+    }
   }
 }

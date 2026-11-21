@@ -8,6 +8,9 @@
     "app-shell"
   ],
   "scripts": {
+    "build:packages": "npm run build --workspace=@asset-management/ui-kit && npm run build --workspace=@asset-management/app-shell",
+    "verify:packages": "node scripts/verify-packages.mjs",
+    "pack:packages": "npm run build:packages && node scripts/pack-packages.mjs",
     "dev": "npm run dev --workspace=asset-management-web",
     "build": "npm run build --workspace=asset-management-web",
     "preview": "npm run preview --workspace=asset-management-web",
