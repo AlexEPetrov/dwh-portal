@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { CATALOG_ASSET_TYPES, OVERVIEW_ASSET_TYPES, catalogTypeUrl } from '../src/modules/catalog/assetTypes.ts';
+import { ASSET_TYPE_LABELS, CATALOG_ASSET_TYPES, OVERVIEW_ASSET_TYPES, catalogTypeUrl } from '../src/modules/catalog/assetTypes.ts';
+import { inspectorConnections } from '../src/modules/catalog/components/lineageInspector.ts';
 import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
 import { matchingResultsOption, overviewSearchParams, overviewSearchUrl } from '../src/modules/catalog/search.ts';
 
@@ -155,4 +156,154 @@ test('server navigation destinations correspond to registered Portal/Universe ro
         '/lineage/universe', '/lineage/universe/:assetId']) {
         assert.ok(routes.includes(`path: '${path}'`), `Missing verified route: ${path}`);
     }
+});
+
+test('Universe chain nodes open Lineage while the roots overview stays inside Universe', () => {
+    const page = readFileSync(new URL('../src/modules/catalog/pages/LineageUniversePage.tsx', import.meta.url), 'utf8');
+    const select = page.slice(page.indexOf('const onSelect ='), page.indexOf('const openFocused ='));
+    assert.ok(select.includes("mode === 'roots'"));
+    assert.ok(select.includes('navigate(`/lineage/universe/${id}`, {'));
+    assert.ok(select.includes('state: origin ? { fromRing: origin } : null'));
+    assert.ok(select.includes('navigate(`/lineage/${id}`)'));
+    assert.ok(!select.includes('/objects/'));
+    const scene = readFileSync(new URL('../src/modules/catalog/components/LineageUniverseScene.tsx', import.meta.url), 'utf8');
+    assert.ok(scene.includes('клик — Lineage · двойной — сюда'));
+    assert.ok(scene.includes('Кликните, чтобы открыть Lineage объекта'));
+    assert.ok(!scene.includes('Кликните, чтобы открыть карточку объекта'));
+});
+
+test('Universe freshness is disclosed from the header rather than obscured underneath it', () => {
+    const page = readFileSync(new URL('../src/modules/catalog/pages/LineageUniversePage.tsx', import.meta.url), 'utf8');
+    const header = page.slice(page.indexOf('<header'), page.indexOf('</header>'));
+    const belowHeader = page.slice(page.indexOf('</header>'));
+    assert.ok(header.includes('<Popover'));
+    assert.ok(header.includes('trigger="click"'));
+    assert.ok(header.includes('Актуальность метаданных'));
+    assert.ok(header.includes('<FreshnessBar items={freshness} />'));
+    assert.ok(header.includes('freshnessNotices'));
+    assert.ok(!belowHeader.includes('<FreshnessBar'));
+    const css = readFileSync(new URL('../src/modules/catalog/components/lineageUniverse.css', import.meta.url), 'utf8');
+    assert.ok(css.includes('.lineage-universe-freshness.ant-btn'));
+    assert.ok(css.includes('.lineage-universe-freshness-details .ant-tag'));
+});
+
+test('lineage display labels cover canonical types without changing their identifiers', () => {
+    for (const { key } of CATALOG_ASSET_TYPES) {
+        assert.equal(typeof ASSET_TYPE_LABELS[key], 'string');
+        assert.ok(ASSET_TYPE_LABELS[key].length > 0);
+    }
+    assert.equal(ASSET_TYPE_LABELS.TABLE, 'Таблица');
+    assert.equal(ASSET_TYPE_LABELS.PROCESS, 'Процесс');
+});
+
+test('compact lineage retains metadata details, explicit unresolved targets and extraction loads', () => {
+    const page = readFileSync(new URL('../src/modules/catalog/pages/LineagePage.tsx', import.meta.url), 'utf8');
+    assert.ok(page.includes('<FreshnessBar items={freshness} />'));
+    assert.ok(page.includes('<details className="lineage-page__details">'));
+    assert.ok(page.includes('<UnresolvedTargetsAlert key={assetId} targets={lineage.unresolved_targets} />'));
+    assert.ok(page.includes('<ExtractionLoadsPanel key={assetId} assetId={assetId} hideWhenUnavailable compact />'));
+    assert.ok(page.includes('lineageQuery.isError'));
+    assert.ok(page.includes('в пределах глубины обхода'));
+    assert.ok(!page.includes('Цепочка пока неполная'));
+    assert.ok(!page.includes('Выберите DATA_SOURCE «ICE»'));
+});
+
+test('lineage object changes and source overview preserve the active view and Universe context', () => {
+    const page = readFileSync(new URL('../src/modules/catalog/pages/LineagePage.tsx', import.meta.url), 'utf8');
+    assert.ok(page.includes("searchParams.get('view') === 'map' ? 'map' : 'list'"));
+    assert.ok(page.includes("`${value ? `/lineage/${value}` : '/lineage'}?view=${view}`"));
+    assert.ok(page.includes('navigate(`/lineage?view=${view}`)'));
+    assert.ok(page.includes("assetId ? `/lineage/universe/${assetId}` : '/lineage/universe'"));
+});
+
+test('lineage exposes focus reset and direct keyboard-accessible object actions', () => {
+    const graph = readFileSync(new URL('../src/modules/catalog/components/LineageGraph.tsx', import.meta.url), 'utf8');
+    assert.ok(graph.includes('onClick={onClearFocus}>Сбросить фокус'));
+    assert.ok(graph.includes('Как пользоваться'));
+    const chip = readFileSync(new URL('../src/modules/catalog/components/LineageAssetChip.tsx', import.meta.url), 'utf8');
+    assert.ok(chip.includes('aria-label={`Открыть карточку: ${title}`}'));
+    assert.ok(chip.includes('aria-label={`Открыть в Universe: ${title}`}'));
+    assert.ok(!chip.includes('Dropdown'));
+    assert.ok(chip.includes("event.key === 'Enter' || event.key === ' '"));
+    assert.ok(chip.includes('Объект не найден в каталоге'));
+});
+
+test('inspector uses the existing flow direction for reads, writes and derived dependencies', () => {
+    const nodes = ['table', 'process', 'target', 'view'].map((id) => ({
+        id, asset_type: id === 'process' ? 'PROCESS' : id === 'view' ? 'VIEW' : 'TABLE',
+        name: id, display_name: id, qualified_name: `dwh.raw.${id}`,
+    }));
+    const edges = [
+        { id: 'read', from_asset_id: 'process', to_asset_id: 'table', relationship_type: 'READS_FROM' },
+        { id: 'write', from_asset_id: 'process', to_asset_id: 'target', relationship_type: 'WRITES_TO' },
+        { id: 'derived', from_asset_id: 'view', to_asset_id: 'target', relationship_type: 'DERIVED_FROM' },
+    ];
+    const original = structuredClone(edges);
+    const process = inspectorConnections('process', nodes, edges);
+    assert.deepEqual(process.incoming.map(({ node }) => node.id), ['table']);
+    assert.deepEqual(process.outgoing.map(({ node }) => node.id), ['target']);
+    const target = inspectorConnections('target', nodes, edges);
+    assert.deepEqual(target.incoming.map(({ node }) => node.id), ['process']);
+    assert.deepEqual(target.outgoing.map(({ node }) => node.id), ['view']);
+    assert.deepEqual(edges, original, 'stored edge directions remain unchanged');
+});
+
+test('inspector preserves unresolved neighbours and does not infer links outside the payload', () => {
+    const nodes = [
+        { id: 'source', asset_type: 'DATA_SOURCE', name: 'source', display_name: 'source', qualified_name: 'source' },
+        { id: 'missing', asset_type: 'TABLE', name: 'missing', display_name: 'missing', qualified_name: 'dwh.raw.missing', unresolved: true },
+    ];
+    const edges = [
+        { id: 'known', from_asset_id: 'source', to_asset_id: 'missing', relationship_type: 'WRITES_TO' },
+        { id: 'outside', from_asset_id: 'source', to_asset_id: 'outside', relationship_type: 'WRITES_TO' },
+    ];
+    const result = inspectorConnections('source', nodes, edges);
+    assert.equal(result.outgoing.length, 1);
+    assert.equal(result.outgoing[0].node.unresolved, true);
+    assert.deepEqual(inspectorConnections('absent', nodes, edges), { incoming: [], outgoing: [] });
+});
+
+test('inspector persists across views and focus reset falls back to the route object', () => {
+    const graph = readFileSync(new URL('../src/modules/catalog/components/LineageGraph.tsx', import.meta.url), 'utf8');
+    assert.ok(graph.includes('assetId={focus?.id ?? selectedAssetId}'));
+    assert.ok(graph.indexOf('<LineageInspector') > graph.indexOf('items={['));
+    const inspector = readFileSync(new URL('../src/modules/catalog/components/LineageInspector.tsx', import.meta.url), 'utf8');
+    assert.ok(inspector.includes('node.qualified_name'));
+    assert.ok(inspector.includes('neighbour.unresolved'));
+    assert.ok(inspector.includes('Нет связей в текущем графе'));
+    assert.ok(!inspector.includes('useCatalogAsset'));
+});
+
+test('both lineage views mark exactly the inspector asset separately from the route object', () => {
+    const graph = readFileSync(new URL('../src/modules/catalog/components/LineageGraph.tsx', import.meta.url), 'utf8');
+    assert.equal(graph.split('inspectorAssetId={fillHeight ? focus?.id ?? selectedAssetId : undefined}').length - 1, 2);
+    const list = readFileSync(new URL('../src/modules/catalog/components/LineageListView.tsx', import.meta.url), 'utf8');
+    assert.ok(list.includes('inspected={row.left.id === inspectorAssetId}'));
+    assert.ok(list.includes('inspected={row.right.id === inspectorAssetId}'));
+    assert.ok(list.includes('inspected={row.actor.id === inspectorAssetId}'));
+    const map = readFileSync(new URL('../src/modules/catalog/components/LineageMapView.tsx', import.meta.url), 'utf8');
+    assert.ok(map.includes('inspected: node.id === inspectorAssetId'));
+    const chip = readFileSync(new URL('../src/modules/catalog/components/LineageAssetChip.tsx', import.meta.url), 'utf8');
+    assert.ok(chip.includes('В инспекторе'));
+    assert.ok(chip.includes('Цепочка'));
+    assert.ok(!chip.includes('>текущий<'));
+    assert.ok(chip.indexOf('{title}') < chip.indexOf('В инспекторе'));
+});
+
+test('focus does not animate row transforms or change spacing inside the scroll region', () => {
+    const list = readFileSync(new URL('../src/modules/catalog/components/LineageListView.tsx', import.meta.url), 'utf8');
+    assert.ok(!list.includes('el.animate('));
+    const css = readFileSync(new URL('../src/modules/catalog/components/lineageViews.css', import.meta.url), 'utf8');
+    const focus = css.slice(css.indexOf('.lineage-list-focus {'), css.indexOf('@keyframes lineage-chip-enter'));
+    assert.ok(focus.includes('gap: 16px'));
+    assert.ok(focus.includes('padding: 0'));
+    assert.ok(!focus.includes('animation:'));
+    assert.ok(css.includes('scrollbar-gutter: stable'));
+    assert.ok(css.includes('opacity: 0.12'));
+    assert.ok(css.includes(':focus-within'));
+    assert.ok(css.includes('@media (hover: none)'));
+    const rows = css.slice(css.indexOf('.lineage-list-rows {'), css.indexOf('.lineage-list-hop {'));
+    assert.ok(rows.includes('padding: 8px'), 'halo clearance is reserved even without focus');
+    assert.ok(focus.includes('inset: -6px'), 'focus border sits outside cards without adding layout padding');
+    assert.ok(css.includes('background: rgba(37, 99, 235, 0.07)'));
 });

@@ -2,6 +2,7 @@ import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Empty, Space, Tag, Tooltip, Typography } from 'antd';
 import { useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ASSET_TYPE_LABELS } from '../assetTypes';
 import LineageAssetChip from './LineageAssetChip';
 import {
   STAGE_ORDER,
@@ -10,7 +11,7 @@ import {
   flowLabelFor,
   focusFlowRows,
   originCaption,
-  type FlowRow,
+  type FlowRow
 } from './lineageFlow';
 import './lineageViews.css';
 
@@ -18,6 +19,7 @@ type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
   selectedAssetId?: string;
+  inspectorAssetId?: string;
   focusId?: string | null;
   focusAnchorKey?: string | null;
   onFocusNode?: (assetId: string, anchorKey?: string) => void;
@@ -39,6 +41,7 @@ const NodeCard = ({
   actor = false,
   showType = true,
   selected = false,
+  inspected = false,
   focused = false,
   detail = null,
   onFocusNode,
@@ -48,6 +51,7 @@ const NodeCard = ({
   /** False when the surrounding section already names the type (roots overview). */
   showType?: boolean;
   selected?: boolean;
+  inspected?: boolean;
   focused?: boolean;
   /** Secondary line already loaded with the node. No extra request. */
   detail?: string | null;
@@ -65,6 +69,7 @@ const NodeCard = ({
       actor={actor}
       showType={showType}
       selected={selected}
+      inspected={inspected}
       focused={focused}
       interactive={interactive}
       onOpenObject={interactive ? () => navigate(`/objects/${node.id}`) : undefined}
@@ -87,6 +92,7 @@ const Hop = ({
   anchor = false,
   index = 0,
   selectedAssetId,
+  inspectorAssetId,
   focusId,
   onFocusNode,
 }: {
@@ -95,6 +101,7 @@ const Hop = ({
   anchor?: boolean;
   index?: number;
   selectedAssetId?: string;
+  inspectorAssetId?: string;
   focusId?: string | null;
   onFocusNode?: (assetId: string, anchorKey?: string) => void;
 }) => (
@@ -107,6 +114,7 @@ const Hop = ({
     <NodeCard
       node={row.left}
       selected={row.left.id === selectedAssetId}
+      inspected={row.left.id === inspectorAssetId}
       focused={row.left.id === focusId}
       onFocusNode={onFocusNode ? (assetId) => onFocusNode(assetId, row.key) : undefined}
     />
@@ -117,6 +125,7 @@ const Hop = ({
           node={row.actor}
           actor
           selected={row.actor.id === selectedAssetId}
+          inspected={row.actor.id === inspectorAssetId}
           focused={row.actor.id === focusId}
           onFocusNode={onFocusNode ? (assetId) => onFocusNode(assetId, row.key) : undefined}
         />
@@ -128,6 +137,7 @@ const Hop = ({
     <NodeCard
       node={row.right}
       selected={row.right.id === selectedAssetId}
+      inspected={row.right.id === inspectorAssetId}
       focused={row.right.id === focusId}
       onFocusNode={onFocusNode ? (assetId) => onFocusNode(assetId, row.key) : undefined}
     />
@@ -141,6 +151,7 @@ const ListRows = ({
   anchorKey,
   dependencyKeys,
   selectedAssetId,
+  inspectorAssetId,
   focusId,
   onFocusNode,
 }: {
@@ -150,6 +161,7 @@ const ListRows = ({
   anchorKey: string | null;
   dependencyKeys: Set<string>;
   selectedAssetId?: string;
+  inspectorAssetId?: string;
   focusId?: string | null;
   onFocusNode?: (assetId: string, anchorKey?: string) => void;
 }) => {
@@ -164,7 +176,7 @@ const ListRows = ({
       clusterEnd += 1;
     }
   }
-  const hopProps = { selectedAssetId, focusId, onFocusNode };
+  const hopProps = { selectedAssetId, inspectorAssetId, focusId, onFocusNode };
   const renderHop = (row: FlowRow, dimmed: boolean, index: number) => (
     <Hop
       key={row.key}
@@ -221,7 +233,6 @@ const Arrow = ({ label }: { label: string }) => (
 );
 
 const SCROLL_MS = 560;
-const SCROLL_EASING = 'cubic-bezier(0.45, 0, 0.25, 1)';
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
 
@@ -248,20 +259,6 @@ const findScroller = (from: HTMLElement): HTMLElement | null => {
   return marked instanceof HTMLElement ? marked : null;
 };
 
-const layoutTop = (el: HTMLElement, scroller: HTMLElement): number => {
-  let y = 0;
-  let node: HTMLElement | null = el;
-  while (node && node !== scroller) {
-    y += node.offsetTop;
-    const parent: Element | null = node.offsetParent;
-    if (!(parent instanceof HTMLElement) || (parent !== scroller && !scroller.contains(parent))) {
-      return el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-    }
-    node = parent;
-  }
-  return y;
-};
-
 const clusterDelta = (scroller: HTMLElement, cluster: HTMLElement): number => {
   const anchor = cluster.querySelector<HTMLElement>('[data-lineage-anchor="true"]') ?? cluster;
   const view = scroller.getBoundingClientRect();
@@ -285,6 +282,7 @@ const LineageListView = ({
   nodes,
   edges,
   selectedAssetId,
+  inspectorAssetId,
   focusId = null,
   focusAnchorKey = null,
   onFocusNode,
@@ -292,13 +290,11 @@ const LineageListView = ({
 }: Props) => {
   const clusterRef = useRef<HTMLDivElement>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
-  const topsRef = useRef<Map<string, number>>(new Map());
   const scrollFrame = useRef<number | null>(null);
   const stages = useMemo(() => {
     const present = new Set(nodes.map((node) => node.asset_type));
     return STAGE_ORDER.filter((type) => present.has(type));
   }, [nodes]);
-
   const baseRows = useMemo(() => buildFlowRows(nodes, edges), [nodes, edges]);
   const focused = useMemo(
     () => focusFlowRows(baseRows, focusId, focusAnchorKey),
@@ -312,36 +308,12 @@ const LineageListView = ({
       return;
     }
     const scroller = findScroller(root);
-    const hops = root.querySelectorAll<HTMLElement>('[data-lineage-key]');
-    hops.forEach((el) => el.getAnimations().forEach((animation) => animation.cancel()));
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const delta =
       focusId && clusterRef.current && scroller ? clusterDelta(scroller, clusterRef.current) : 0;
     if (scrollFrame.current !== null) {
       cancelAnimationFrame(scrollFrame.current);
       scrollFrame.current = null;
-    }
-    hops.forEach((el) => {
-      const key = el.dataset.lineageKey;
-      if (!key || !scroller) {
-        return;
-      }
-      const next = layoutTop(el, scroller);
-      const prev = topsRef.current.get(key);
-      if (!reduceMotion && prev !== undefined && Math.abs(prev - next) > 1) {
-        el.getAnimations().forEach((animation) => animation.cancel());
-        el.animate(
-          [{ transform: `translateY(${prev - next}px)` }, { transform: 'translateY(0)' }],
-          { duration: SCROLL_MS, easing: SCROLL_EASING }
-        );
-      }
-      topsRef.current.set(key, next);
-    });
-    const live = new Set([...hops].map((el) => el.dataset.lineageKey));
-    for (const key of topsRef.current.keys()) {
-      if (!live.has(key)) {
-        topsRef.current.delete(key);
-      }
     }
     if (!scroller || Math.abs(delta) < 1) {
       return;
@@ -387,8 +359,7 @@ const LineageListView = ({
       <div className="lineage-list-view">
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            Корневые объекты: DATA_SOURCE и EXTRACTION_SOURCE без родительского источника. Нажмите
-            объект, чтобы открыть цепочку. Стрелка — карточка объекта.
+            Выберите источник, чтобы посмотреть его связи.
           </Typography.Paragraph>
           {stages.map((type, stageIndex) => (
             <div
@@ -397,7 +368,7 @@ const LineageListView = ({
               style={{ '--lineage-stage-i': stageIndex } as CSSProperties}
             >
               <Tag color={TYPE_COLOR[type]} className="lineage-list-stage__tag">
-                {type}
+                {ASSET_TYPE_LABELS[type] ?? type}
               </Tag>
               <div className="lineage-list-stage__chips">
                 {nodes
@@ -412,6 +383,7 @@ const LineageListView = ({
                         node={node}
                         showType={false}
                         selected={node.id === selectedAssetId}
+                        inspected={node.id === inspectorAssetId}
                         focused={node.id === focusId}
                         detail={
                           node.asset_type === 'DATA_SOURCE' &&
@@ -432,29 +404,13 @@ const LineageListView = ({
   }
   if (!edges.length || !rows.length) {
     return (
-      <Empty description="У объекта нет data-flow рёбер. Выберите DATA_SOURCE, EXTRACTION_SOURCE или PROCESS." />
+      <Empty description="В доступных метаданных нет связей для этого объекта." />
     );
   }
 
   return (
     <div className="lineage-list-view">
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        <Space wrap size={4} className="lineage-list-legend">
-          <Typography.Text type="secondary">Поток слева направо:</Typography.Text>
-          {stages.map((type, index) => (
-            <span key={type}>
-              <Tag color={TYPE_COLOR[type]}>{type}</Tag>
-              {index < stages.length - 1 ? (
-                <Typography.Text type="secondary"> → </Typography.Text>
-              ) : null}
-            </span>
-          ))}
-        </Space>
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          Клик по объекту показывает его зависимости рядом и не сдвигает сам объект. Наведение
-          показывает полное имя. Стрелка наружу — карточка объекта. Повторный клик возвращает общий
-          список. VIEW может порождаться несколькими TABLE.
-        </Typography.Paragraph>
         <ListRows
           rows={rows}
           rowsRef={rowsRef}
@@ -462,6 +418,7 @@ const LineageListView = ({
           anchorKey={focused.anchorKey}
           dependencyKeys={focused.dependencyKeys}
           selectedAssetId={selectedAssetId}
+          inspectorAssetId={inspectorAssetId}
           focusId={focusId}
           onFocusNode={onFocusNode}
         />

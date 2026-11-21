@@ -1,7 +1,8 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
-import { Tabs } from 'antd';
+import { Button, Popover, Space, Tabs, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import LineageInspector from './LineageInspector';
 import LineageListView from './LineageListView';
 import LineageMapView from './LineageMapView';
 import './lineageViews.css';
@@ -104,11 +105,39 @@ const LineageGraph = ({
   }, []);
 
   return (
+    <div className={fillHeight ? 'lineage-workspace is-fill' : 'lineage-workspace'}>
     <Tabs
       activeKey={activeKey}
       onChange={(key) => setView(key === 'map' ? 'map' : 'list')}
       // Keep both panes mounted — rebuilding G6 on every tab switch is what feels slow.
       destroyInactiveTabPane={false}
+      tabBarExtraContent={
+        <Space size={4}>
+          {focus ? <Button size="small" onClick={onClearFocus}>Сбросить фокус</Button> : null}
+          <Popover
+            title="Как пользоваться Lineage"
+            trigger="click"
+            content={
+              <div style={{ maxWidth: 300 }}>
+                <Typography.Paragraph>
+                  Выберите объект, чтобы выделить его связи. Повторный клик или «Сбросить фокус»
+                  возвращает общий вид. В обзоре источников клик открывает цепочку.
+                </Typography.Paragraph>
+                <Typography.Paragraph>
+                  Кнопки на объекте открывают карточку и Universe и становятся заметнее при
+                  наведении или фокусе с клавиатуры. Инспектор показывает полное имя и соседние
+                  объекты. Стрелки в списке показывают поток данных слева направо.
+                </Typography.Paragraph>
+                <Typography.Text type="secondary">
+                  Это ограниченный граф метаданных каталога, а не история выполнения загрузок.
+                </Typography.Text>
+              </div>
+            }
+          >
+            <Button type="text" size="small">Как пользоваться</Button>
+          </Popover>
+        </Space>
+      }
       className={fillHeight ? 'lineage-views-tabs fill-height' : 'lineage-views-tabs'}
       style={
         fillHeight
@@ -124,7 +153,7 @@ const LineageGraph = ({
       items={[
         {
           key: 'list',
-          label: 'Список',
+          label: rootsOverview ? 'Источники' : 'Связи',
           children: (
             <div
               className={fillHeight ? 'lineage-list-scroll is-fill' : 'lineage-list-scroll'}
@@ -133,6 +162,7 @@ const LineageGraph = ({
                 nodes={nodes}
                 edges={edges}
                 selectedAssetId={selectedAssetId}
+                inspectorAssetId={fillHeight ? focus?.id ?? selectedAssetId : undefined}
                 focusId={focus?.id ?? null}
                 focusAnchorKey={focus?.anchorKey}
                 onFocusNode={onFocusNode}
@@ -152,6 +182,7 @@ const LineageGraph = ({
                 nodes={nodes}
                 edges={edges}
                 selectedAssetId={selectedAssetId}
+                inspectorAssetId={fillHeight ? focus?.id ?? selectedAssetId : undefined}
                 focusId={focus?.id ?? null}
                 onFocusNode={onFocusNode}
                 onClearFocus={onClearFocus}
@@ -162,6 +193,16 @@ const LineageGraph = ({
         },
       ]}
     />
+    {fillHeight ? (
+      <LineageInspector
+        nodes={nodes}
+        edges={edges}
+        assetId={focus?.id ?? selectedAssetId}
+        focused={Boolean(focus)}
+        onFocusNode={onFocusNode}
+      />
+    ) : null}
+    </div>
   );
 };
 

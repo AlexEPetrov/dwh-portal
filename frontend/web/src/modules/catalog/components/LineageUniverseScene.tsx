@@ -27,7 +27,7 @@ type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
   selectedAssetId?: string;
-  /** Roots catalogue: open a source chain. Asset chain: open object card. */
+  /** Roots catalogue: open a source chain. Asset chain: open the Lineage page. */
   mode: 'roots' | 'chain';
   /** World point of the clicked ring node — animates chain unfold from here. */
   enterOrigin?: UniverseOrigin | null;
@@ -1973,7 +1973,7 @@ const LineageUniverseScene = ({
           }
           if (active) {
             ctx.fillStyle = 'rgba(255,255,255,0.78)';
-            ctx.fillText('клик — карточка · двойной — сюда', p.x, tipY);
+            ctx.fillText('клик — Lineage · двойной — сюда', p.x, tipY);
           }
         }
         ctx.globalAlpha = 1;
@@ -2281,7 +2281,7 @@ const LineageUniverseScene = ({
               ? 'Кликните, чтобы раскрыть поток источника слева направо'
               : tipBody?.bridgeHubIds?.length
                 ? `Мост между источниками: ${bridgeNames}`
-                : 'Кликните, чтобы открыть карточку объекта';
+                : 'Кликните, чтобы открыть Lineage объекта';
           const kindBit = tip.kind?.trim() ? ` · ${tip.kind.trim()}` : '';
           const statsBit = statsLine
             ? `<em class="lineage-universe-hud-stats">${statsLine}</em>`

@@ -57,6 +57,33 @@
   color: #7dd3fc;
 }
 
+.lineage-universe-freshness.ant-btn {
+  color: var(--universe-ink);
+  border: 1px solid rgba(186, 210, 255, 0.25);
+  background: #111827;
+  height: auto;
+  white-space: normal;
+  text-align: start;
+}
+
+.lineage-universe-freshness.ant-btn:hover,
+.lineage-universe-freshness.ant-btn:focus-visible {
+  color: #fff;
+  border-color: #7dd3fc;
+  background: #1e293b;
+}
+
+.lineage-universe-freshness-details {
+  max-width: min(420px, calc(100vw - 64px));
+  max-height: min(320px, 60vh);
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.lineage-universe-freshness-details .ant-tag {
+  white-space: normal;
+}
+
 .lineage-universe-title {
   margin: 2px 0 0 !important;
   color: #fff !important;

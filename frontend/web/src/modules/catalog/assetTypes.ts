@@ -1,5 +1,17 @@
 import { updateCatalogFilters } from './navigation';
 
+export const ASSET_TYPE_LABELS: Record<string, string> = {
+    DATA_SOURCE: 'Источник данных',
+    EXTRACTION_SOURCE: 'Источник извлечения',
+    PROCESS: 'Процесс',
+    STORAGE_LOCATION: 'Место хранения',
+    DATABASE: 'База данных',
+    SCHEMA: 'Схема',
+    TABLE: 'Таблица',
+    VIEW: 'Представление',
+    MATERIALIZED_VIEW: 'Материализованное представление',
+};
+
 export const CATALOG_ASSET_TYPES = [
     { key: 'DATA_SOURCE', label: 'Источники данных' },
     { key: 'EXTRACTION_SOURCE', label: 'Источники извлечения' },

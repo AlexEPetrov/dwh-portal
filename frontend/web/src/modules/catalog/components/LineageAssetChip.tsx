@@ -1,7 +1,8 @@
-import { AimOutlined, ExperimentOutlined, ExportOutlined } from '@ant-design/icons';
-import { Tag, Tooltip, Typography } from 'antd';
-import type { CSSProperties, KeyboardEvent, MouseEvent, MouseEventHandler, ReactNode } from 'react';
-import { TYPE_ACCENT, TYPE_COLOR } from './lineageFlow';
+import { ExperimentOutlined, ExportOutlined } from '@ant-design/icons';
+import { Tooltip, Typography } from 'antd';
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
+import { ASSET_TYPE_LABELS } from '../assetTypes';
+import { TYPE_ACCENT } from './lineageFlow';
 
 type Props = {
   assetType: string;
@@ -18,17 +19,19 @@ type Props = {
   showType?: boolean;
   /** Lineage root from the page route. Shows the «текущий» badge. */
   selected?: boolean;
+  /** This exact asset is displayed in the persistent inspector. */
+  inspected?: boolean;
   /** Clicked asset whose dependencies are shown beside it. */
   focused?: boolean;
   interactive?: boolean;
   /** Open object card (export icon). */
-  onOpenObject?: MouseEventHandler<HTMLElement>;
+  onOpenObject?: () => void;
   /** Open immersive Universe for this asset. */
-  onOpenUniverse?: MouseEventHandler<HTMLElement>;
+  onOpenUniverse?: () => void;
   /** Click on the chip body: focus this asset in place. */
-  onActivate?: MouseEventHandler<HTMLElement>;
-  /** Same as body click; kept for the aim icon. */
-  onSelectInLineage?: MouseEventHandler<HTMLElement>;
+  onActivate?: () => void;
+  /** Compatibility alias for the body focus action. */
+  onSelectInLineage?: () => void;
   className?: string;
   style?: CSSProperties;
   children?: ReactNode;
@@ -42,6 +45,7 @@ const LineageAssetChip = ({
   actor = false,
   showType = true,
   selected = false,
+  inspected = false,
   focused = false,
   interactive = false,
   onOpenObject,
@@ -61,15 +65,11 @@ const LineageAssetChip = ({
     interactive ? 'is-interactive' : '',
     selected ? 'is-selected' : '',
     focused ? 'is-focused' : '',
+    inspected ? 'is-inspected' : '',
     className,
   ]
     .filter(Boolean)
     .join(' ');
-
-  const stop = (event: MouseEvent | KeyboardEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
 
   const onBody = onActivate ?? onSelectInLineage ?? onOpenObject;
 
@@ -79,95 +79,67 @@ const LineageAssetChip = ({
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      onBody(event as unknown as Parameters<MouseEventHandler<HTMLElement>>[0]);
+      event.stopPropagation();
+      onBody();
     }
   };
 
   return (
     <div
       className={classes}
-      onClick={
-        interactive && onBody
-          ? (event) => {
-              onBody(event);
-            }
-          : undefined
-      }
       style={
         {
           '--lineage-accent': accent,
           ...style,
         } as CSSProperties
       }
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onKeyDown={interactive ? onKeyDown : undefined}
     >
-      <div className="lineage-asset-chip__actions">
-        {onSelectInLineage && !unresolved ? (
-          <Tooltip title="Показать зависимости рядом">
-            <button
-              type="button"
-              className="lineage-asset-chip__action"
-              aria-label="Показать зависимости рядом"
-              onClick={(event) => {
-                stop(event);
-                onSelectInLineage(event);
-              }}
-            >
-              <AimOutlined />
-            </button>
-          </Tooltip>
-        ) : null}
-        {onOpenUniverse && !unresolved ? (
-          <Tooltip title="Открыть в Universe">
-            <button
-              type="button"
-              className="lineage-asset-chip__action lineage-asset-chip__action--universe"
-              aria-label="Открыть в Universe"
-              onClick={(event) => {
-                stop(event);
-                onOpenUniverse(event);
-              }}
-            >
-              <ExperimentOutlined />
-            </button>
-          </Tooltip>
-        ) : null}
-        {onOpenObject && !unresolved ? (
-          <Tooltip title="Открыть карточку">
-            <button
-              type="button"
-              className="lineage-asset-chip__action"
-              aria-label="Открыть карточку"
-              onClick={(event) => {
-                stop(event);
-                onOpenObject(event);
-              }}
-            >
-              <ExportOutlined />
-            </button>
-          </Tooltip>
-        ) : null}
-      </div>
+      {!unresolved && (onOpenObject || onOpenUniverse) ? (
+        <div className="lineage-asset-chip__actions" onClick={(event) => event.stopPropagation()}>
+          {onOpenObject ? (
+            <Tooltip title="Открыть карточку">
+              <button type="button" className="lineage-asset-chip__action" aria-label={`Открыть карточку: ${title}`} onClick={onOpenObject}>
+                <ExportOutlined />
+              </button>
+            </Tooltip>
+          ) : null}
+          {onOpenUniverse ? (
+            <Tooltip title="Открыть в Universe">
+              <button type="button" className="lineage-asset-chip__action lineage-asset-chip__action--universe" aria-label={`Открыть в Universe: ${title}`} onClick={onOpenUniverse}>
+                <ExperimentOutlined />
+              </button>
+            </Tooltip>
+          ) : null}
+        </div>
+      ) : null}
       <Tooltip
-        title={hint ? `${title} — ${hint}` : title}
+        title={`${assetType} · ${hint ? `${title} — ${hint}` : title}`}
         placement="topLeft"
         mouseEnterDelay={0.2}
       >
-        <div className="lineage-asset-chip__main">
-          {selected ? <span className="lineage-asset-chip__current">текущий</span> : null}
-          {showType ? (
-            <Tag
-              className="lineage-asset-chip__tag"
-              color={unresolved ? 'red' : TYPE_COLOR[assetType]}
-            >
-              {actor ? 'PROCESS · actor' : assetType}
-            </Tag>
-          ) : null}
+        <div
+          className="lineage-asset-chip__main"
+          role={interactive && onBody ? 'button' : undefined}
+          tabIndex={interactive && onBody ? 0 : undefined}
+          onClick={interactive ? onBody : undefined}
+          onKeyDown={interactive ? onKeyDown : undefined}
+          aria-pressed={interactive && onBody ? focused : undefined}
+        >
           <Typography.Text className="lineage-asset-chip__title" ellipsis>
             {title}
           </Typography.Text>
+          <div className="lineage-asset-chip__status">
+            {inspected ? (
+              <span className="lineage-asset-chip__inspected">В инспекторе</span>
+            ) : selected ? (
+              <span className="lineage-asset-chip__route">Цепочка</span>
+            ) : null}
+          </div>
+          {showType ? (
+            <Typography.Text type="secondary" className="lineage-asset-chip__hint">
+              {ASSET_TYPE_LABELS[assetType] ?? assetType}
+            </Typography.Text>
+          ) : null}
           {hint ? (
             <Typography.Text type="secondary" className="lineage-asset-chip__hint" ellipsis>
               {hint}
@@ -175,7 +147,7 @@ const LineageAssetChip = ({
           ) : null}
           {unresolved ? (
             <Typography.Text type="danger" style={{ fontSize: 12 }}>
-              unresolved
+              Объект не найден в каталоге
             </Typography.Text>
           ) : null}
           {children}

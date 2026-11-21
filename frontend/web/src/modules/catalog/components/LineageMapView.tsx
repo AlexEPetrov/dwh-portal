@@ -1,7 +1,7 @@
-import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { ExtensionCategory, Graph, register, type GraphOptions } from '@antv/g6';
 import { ReactNode } from '@antv/g6-extension-react';
 import { useThemeMode } from '@asset-management/app-shell/theme';
+import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Empty } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,7 @@ type Props = {
   nodes: LineageNode[];
   edges: LineageEdge[];
   selectedAssetId?: string;
+  inspectorAssetId?: string;
   focusId?: string | null;
   onFocusNode?: (assetId: string) => void;
   onClearFocus?: () => void;
@@ -38,6 +39,7 @@ type NodePayload = {
   unresolved?: boolean;
   selected: boolean;
   focused: boolean;
+  inspected: boolean;
 };
 
 type NodeDatum = {
@@ -57,6 +59,7 @@ const LineageMapView = ({
   nodes,
   edges,
   selectedAssetId,
+  inspectorAssetId,
   focusId = null,
   onFocusNode,
   onClearFocus,
@@ -116,6 +119,7 @@ const LineageMapView = ({
           unresolved: node.unresolved,
           selected: node.id === selectedAssetId,
           focused: node.id === focusId,
+          inspected: node.id === inspectorAssetId,
         } satisfies NodePayload,
       })),
       edges: flowEdges.map((edge) => ({
@@ -129,7 +133,7 @@ const LineageMapView = ({
       })),
       layout,
     };
-  }, [nodes, edges, centerId, selectedAssetId, focusId]);
+  }, [nodes, edges, centerId, selectedAssetId, inspectorAssetId, focusId]);
 
   const active = nodes.length > 0 && (rootsOverview || model.edges.length > 0);
   const modelRef = useRef(model);
@@ -207,6 +211,7 @@ const LineageMapView = ({
                     unresolved={payload?.unresolved}
                     selected={payload?.selected}
                     focused={payload?.focused}
+                    inspected={payload?.inspected}
                     interactive={interactive}
                     onOpenObject={
                       interactive ? () => navigateRef.current(`/objects/${datum.id}`) : undefined

@@ -1,7 +1,7 @@
 import { AimOutlined, ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { FreshnessBar } from '@shared/ui/portal';
-import { Alert, Button, Empty, Input, Spin, Typography } from 'antd';
+import { Alert, Button, Empty, Input, Popover, Spin, Typography } from 'antd';
 import {
   useCallback,
   useDeferredValue,
@@ -82,6 +82,8 @@ const LineageUniversePage = () => {
   const mode = assetId ? 'chain' : 'roots';
   const lineageQuery = useCatalogLineage(assetId);
   const payload = lineageQuery.isError ? undefined : lineageQuery.data;
+  const freshness = payload?.collector_freshness ?? [];
+  const freshnessNotices = freshness.filter((item) => item.status !== 'SUCCESS').length;
   const nodes = payload?.nodes ?? EMPTY_NODES;
   const edges = payload?.edges ?? EMPTY_EDGES;
   const title = assetId
@@ -268,7 +270,7 @@ const LineageUniversePage = () => {
         });
         return;
       }
-      navigate(`/objects/${id}`);
+      navigate(`/lineage/${id}`);
     },
     [mode, navigate]
   );
@@ -357,6 +359,29 @@ const LineageUniversePage = () => {
             <Typography.Title level={3} className="lineage-universe-title">
               {title}
             </Typography.Title>
+            {payload ? (
+              <Popover
+                title="Актуальность метаданных"
+                trigger="click"
+                placement="bottomLeft"
+                content={
+                  <div className="lineage-universe-freshness-details">
+                    <Typography.Paragraph type="secondary">
+                      Статусы относятся к снимкам каталога, а не к свежести самих данных или успешности загрузок.
+                    </Typography.Paragraph>
+                    <FreshnessBar items={freshness} />
+                  </div>
+                }
+              >
+                <Button type="text" size="small" className="lineage-universe-freshness">
+                  Метаданные · {freshness.length
+                    ? freshnessNotices
+                      ? `требуют внимания: ${freshnessNotices}`
+                      : 'обновлены'
+                    : 'нет снимков'}
+                </Button>
+              </Popover>
+            ) : null}
           </div>
         </div>
         <div className="lineage-universe-top__right">
@@ -514,7 +539,6 @@ const LineageUniversePage = () => {
           </Typography.Paragraph>
         </div>
       </header>
-      <FreshnessBar items={payload?.collector_freshness} />
       {lineageQuery.isFetching && !loading ? <Spin size="small" /> : null}
         {payload?.unresolved_targets.length ? <UnresolvedTargetsAlert key={assetId ?? 'roots'} targets={payload.unresolved_targets} /> : null}
       <main className="lineage-universe-stage">
