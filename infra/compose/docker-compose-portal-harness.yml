@@ -3,6 +3,7 @@ services:
     image: 134/dwh-portal-dsh:0.2.2-rc.5-source-experimental
     init: true
     restart: unless-stopped
+    command: ["${PORTAL_LAUNCH_MODE:-portal}"]
     env_file:
       - "${PORTAL_ENV_FILE:?Pass the existing Portal environment file}"
     environment:

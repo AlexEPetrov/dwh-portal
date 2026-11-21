@@ -63,8 +63,12 @@ class ConfigurationTests(unittest.TestCase):
             'bash infra/environments/portal-harness/up.sh "{env_file}"',
         )
 
-    def test_yaml_conversion_preserves_the_original_compose_values(self):
+    def test_yaml_conversion_preserves_values_except_approved_launch_selector(self):
         compose = yaml.safe_load(COMPOSE.read_text())
+        self.assertEqual(
+            compose["services"]["portal-harness"].pop("command"),
+            ["${PORTAL_LAUNCH_MODE:-portal}"],
+        )
         normalized = json.dumps(compose, sort_keys=True, separators=(",", ":"))
         self.assertEqual(
             hashlib.sha256(normalized.encode()).hexdigest(),
@@ -86,12 +90,24 @@ class ConfigurationTests(unittest.TestCase):
             {"harness": {"driver": "bridge"}},
         )
         self.assertEqual(service["networks"], ["harness"])
-        self.assertNotIn("command", service)
+        self.assertEqual(service["command"], ["${PORTAL_LAUNCH_MODE:-portal}"])
         self.assertNotIn("build", service)
         script = (ENVIRONMENT / "compose.sh").read_text()
         self.assertIn("--project-name dwh-portal-harness", script)
         self.assertIn('--env-file "$PORTAL_ENV_FILE"', script)
         self.assertNotIn("alembic", script)
+
+    def test_launch_selector_sample_defaults_to_portal_without_disabling_mcp(self):
+        sample = (ENVIRONMENT / "sample.env").read_text().splitlines()
+        self.assertEqual(
+            [line for line in sample if line.startswith("PORTAL_LAUNCH_MODE=")],
+            ["PORTAL_LAUNCH_MODE=portal"],
+        )
+        self.assertIn("APP_MCP_ENABLED=true", sample)
+        portal = launcher.commands("portal", {})
+        self.assertEqual(len(portal), 1)
+        self.assertEqual(portal[0]["args"][-1], "/app/src/api/run.py")
+        self.assertEqual(portal[0]["env"]["APP_MCP_ENABLED"], "true")
 
     def test_sql_network_is_project_owned_and_supports_the_host_database(self):
         compose = yaml.safe_load(COMPOSE.read_text())
