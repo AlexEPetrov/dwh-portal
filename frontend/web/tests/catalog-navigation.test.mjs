@@ -3,8 +3,76 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { ASSET_TYPE_LABELS, CATALOG_ASSET_TYPES, OVERVIEW_ASSET_TYPES, catalogTypeUrl } from '../src/modules/catalog/assetTypes.ts';
 import { inspectorConnections } from '../src/modules/catalog/components/lineageInspector.ts';
+import { schemaGroups, schemaPatches } from '../src/modules/catalog/components/schemaNebulae.ts';
 import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
 import { matchingResultsOption, overviewSearchParams, overviewSearchUrl } from '../src/modules/catalog/search.ts';
+
+test('Universe schemas use explicit relation membership and count only supplied chain nodes', () => {
+    const relation = (id, overrides = {}) => ({
+        id, asset_type: 'TABLE', database: 'dwh',
+        schema_name: 'raw', qualified_name: 'wrong.guess.name', ...overrides
+    });
+    const nodes = [relation('table'), relation('view', { asset_type: 'VIEW' }),
+    relation('mv', { asset_type: 'MATERIALIZED_VIEW' }),
+    relation('unknown', { database: null }), relation('unresolved', { unresolved: true }),
+    relation('process', { asset_type: 'PROCESS' }), relation('blank', { schema_name: '  ' }),
+    relation('other-db', { database: 'other' }),
+    relation('dot-a', { database: 'a.b', schema_name: 'c' }),
+    relation('dot-b', { database: 'a', schema_name: 'b.c' })];
+    const before = structuredClone(nodes);
+    const groups = schemaGroups(nodes);
+    assert.equal(groups.length, 4);
+    assert.equal(groups.find((group) => group.label === 'dwh.raw').ids.size, 3);
+    assert.equal(new Set(groups.map((group) => group.key)).size, 4);
+    assert.deepEqual(schemaGroups([]), []);
+    assert.deepEqual(nodes, before);
+    assert.deepEqual(groups, schemaGroups([...nodes].reverse()));
+    const color = groups.find((group) => group.label === 'dwh.raw').color;
+    assert.equal(schemaGroups([nodes[0]])[0].color, color);
+});
+
+test('Universe schema patches stay local across distant lanes and dense long chains', () => {
+    const nodes = Array.from({ length: 100 }, (_, index) => ({
+        id: String(index),
+        asset_type: 'TABLE', database: 'dwh', schema_name: 'raw'
+    }));
+    const points = nodes.map((node, index) => ({
+        id: node.id, homeX: index * 25,
+        homeY: 0, homeZ: index % 2 ? 2000 : 0
+    }));
+    const before = structuredClone(points);
+    const groups = schemaGroups(nodes);
+    const patches = schemaPatches(groups, points);
+    assert.ok(patches.length > 10);
+    assert.equal(patches.flatMap((patch) => patch.ids).length, nodes.length);
+    for (const patch of patches) {
+        assert.ok(patch.radius < 140 * Math.sqrt(3) + 48);
+        const members = patch.ids.map((id) => points.find((point) => point.id === id));
+        assert.ok(Math.max(...members.map((p) => p.homeX)) - Math.min(...members.map((p) => p.homeX)) < 140);
+        assert.equal(new Set(members.map((p) => p.homeZ)).size, 1);
+    }
+    assert.deepEqual(schemaPatches(groups, [...points].reverse()), patches);
+    assert.deepEqual(points, before);
+});
+
+test('Universe schema controls are chain-only, keyboard-accessible and independent of renderer lifecycle', () => {
+    const scene = readFileSync(new URL('../src/modules/catalog/components/LineageUniverseScene.tsx', import.meta.url), 'utf8');
+    assert.ok(scene.includes("useState(false)"));
+    assert.ok(scene.includes("mode === 'chain' && schemasEnabled"));
+    assert.ok(scene.includes('aria-pressed={pinnedSchema === group.key}'));
+    assert.ok(scene.includes('onFocus={() => setFocusedSchema(group.key)}'));
+    assert.ok(scene.includes('onBlur={() => setFocusedSchema(null)}'));
+    assert.ok(scene.includes("event.key === 'Escape'"));
+    assert.ok(scene.includes('только текущая цепочка'));
+    const reset = scene.slice(scene.indexOf('const resetView ='), scene.indexOf('const minZoom ='));
+    assert.ok(reset.includes('setSchemasEnabled(false)'));
+    assert.ok(reset.includes('setPinnedSchema(null)'));
+    const dependencies = scene.slice(scene.indexOf('}, [\n    nodes,'), scene.indexOf('\n  return (', scene.indexOf('}, [\n    nodes,')));
+    for (const state of ['schemasEnabled', 'pinnedSchema', 'hoveredSchema', 'focusedSchema']) {
+        assert.ok(!dependencies.includes(state), `${state} must not reinitialize layout/camera`);
+    }
+    assert.ok(scene.indexOf('const activeSchema =') < scene.indexOf('const projectedLinks ='));
+});
 
 test('overview searches all databases and types with bounded server-side suggestions', () => {
     assert.deepEqual(overviewSearchParams('  Аргус & 東京  '), {

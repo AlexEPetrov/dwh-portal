@@ -178,6 +178,8 @@ class LineageNode(BaseModel):
     name: str
     display_name: str
     unresolved: bool = False
+    database: str | None = None
+    schema_name: str | None = None
     # Optional business category (prototype of sys.data_source_items.kind).
     # Missing when the DWH column is absent and attributes have no kind.
     kind: str | None = None
@@ -386,6 +388,17 @@ def lineage_node(
 ) -> LineageNode:
     raw_kind = asset.attributes.get("kind")
     kind = raw_kind.strip() if isinstance(raw_kind, str) and raw_kind.strip() else None
+    # Membership is snapshot evidence, never inferred from a dotted display name.
+    membership: dict[str, str | None] = {"database": None, "schema_name": None}
+    if not asset.attributes.get("unresolved") and asset.asset_type.value in {
+        "TABLE",
+        "VIEW",
+        "MATERIALIZED_VIEW",
+    }:
+        for field, attribute in (("database", "database"), ("schema_name", "schema")):
+            value = asset.attributes.get(attribute)
+            if isinstance(value, str) and value.strip():
+                membership[field] = value
     if counts is None:
         return LineageNode(
             id=asset.id,
@@ -395,6 +408,7 @@ def lineage_node(
             display_name=display_name_for(asset),
             unresolved=bool(asset.attributes.get("unresolved")),
             kind=kind,
+            **membership,
         )
     return LineageNode(
         id=asset.id,
@@ -404,6 +418,7 @@ def lineage_node(
         display_name=display_name_for(asset),
         unresolved=bool(asset.attributes.get("unresolved")),
         kind=kind,
+        **membership,
         extraction_source_count=int(counts.get("EXTRACTION_SOURCE", 0)),
         process_count=int(counts.get("PROCESS", 0)),
         table_count=int(counts.get("TABLE", 0)),

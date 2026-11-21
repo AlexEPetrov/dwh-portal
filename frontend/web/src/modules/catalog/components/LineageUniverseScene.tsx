@@ -8,9 +8,10 @@ import {
 } from '@ant-design/icons';
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 import { Button, Segmented, Space, Tooltip } from 'antd';
-import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { STAGE_ORDER, TYPE_ACCENT, buildFlowEdges } from './lineageFlow';
 import './lineageUniverse.css';
+import { schemaGroups, schemaPatches } from './schemaNebulae';
 
 export type UniverseOrigin = { x: number; y: number; z: number };
 
@@ -453,6 +454,21 @@ const LineageUniverseScene = ({
   onFrontParadeRef.current = onFrontParade;
   const [tool, setTool] = useState<DragTool>('orbit');
   toolRef.current = tool;
+  const schemas = useMemo(() => mode === 'chain' ? schemaGroups(nodes) : [], [nodes, mode]);
+  const [schemasEnabled, setSchemasEnabled] = useState(false);
+  const [pinnedSchema, setPinnedSchema] = useState<string | null>(null);
+  const [hoveredSchema, setHoveredSchema] = useState<string | null>(null);
+  const [focusedSchema, setFocusedSchema] = useState<string | null>(null);
+  const schemaRef = useRef({ enabled: false, active: null as string | null });
+  schemaRef.current = { enabled: mode === 'chain' && schemasEnabled,
+    active: focusedSchema ?? hoveredSchema ?? pinnedSchema };
+
+  useEffect(() => {
+    setSchemasEnabled(false);
+    setPinnedSchema(null);
+    setHoveredSchema(null);
+    setFocusedSchema(null);
+  }, [selectedAssetId, mode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -921,6 +937,10 @@ const LineageUniverseScene = ({
     })();
 
     const bodyMap = new Map(bodies.map((body) => [body.id, body]));
+    const schemaContext = mode === 'chain' ? schemaGroups(nodes) : [];
+    const nebulae = schemaPatches(schemaContext, bodies);
+    const schemaByNode = new Map(schemaContext.flatMap((group) =>
+      [...group.ids].map((id) => [id, group.key] as const)));
     // Fixed layout poses — roots cloud spins by rotating these around Y.
     const bodyLayout = new Map(
       bodies.map((body) => [body.id, { x: body.homeX, z: body.homeZ }] as const)
@@ -1733,6 +1753,57 @@ const LineageUniverseScene = ({
       ctx.restore();
       ctx.setLineDash([]);
 
+      // Context only: bounded world-space clouds behind every lineage stroke.
+      // No animation, hull, force, synthetic relationship or type recoloring.
+      const activeSchema = schemaRef.current.enabled
+        ? schemaRef.current.active ?? schemaByNode.get(hoverId ?? '') ?? null : null;
+      if (schemaRef.current.enabled && mode === 'chain' && !enterMorph) {
+        const labelled = new Set<string>();
+        const labelBoxes: { x: number; y: number; w: number }[] = [];
+        const patches = nebulae.map((patch) => {
+          const members = patch.ids.map((id) => bodyMap.get(id)!).filter(Boolean);
+          const mean = (axis: 'x' | 'y' | 'z') =>
+            members.reduce((sum, body) => sum + body[axis], 0) / members.length;
+          return { patch, p: projectScene(mean('x'), mean('y'), mean('z')) };
+        }).sort((a, b) => Number(b.patch.group.key === activeSchema) - Number(a.patch.group.key === activeSchema)
+          || a.p.z - b.p.z);
+        for (const { patch, p } of patches) {
+          if (p.depth <= 0.04) continue;
+          const radius = patch.radius * p.depth * zoom;
+          if (radius < 4 || p.x + radius < 0 || p.x - radius > width
+            || p.y + radius < 0 || p.y - radius > height) continue;
+          const hot = patch.group.key === activeSchema;
+          ctx.save();
+          ctx.globalAlpha = hot ? 0.25 : activeSchema ? 0.035 : 0.10;
+          const fog = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+          fog.addColorStop(0, patch.group.color);
+          fog.addColorStop(0.45, patch.group.color);
+          fog.addColorStop(1, 'transparent');
+          ctx.fillStyle = fog;
+          ctx.fillRect(p.x - radius, p.y - radius, radius * 2, radius * 2);
+          ctx.restore();
+          // One concise label per schema, with screen-space collision/zoom budget.
+          if (labelled.has(patch.group.key) || radius < 28 || (!hot && activeSchema)
+            || labelBoxes.length >= (hot ? 7 : 6)) continue;
+          const text = `${patch.group.label} · ${patch.group.ids.size} в цепочке`;
+          ctx.save();
+          ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+          const w = ctx.measureText(text).width + 12;
+          const x = p.x - w / 2, y = p.y - radius * 0.8 - 20;
+          if (x < 8 || x + w > width - 8 || y < 12 || y > height - 100
+            || labelBoxes.some((box) => x < box.x + box.w + 8 && x + w + 8 > box.x
+              && Math.abs(y - box.y) < 26)) { ctx.restore(); continue; }
+          ctx.fillStyle = 'rgba(8, 15, 30, 0.86)';
+          ctx.fillRect(x, y, w, 19);
+          ctx.fillStyle = patch.group.color;
+          ctx.textAlign = 'left';
+          ctx.fillText(text, x + 6, y + 13);
+          ctx.restore();
+          labelled.add(patch.group.key);
+          labelBoxes.push({ x, y, w });
+        }
+      }
+
       const projectedLinks = links
         .map((link) => {
           const a = bodyMap.get(link.source);
@@ -1879,6 +1950,15 @@ const LineageUniverseScene = ({
           body.id === hoverId ||
           body.id === selectedAssetId ||
           body.id === listHighlight;
+        if (activeSchema && schemaByNode.get(body.id) === activeSchema) {
+          ctx.save();
+          ctx.strokeStyle = schemaContext.find((group) => group.key === activeSchema)!.color;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.max(8, body.r * p.depth * zoom) + 5, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
         const front = mode === 'roots' ? frontnessOf(p.z) : 0.5;
         const nodeKind = byId.get(body.id)?.kind?.trim() || 'Прочее';
         const cohortKind = kindFilterRef.current || spotlightKind;
@@ -2301,6 +2381,11 @@ const LineageUniverseScene = ({
     };
 
     const resetView = () => {
+      schemaRef.current = { enabled: false, active: null };
+      setSchemasEnabled(false);
+      setPinnedSchema(null);
+      setHoveredSchema(null);
+      setFocusedSchema(null);
       // Back to the default galaxy: no selection, spin at 0, overview framing.
       focusId = null;
       followFocus = false;
@@ -2464,6 +2549,14 @@ const LineageUniverseScene = ({
       );
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        schemaRef.current.active = null;
+        setPinnedSchema(null);
+        setHoveredSchema(null);
+        setFocusedSchema(null);
+        hoverId = null;
+        return;
+      }
       const target = event.target;
       if (
         target instanceof HTMLElement &&
@@ -2543,7 +2636,34 @@ const LineageUniverseScene = ({
     <div className="lineage-universe-scene">
       <canvas ref={canvasRef} className="lineage-universe-canvas" />
       <div ref={overlayRef} className="lineage-universe-hud-card" data-visible="0" />
+      {mode === 'chain' && schemasEnabled && (
+        <section className="lineage-universe-schemas" aria-label="Схемы текущей цепочки">
+          <strong>Схемы · только текущая цепочка</strong>
+          <p>Наведение или фокус — подсветить; нажатие — закрепить; Esc — снять.</p>
+          {schemas.length ? schemas.map((group) => (
+            <button key={group.key} type="button" aria-pressed={pinnedSchema === group.key}
+              onMouseEnter={() => setHoveredSchema(group.key)}
+              onMouseLeave={() => setHoveredSchema(null)}
+              onFocus={() => setFocusedSchema(group.key)}
+              onBlur={() => setFocusedSchema(null)}
+              onClick={() => setPinnedSchema((key) => key === group.key ? null : group.key)}>
+              <span aria-hidden="true" style={{ background: group.color }} />
+              {group.label} · {group.ids.size} в цепочке
+            </button>
+          )) : <p>Нет объектов с подтверждённой базой и схемой.</p>}
+          <p>Неизвестная принадлежность и неразрешённые объекты не группируются.</p>
+        </section>
+      )}
       <div className="lineage-universe-toolbar" role="toolbar" aria-label="Навигация Universe">
+        {mode === 'chain' && (
+          <Button size="small" aria-pressed={schemasEnabled}
+            onClick={() => {
+              setSchemasEnabled((enabled) => !enabled);
+              setPinnedSchema(null);
+              setHoveredSchema(null);
+              setFocusedSchema(null);
+            }}>Схемы</Button>
+        )}
         <Segmented
           size="small"
           value={tool}

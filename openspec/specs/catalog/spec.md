@@ -126,6 +126,59 @@ DERIVED_FROM
 - WHEN клиент запрашивает lineage процесса
 - THEN в ответе есть нерешённая цель с исходной ссылкой `database.schema.name`
 
+### Requirement: Optional schema context in an open Universe chain
+
+Universe SHALL offer an initially disabled «Схемы» toggle only in an open
+lineage chain. The source roots overview SHALL retain its existing presentation.
+Schema context SHALL NOT add nodes or edges, change traversal, move layout
+positions or change the camera when toggled, highlighted or pinned.
+
+Canonical lineage nodes SHALL expose optional nullable `database` and
+`schema_name` fields. For resolved `TABLE`, `VIEW` and `MATERIALIZED_VIEW`
+nodes these SHALL carry only existing nonblank string attributes `database`
+and `schema`. Missing, invalid or unresolved membership SHALL remain null;
+membership SHALL NOT be inferred by splitting names. This additive context
+SHALL be consistent in REST and the existing typed MCP lineage projection.
+
+When enabled, soft bounded local world-space clouds SHALL group relations by
+the exact database/schema tuple without replacing asset-type colors. Schema
+colors SHALL be stable independently of chain ordering and subset. Distant
+members SHALL form separate local patches, not a schema-wide enclosure or
+transitively expanding connected cloud. Lineage strokes SHALL remain visible
+above the clouds. Cloud labels SHALL have a zoom/collision budget and show
+`database.schema` with counts explicitly limited to the current chain, not
+catalog-wide totals. An accessible scrollable legend SHALL retain all known
+schema groups when canvas labels are suppressed.
+
+Hover and keyboard focus in the legend SHALL highlight schema members without
+moving them; native button activation SHALL toggle a pinned highlight. Escape
+SHALL clear transient and pinned highlights. Reset SHALL also disable schema
+context. Clouds and highlight changes SHALL introduce no motion, including
+with reduced-motion preferences. Unknown and unresolved objects SHALL remain
+visible as graph nodes but SHALL NOT be assigned a guessed schema cloud.
+
+#### Scenario: One schema spans distant chain regions
+
+- **GIVEN** an open chain has resolved relations of one database/schema in distant lanes
+- **WHEN** the user enables «Схемы»
+- **THEN** separate bounded local clouds share one stable schema tint
+- **AND** the legend counts only that chain's unique resolved members
+- **AND** graph nodes, edges, layout and camera remain unchanged
+
+#### Scenario: Ambiguous names do not establish membership
+
+- **GIVEN** a relation has a dotted qualified name but lacks explicit schema attributes
+- **WHEN** schema context is enabled
+- **THEN** that node remains visible without a schema cloud
+- **AND** unresolved targets are likewise excluded from schema grouping
+
+#### Scenario: Keyboard highlight and reset
+
+- **GIVEN** schema context is enabled in an open chain
+- **WHEN** the user focuses a legend button and activates it
+- **THEN** its schema highlight is pinned without changing asset-type colors or camera
+- **AND** Escape clears the highlight while Reset disables the optional context
+
 ### Requirement: Lineage доступен без extraction sources
 
 `GET /api/v1/assets/{asset_id}/lineage` MUST возвращать граф по всем

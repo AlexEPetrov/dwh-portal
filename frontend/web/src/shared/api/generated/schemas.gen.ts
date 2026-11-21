@@ -872,6 +872,28 @@ export const $LineageNode = {
             title: 'Unresolved',
             default: false
         },
+        database: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Database'
+        },
+        schema_name: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Schema Name'
+        },
         kind: {
             anyOf: [
                 {

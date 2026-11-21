@@ -193,6 +193,8 @@ export type LineageNode = {
     name: string;
     display_name: string;
     unresolved?: boolean;
+    database?: string | null;
+    schema_name?: string | null;
     kind?: string | null;
     extraction_source_count?: number | null;
     process_count?: number | null;

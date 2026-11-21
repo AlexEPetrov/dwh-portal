@@ -375,6 +375,64 @@
   white-space: nowrap;
 }
 
+.lineage-universe-schemas {
+  position: absolute;
+  z-index: 2;
+  top: 118px;
+  left: 18px;
+  width: min(290px, calc(100% - 36px));
+  max-height: min(34%, 300px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid rgba(186, 210, 255, 0.24);
+  border-radius: 12px;
+  background: rgba(8, 15, 30, 0.9);
+  color: #e8eefc;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.lineage-universe-schemas p {
+  margin: 6px 0;
+  color: #b9c7df;
+  font-size: 11px;
+}
+
+.lineage-universe-schemas button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.lineage-universe-schemas button > span {
+  flex: 0 0 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.lineage-universe-schemas button:hover,
+.lineage-universe-schemas button[aria-pressed='true'],
+.lineage-universe-toolbar .ant-btn[aria-pressed='true'] {
+  border-color: #a5b4cf;
+  background: rgba(186, 210, 255, 0.12);
+}
+
+.lineage-universe-schemas button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+
 .lineage-universe-hud-card {
   position: absolute;
   z-index: 2;
@@ -462,6 +520,13 @@
 }
 
 @media (max-width: 720px) {
+  .lineage-universe-schemas {
+    top: auto;
+    bottom: 150px;
+    max-height: 25%;
+    width: min(250px, calc(100% - 36px));
+  }
+
   .lineage-universe-top {
     flex-direction: column;
     gap: 8px;
