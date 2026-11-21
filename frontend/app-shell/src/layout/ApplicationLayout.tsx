@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { ApplicationHelpDrawer, type ApplicationHelpConfig } from '../help';
 import { Outlet, useLocation } from 'react-router-dom';
+import { ApplicationHelpDrawer, type ApplicationHelpConfig } from '../help';
 import {
   PluginSideNavigation,
   type PluginMenuSource,
@@ -24,6 +24,7 @@ export interface ApplicationLayoutProps {
   subtitle?: ReactNode;
   navigation: ApplicationNavigationConfig;
   help?: ApplicationHelpConfig;
+  headerCenter?: ReactNode;
   headerActions?: ReactNode;
   showUserMenu?: boolean;
   userMenu?: ApplicationUserMenuProps;
@@ -44,6 +45,7 @@ export function ApplicationLayout({
   subtitle,
   navigation,
   help,
+  headerCenter,
   headerActions,
   showUserMenu = true,
   userMenu,
@@ -72,6 +74,7 @@ export function ApplicationLayout({
     <AppShellLayout
       title={title}
       subtitle={subtitle}
+      headerCenter={headerCenter}
       navigationKey={location.pathname}
       headerActions={resolvedHeaderActions}
       headerHeight={headerHeight}

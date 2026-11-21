@@ -1,5 +1,7 @@
 import type { ApplicationLayoutProps } from '@asset-management/app-shell/layout';
 import { pluginRegistry } from '@asset-management/app-shell/plugin';
+import { HeaderNavigation } from './adapters/HeaderNavigation';
+import './application.css';
 
 const MENU_LABEL_REFRESH_EVENT = 'atrm:menu-label-refresh';
 
@@ -10,6 +12,7 @@ const MENU_LABEL_REFRESH_EVENT = 'atrm:menu-label-refresh';
 export const applicationLayout = {
   title: 'DWH Portal',
   subtitle: 'Каталог объектов DWH, хранение, lineage и структурные изменения.',
+  headerCenter: <HeaderNavigation />,
   expandSidebarLabel: 'Развернуть меню',
   collapseSidebarLabel: 'Свернуть меню',
   navigation: {

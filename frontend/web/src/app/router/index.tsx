@@ -21,7 +21,7 @@ async function loadModules() {
   const moduleRoutes = await registerDiscoveredModules({
     moduleImports,
     registry: pluginRegistry,
-    requiredModuleIds: ['assistant', 'catalog', 'documents', 'admin'],
+    requiredModuleIds: ['catalog', 'documents', 'admin'],
     onModuleLoaded: (path) => console.log('Loaded module:', path),
     onModuleSkipped: (path) => console.log('Skipping disabled module:', path),
   });

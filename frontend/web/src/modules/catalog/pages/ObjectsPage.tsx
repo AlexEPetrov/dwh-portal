@@ -9,23 +9,23 @@ import {
   formatDateTime,
   formatRows,
 } from '@shared/ui/portal';
-import { Alert, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Input, Pagination, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { readCatalogFilters, updateCatalogFilters, type CatalogFilters } from '../navigation';
 import { useCatalogAssets } from '../queries';
 
 const TYPE_TOGGLES = [
-  { key: 'DATA_SOURCE', label: 'Источник' },
-  { key: 'EXTRACTION_SOURCE', label: 'Извлечение' },
+  { key: 'DATA_SOURCE', label: 'Data source' },
+  { key: 'EXTRACTION_SOURCE', label: 'Extraction source' },
   { key: 'PROCESS', label: 'Loader' },
-  { key: 'STORAGE_LOCATION', label: 'Хранение' },
+  { key: 'STORAGE_LOCATION', label: 'Storage location' },
   { key: 'TABLE', label: 'Table' },
   { key: 'VIEW', label: 'View' },
   { key: 'MATERIALIZED_VIEW', label: 'Materialized view' },
-  { key: 'DATABASE', label: 'База данных' },
-  { key: 'SCHEMA', label: 'Схема' },
+  { key: 'DATABASE', label: 'Database' },
+  { key: 'SCHEMA', label: 'Schema' },
 ] as const;
 
 const PAGE_SIZE_OPTIONS = ['10', '25', '50', '100'] as const;
@@ -46,6 +46,8 @@ const ObjectsGrid = memo(({ filters, onFreshness }: ObjectsGridProps) => {
   }
   const page = pagination.filterKey === filterKey ? pagination.page : 1;
   const pageSize = pagination.pageSize;
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [tableBodyHeight, setTableBodyHeight] = useState(1);
   const assetsQuery = useCatalogAssets({
     ...filters,
     status: filters.status ?? 'active',
@@ -62,6 +64,21 @@ const ObjectsGrid = memo(({ filters, onFreshness }: ObjectsGridProps) => {
     // Keep the last confirmed snapshot metadata while a new result is pending.
     if (freshness) onFreshness(freshness);
   }, [freshness, onFreshness]);
+
+  useLayoutEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+    const header = container.querySelector<HTMLElement>('.ant-table-header');
+    const updateHeight = () => {
+      // Reserve the actual header height, including wrapped column titles.
+      setTableBodyHeight(Math.max(1, container.clientHeight - (header?.offsetHeight ?? 0) - 1));
+    };
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(container);
+    if (header) observer.observe(header);
+    updateHeight();
+    return () => observer.disconnect();
+  }, []);
 
   const columns: ColumnsType<AssetListItem> = useMemo(
     () => [
@@ -112,8 +129,8 @@ const ObjectsGrid = memo(({ filters, onFreshness }: ObjectsGridProps) => {
         width: 220,
         render: (_, row) => (
           <Space size={4} onClick={(event) => event.stopPropagation()}>
-            <Button size="small" type="link" onClick={() => navigate(`/objects/${row.id}`)}>
-              Карточка
+            <Button size="small" type="link" onClick={() => navigate(`/lineage/universe/${row.id}`)}>
+              Universe
             </Button>
             <Button size="small" type="link" onClick={() => navigate(`/lineage/${row.id}`)}>
               Lineage
@@ -126,35 +143,44 @@ const ObjectsGrid = memo(({ filters, onFreshness }: ObjectsGridProps) => {
   );
 
   return (
-    <div aria-busy={assetsQuery.isFetching}>
+    <div
+      aria-busy={assetsQuery.isFetching}
+      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 12 }}
+    >
       {assetsQuery.isError ? (
         <Alert
           type="error"
           showIcon
+          style={{ flexShrink: 0 }}
           message="Не удалось загрузить список объектов"
           description={assetsQuery.error instanceof Error ? assetsQuery.error.message : undefined}
         />
       ) : null}
-      <Table
-        rowKey="id"
-        loading={assetsQuery.isPending || assetsQuery.isFetching}
-        locale={{ emptyText: assetsQuery.isError ? 'Список недоступен' : assetsQuery.isPending ? 'Загрузка…' : 'Нет объектов' }}
-        columns={columns}
-        dataSource={items}
-        pagination={{
-          current: page,
-          pageSize,
-          total,
-          showSizeChanger: true,
-          pageSizeOptions: [...PAGE_SIZE_OPTIONS],
-          onChange: (nextPage, nextSize) => {
-            setPagination({ filterKey, page: nextPage, pageSize: nextSize });
-          },
+      <div ref={tableContainerRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <Table
+          rowKey="id"
+          loading={assetsQuery.isPending || assetsQuery.isFetching}
+          locale={{ emptyText: assetsQuery.isError ? 'Список недоступен' : assetsQuery.isPending ? 'Загрузка…' : 'Нет объектов' }}
+          columns={columns}
+          dataSource={items}
+          pagination={false}
+          scroll={{ y: tableBodyHeight }}
+          onRow={(row) => ({
+            onClick: () => navigate(`/objects/${row.id}`),
+            style: { cursor: 'pointer' },
+          })}
+        />
+      </div>
+      <Pagination
+        style={{ flexShrink: 0, alignSelf: 'flex-end' }}
+        current={page}
+        pageSize={pageSize}
+        total={total}
+        showSizeChanger
+        pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+        onChange={(nextPage, nextSize) => {
+          setPagination({ filterKey, page: nextPage, pageSize: nextSize });
         }}
-        onRow={(row) => ({
-          onClick: () => navigate(`/objects/${row.id}`),
-          style: { cursor: 'pointer' },
-        })}
       />
     </div>
   );
@@ -204,7 +230,8 @@ const ObjectsPage = () => {
   };
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, width: '100%', gap: 12, overflow: 'hidden' }}>
+      <Space direction="vertical" size={12} style={{ width: '100%', flexShrink: 0 }}>
       <ObjectsHeader freshness={freshness} />
       <FilterToolbar>
         <FilterChipGroup
@@ -250,8 +277,9 @@ const ObjectsPage = () => {
           </Tag>
         ) : null)}
       </Space>
+      </Space>
       <ObjectsGrid filters={filters} onFreshness={onFreshness} />
-    </Space>
+    </div>
   );
 };
 

@@ -1,5 +1,6 @@
 import type { ModuleRegistration } from '@asset-management/app-shell/plugin';
 import { RouteSuspense } from '@asset-management/app-shell/routing';
+import { registerHeaderNavigation } from '@shared/plugins/headerNavigation';
 import { lazy, type ReactNode } from 'react';
 import menu from './menu';
 
@@ -36,4 +37,11 @@ export default {
   order: 20,
   menu,
   routes,
+  registerContributions(registry) {
+    registerHeaderNavigation(registry, 'catalog.universe', {
+      label: 'Universe',
+      path: '/lineage/universe',
+      order: 10,
+    });
+  },
 } satisfies ModuleRegistration;

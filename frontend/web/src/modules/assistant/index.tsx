@@ -13,7 +13,8 @@ const routes: ModuleRegistration['routes'] = () => [
 
 export default {
   id: 'assistant',
-  enabled: true,
+  // Temporarily hide Assistant for everyone, including its page route.
+  enabled: false,
   order: 10,
   menu,
   routes,

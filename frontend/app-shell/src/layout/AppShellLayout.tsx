@@ -9,6 +9,7 @@ export interface AppShellLayoutProps {
   title: ReactNode;
   subtitle?: ReactNode;
   renderSidebar: (collapsed: boolean) => ReactNode;
+  headerCenter?: ReactNode;
   headerActions?: ReactNode;
   navigationKey?: string;
   children: ReactNode;
@@ -24,6 +25,7 @@ export function AppShellLayout({
   title,
   subtitle,
   renderSidebar,
+  headerCenter,
   headerActions,
   navigationKey,
   children,
@@ -91,7 +93,9 @@ export function AppShellLayout({
     <Layout style={{ height: '100vh', background: token.colorBgLayout }}>
       <Header
         style={{
-          display: 'flex',
+          display: headerCenter ? 'grid' : 'flex',
+          gridTemplateColumns: headerCenter ? 'minmax(0, 1fr) auto minmax(0, 1fr)' : undefined,
+          columnGap: headerCenter ? 24 : undefined,
           alignItems: 'center',
           justifyContent: 'space-between',
           background: token.Layout?.headerBg || token.colorBgContainer,
@@ -103,7 +107,7 @@ export function AppShellLayout({
           backdropFilter: 'blur(10px)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           <Tooltip title={isSiderCollapsed ? expandSidebarLabel : collapseSidebarLabel}>
             <button
               type="button"
@@ -111,6 +115,7 @@ export function AppShellLayout({
               aria-label={isSiderCollapsed ? expandSidebarLabel : collapseSidebarLabel}
               style={{
                 width: 36,
+                flexShrink: 0,
                 height: 36,
                 borderRadius: 8,
                 border: `1px solid ${token.colorBorderSecondary}`,
@@ -126,20 +131,22 @@ export function AppShellLayout({
             </button>
           </Tooltip>
 
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 50 }}>
-            <Title level={4} style={{ margin: 0, color: token.colorText, fontWeight: 600, lineHeight: 1.7 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 50, minWidth: 0 }}>
+            <Title level={4} ellipsis style={{ margin: 0, color: token.colorText, fontWeight: 600, lineHeight: 1.7 }}>
               {title}
             </Title>
             {subtitle ? (
-              <Text type="secondary" style={{ lineHeight: 1.5 }}>
+              <Text type="secondary" ellipsis style={{ lineHeight: 1.5 }}>
                 {subtitle}
               </Text>
             ) : null}
           </div>
         </div>
 
+        {headerCenter ? <div style={{ display: 'flex', alignItems: 'center' }}>{headerCenter}</div> : null}
+
         {headerActions ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginLeft: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, marginLeft: headerCenter ? 0 : 24 }}>
             {headerActions}
           </div>
         ) : null}

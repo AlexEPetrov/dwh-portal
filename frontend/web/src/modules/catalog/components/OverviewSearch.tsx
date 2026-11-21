@@ -47,7 +47,7 @@ const OverviewSearch = () => {
       }}
     >
       <div className="overview-search__eyebrow" style={{ color: token.colorPrimary }}>
-        <DatabaseOutlined /> АНАЛИЗИРУЙ
+        <DatabaseOutlined /> НАЧАТЬ РАБОТУ
       </div>
       <Typography.Title id="overview-search-title" level={3} className="overview-search__title">
         Все начинается с поиска
