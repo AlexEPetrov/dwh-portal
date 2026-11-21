@@ -2,9 +2,9 @@
 export const mockContracts: Array<Record<string, unknown>> = [
   {
     id: '1',
-    name: 'М экспорт (долгосрочный)',
-    slug: 'm-export-lt',
-    counterparty: 'Gazprom Export LLC',
+    name: 'B export (longterm)',
+    slug: 'b-export-lt',
+    counterparty: 'BP Export LLC',
     volume_uom: 'MWh',
     pricing_uom: 'EUR/MWh',
     is_active: true,
@@ -12,7 +12,7 @@ export const mockContracts: Array<Record<string, unknown>> = [
   },
   {
     id: '2',
-    name: 'Shell Energy Europe (спотовый)',
+    name: 'Shell Energy Europe (spot)',
     slug: 'shell-energy-spot',
     counterparty: 'Shell Energy Europe Ltd',
     volume_uom: 'MWh',
