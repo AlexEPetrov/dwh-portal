@@ -1,0 +1,44 @@
+services:
+  portal-harness:
+    image: 134/dwh-portal-dsh:0.2.2-rc.5-source-experimental
+    init: true
+    restart: unless-stopped
+    env_file:
+      - "${PORTAL_ENV_FILE:?Pass the existing Portal environment file}"
+    environment:
+      APP_PORTAL_STORE: "sql"
+      APP_PORTAL_SEED_DEMO: "false"
+      APP_PORTAL_RESET_ON_COLLECT: "false"
+      APP_API_PORT: "5051"
+      APP_MCP_ENABLED: "${APP_MCP_ENABLED:-true}"
+      APP_MCP_ALLOW_ANONYMOUS_READ: "${APP_MCP_ALLOW_ANONYMOUS_READ:-true}"
+      APP_MCP_PUBLIC_BASE_URL: "${PORTAL_HARNESS_PUBLIC_URL:-http://127.0.0.1:5053}"
+      APP_DB_PSG_HOST: "${APP_DB_PSG_HOST:?Existing Portal DB host is required}"
+      APP_DB_PSG_PORT: "${APP_DB_PSG_PORT:-5432}"
+      APP_DB_PSG_DB: "${APP_DB_PSG_DB:?Existing Portal DB name is required}"
+      APP_DB_PSG_USER: "${APP_DB_PSG_USER:?Existing Portal DB user is required}"
+      APP_DB_PSG_PASS: "${APP_DB_PSG_PASS:?Existing Portal DB password is required}"
+      DSH_PORT: "3080"
+      DSH_PROVIDER_MODE: "${DSH_PROVIDER_MODE:-ollama}"
+      DSH_OLLAMA_BASE_URL: "${DSH_OLLAMA_BASE_URL:-}"
+      DSH_OLLAMA_MODEL: "${DSH_OLLAMA_MODEL:-}"
+      DSH_OLLAMA_CONTEXT_WINDOW: "${DSH_OLLAMA_CONTEXT_WINDOW:-8192}"
+      DSH_OLLAMA_MAX_TOKENS: "${DSH_OLLAMA_MAX_TOKENS:-2048}"
+      DSH_OLLAMA_API_KEY: "${DSH_OLLAMA_API_KEY:-ollama}"
+      DSH_PUBLIC_URL: "${DSH_PUBLIC_URL:-http://127.0.0.1:3080/}"
+    ports:
+      - "127.0.0.1:${PORTAL_HARNESS_HOST_PORT:-5053}:5051"
+      - "127.0.0.1:${DSH_HOST_PORT:-3080}:3080"
+    volumes:
+      - dsh-state:/var/lib/dsh
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    networks:
+      - harness
+
+volumes:
+  dsh-state: {}
+
+networks:
+  harness:
+    driver: bridge

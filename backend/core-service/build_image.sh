@@ -1,1 +1,4 @@
-docker build . --file ./Dockerfile -t 134/dwh-portal-core-service:1.2
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+exec sh "$ROOT/infra/images/portal/build.sh" "$@"

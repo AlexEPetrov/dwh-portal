@@ -375,13 +375,8 @@
             "in": "query",
             "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/AssetStatus"
-                }
-              ],
-              "default": "active",
-              "title": "Status"
+              "$ref": "#/components/schemas/AssetStatus",
+              "default": "active"
             }
           },
           {
@@ -1061,6 +1056,7 @@
           "context": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -1091,6 +1087,7 @@
             "title": "Provider"
           },
           "meta": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Meta"
           },
@@ -1223,6 +1220,7 @@
             "title": "Last Seen At"
           },
           "attributes": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Attributes"
           },
@@ -1499,6 +1497,7 @@
             "title": "Detected At"
           },
           "details": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Details"
           },
@@ -1600,6 +1599,7 @@
             "title": "Detected At"
           },
           "details": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Details"
           },
@@ -1782,6 +1782,7 @@
             "title": "Message"
           },
           "details": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Details"
           }
@@ -2689,6 +2690,7 @@
             "title": "Qualified Name"
           },
           "target_ref": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Target Ref"
           }

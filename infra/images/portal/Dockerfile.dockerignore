@@ -1,0 +1,27 @@
+# Repository-root context; allow only Portal application build inputs.
+**
+!frontend/
+!frontend/**
+!common/
+!common/contracts/
+!common/contracts/jsonschema/
+!common/contracts/jsonschema/**
+!backend/
+!backend/core-service/
+!backend/core-service/requirements.txt
+!backend/core-service/src/
+!backend/core-service/src/**
+!backend/core-service/duckdb_extensions/
+!backend/core-service/duckdb_extensions/**
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/.git
+**/.venv
+**/node_modules
+**/dist
+**/frontend-dist
+**/__pycache__
+**/*.pyc
+**/*.pyo

@@ -1,0 +1,5 @@
+# Checkout-only path reconciliation. Release directories already carry frontend-dist.
+services:
+  core-service:
+    volumes:
+      - "${PORTAL_CHECKOUT_ROOT:?Checkout root is required}/frontend/web/dist:/app/frontend-dist:ro"

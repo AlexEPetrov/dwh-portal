@@ -10,6 +10,7 @@ export const $AiChatRequest = {
         context: {
             anyOf: [
                 {
+                    additionalProperties: true,
                     type: 'object'
                 },
                 {
@@ -39,6 +40,7 @@ export const $AiChatResponse = {
             title: 'Provider'
         },
         meta: {
+            additionalProperties: true,
             type: 'object',
             title: 'Meta'
         },
@@ -165,6 +167,7 @@ export const $AssetDetailResponse = {
             title: 'Last Seen At'
         },
         attributes: {
+            additionalProperties: true,
             type: 'object',
             title: 'Attributes'
         },
@@ -410,6 +413,7 @@ export const $ChangeDetailResponse = {
             title: 'Detected At'
         },
         details: {
+            additionalProperties: true,
             type: 'object',
             title: 'Details'
         },
@@ -498,6 +502,7 @@ export const $ChangeSummaryItem = {
             title: 'Detected At'
         },
         details: {
+            additionalProperties: true,
             type: 'object',
             title: 'Details'
         },
@@ -665,6 +670,7 @@ export const $CollectRunItem = {
             title: 'Message'
         },
         details: {
+            additionalProperties: true,
             type: 'object',
             title: 'Details'
         }
@@ -1504,6 +1510,7 @@ export const $UnresolvedTarget = {
             title: 'Qualified Name'
         },
         target_ref: {
+            additionalProperties: true,
             type: 'object',
             title: 'Target Ref'
         }

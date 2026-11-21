@@ -42,7 +42,12 @@ def main():
             "APP_PORTAL_STORE": "memory",
             "APP_PORTAL_SEED_DEMO": "true",
             "APP_API_PORT": "5051",
+            "APP_MCP_ENABLED": "true",
+            "APP_MCP_ALLOW_ANONYMOUS_READ": "true",
             "DSH_PORT": "3080",
+            "DSH_PROVIDER_MODE": "ollama",
+            "DSH_OLLAMA_BASE_URL": "",
+            "DSH_OLLAMA_MODEL": "",
             "DSH_BIND_HOST": "127.0.0.1",
             "DSH_PUBLIC_URL": "http://127.0.0.1:3080/",
         }
@@ -120,11 +125,17 @@ def main():
             ).strip()
             if version != release["version"]:
                 raise RuntimeError("DSH version does not match the source pin")
+            subprocess.run(
+                ["/usr/local/bin/node", "/opt/portal-harness/check_catalog_mcp.mjs"],
+                env=environment,
+                check=True,
+                timeout=45,
+            )
             child.terminate()
             if child.wait(timeout=20) != 0:
                 raise RuntimeError("Launcher did not shut down cleanly")
             print(
-                f"PASS: Portal UI/health, source-built DSH {version}, token/cookie auth, tool guard, shutdown"
+                f"PASS: Portal UI/health/MCP, source-built DSH {version}, token/cookie auth, tool guard, shutdown"
             )
         except BaseException:
             print(redact(log_path.read_text()), file=sys.stderr)

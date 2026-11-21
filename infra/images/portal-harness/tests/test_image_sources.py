@@ -1,5 +1,6 @@
-"""Dependency-free checks of source-pinned DSH packaging and supervision."""
+"""Source-only packaging/supervision checks; Compose parsing requires PyYAML."""
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -12,7 +13,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 SOURCE = Path(__file__).resolve().parents[1]
+REPOSITORY = SOURCE.parents[2]
+ENVIRONMENT = REPOSITORY / "infra/environments/portal-harness"
+COMPOSE = REPOSITORY / "infra/compose/docker-compose-portal-harness.yml"
 
 
 def load(name):
@@ -29,8 +35,17 @@ with patch.dict(sys.modules, {"launch": launcher}):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_yaml_conversion_preserves_the_original_compose_values(self):
+        compose = yaml.safe_load(COMPOSE.read_text())
+        normalized = json.dumps(compose, sort_keys=True, separators=(",", ":"))
+        self.assertEqual(
+            hashlib.sha256(normalized.encode()).hexdigest(),
+            "c750669cdc80e8747b944c1061a96dd0bceac03d9d5eeabdacc29097bc08ece3",
+        )
+        self.assertFalse(COMPOSE.with_suffix(".json").exists())
+
     def test_sql_launch_reuses_configuration_without_replacing_existing_service(self):
-        compose = json.loads((SOURCE / "compose-sql.json").read_text())
+        compose = yaml.safe_load(COMPOSE.read_text())
         self.assertEqual(set(compose["services"]), {"portal-harness"})
         service = compose["services"]["portal-harness"]
         self.assertEqual(service["environment"]["APP_PORTAL_STORE"], "sql")
@@ -39,15 +54,104 @@ class ConfigurationTests(unittest.TestCase):
         self.assertTrue(service["env_file"][0].startswith("${PORTAL_ENV_FILE:?"))
         self.assertTrue(all(port.startswith("127.0.0.1:") for port in service["ports"]))
         self.assertEqual(
-            compose["networks"]["existing-portal"],
-            {"external": True, "name": "dwh_portal"},
+            compose["networks"],
+            {"harness": {"driver": "bridge"}},
         )
+        self.assertEqual(service["networks"], ["harness"])
         self.assertNotIn("command", service)
         self.assertNotIn("build", service)
-        script = (SOURCE / "run-sql.sh").read_text()
+        script = (ENVIRONMENT / "compose.sh").read_text()
         self.assertIn("--project-name dwh-portal-harness", script)
         self.assertIn('--env-file "$PORTAL_ENV_FILE"', script)
         self.assertNotIn("alembic", script)
+
+    def test_sql_network_is_project_owned_and_supports_the_host_database(self):
+        compose = yaml.safe_load(COMPOSE.read_text())
+        service = compose["services"]["portal-harness"]
+        self.assertNotIn("network_mode", service)
+        self.assertIn("host.docker.internal:host-gateway", service["extra_hosts"])
+        for network in compose["networks"].values():
+            self.assertNotIn("external", network)
+            self.assertNotIn("name", network)
+        host_lines = [
+            line
+            for line in (ENVIRONMENT / "sql.env.example").read_text().splitlines()
+            if line.startswith("APP_DB_PSG_HOST=")
+        ]
+        self.assertEqual(host_lines, ["APP_DB_PSG_HOST=host.docker.internal"])
+
+    def test_build_composition_and_environment_files_have_separate_owners(self):
+        self.assertTrue((SOURCE / "Dockerfile").is_file())
+        self.assertTrue((SOURCE / "build.sh").is_file())
+        self.assertTrue((SOURCE / "smoke.sh").is_file())
+        self.assertTrue(COMPOSE.is_file())
+        for name in (
+            "up.sh",
+            "down.sh",
+            "compose.sh",
+            "run-sql.sh",
+            "sql.env.example",
+        ):
+            self.assertTrue((ENVIRONMENT / name).is_file(), name)
+            self.assertFalse((SOURCE / name).exists(), name)
+        self.assertFalse((SOURCE / "compose-sql.json").exists())
+        for name in ("build-release.sh", "run-demo.sh"):
+            self.assertFalse((ENVIRONMENT / name).exists())
+        self.assertTrue(
+            (REPOSITORY / "infra/scripts/build_env_portal_harness.sh").is_file()
+        )
+        self.assertTrue(
+            (REPOSITORY / "infra/scripts/package_portal_harness_release.py").is_file()
+        )
+        self.assertTrue(
+            (REPOSITORY / "infra/scripts/run_portal_harness_demo.sh").is_file()
+        )
+
+    def test_relocated_sql_launcher_resolves_compose_and_env_from_another_cwd(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            capture = directory / "arguments"
+            fake_docker = directory / "docker"
+            fake_docker.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_PATH"\n')
+            fake_docker.chmod(0o700)
+            env_file = directory / "local settings.env"
+            # A shell payload would run if the wrapper sourced the file. It must not.
+            marker = directory / "must-not-run"
+            env_file.write_text(f'UNTRUSTED=$(touch "{marker}")\n')
+            result = subprocess.run(
+                ["bash", str(ENVIRONMENT / "run-sql.sh"), env_file.name],
+                cwd=directory,
+                env={"PATH": f"{directory}:{os.defpath}", "CAPTURE_PATH": str(capture)},
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            args = capture.read_text().splitlines()
+            self.assertEqual(
+                args[:3], ["compose", "--project-name", "dwh-portal-harness"]
+            )
+            self.assertEqual(args[3:5], ["--env-file", str(env_file)])
+            self.assertEqual(args[5], "--file")
+            self.assertEqual(Path(args[6]).resolve(), COMPOSE)
+            self.assertEqual(args[7:], ["up", "-d"])
+            self.assertFalse(marker.exists())
+            self.assertEqual(result.stdout, "")
+
+    def test_relocated_sql_launcher_rejects_missing_environment_without_docker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            fake_docker = directory / "docker"
+            fake_docker.write_text("#!/bin/sh\nexit 99\n")
+            fake_docker.chmod(0o700)
+            result = subprocess.run(
+                ["bash", str(ENVIRONMENT / "run-sql.sh"), "missing.env"],
+                cwd=directory,
+                env={"PATH": f"{directory}:{os.defpath}"},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("infra/environments/portal-harness/run-sql.sh", result.stderr)
 
     def test_source_and_toolchain_are_pinned(self):
         release = json.loads((SOURCE / "dsh-source.json").read_text())
@@ -66,9 +170,75 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("id: portal-packaging-guard", patch_text)
         self.assertIn("id: hmr\n  disabled: true", patch_text)
         self.assertIn("id: plugin-manager\n  disabled: true", patch_text)
+        self.assertIn("id: mcp-resources\n  disabled: true", patch_text)
         guard = (SOURCE / "dsh-guard.mjs").read_text()
-        self.assertIn("ctx.tools.guard(() =>", guard)
+        self.assertIn("ctx.tools.guard(catalogGuard)", guard)
+        self.assertNotIn("ctx.tools.restrict(", guard)
         self.assertIn("portal-harness-guard-ready", guard)
+        self.assertIn("transport: streamable-http", patch_text)
+        self.assertIn("expandTemplates: true", patch_text)
+        self.assertNotIn("transport: stdio", patch_text)
+
+    def test_catalog_preset_replaces_nested_coding_tools_instead_of_reenabling_manager(
+        self,
+    ):
+        class PatchLoader(yaml.SafeLoader):
+            pass
+
+        # Preserve unrelated runtime expressions as scalar data, never evaluate
+        # them. The preset itself MUST be a literal mapping before validation.
+        PatchLoader.add_constructor(
+            "tag:yaml.org,2002:js", lambda loader, node: loader.construct_scalar(node)
+        )
+        rows = yaml.load((SOURCE / "dsh.patch.yml").read_text(), Loader=PatchLoader)
+        preset = next(row for row in rows if row.get("id") == "preset-standard")[
+            "config"
+        ]
+        self.assertIsInstance(preset, dict)
+        self.assertIsInstance(preset["plugins"], list)
+        self.assertEqual(preset["id"], "standard")
+        self.assertEqual(preset["name"], "Portal catalog")
+        self.assertEqual(
+            [entry["id"] for entry in preset["plugins"]],
+            ["persona", "agent-instructions", "time-context", "compaction"],
+        )
+        compaction = preset["plugins"][-1]
+        self.assertEqual(
+            compaction["isolate"], {"compaction": True, "toolResultPruner": True}
+        )
+        self.assertEqual(
+            [entry["id"] for entry in compaction["config"]],
+            ["compaction-basic", "tool-result-pruner"],
+        )
+        serialized = json.dumps(preset)
+        for forbidden in (
+            "plugin-manager",
+            "tool-bash",
+            "tool-pwsh",
+            "tool-fs",
+            "terminal",
+            "tool-web",
+            "tool-subagent",
+            "workflow",
+            "tool-skill",
+            "tool-office",
+            "tool-goal",
+            "tool-todo",
+        ):
+            self.assertNotIn(forbidden, serialized)
+        patch_text = (SOURCE / "dsh.patch.yml").read_text()
+        self.assertIn("- id: plugin-manager\n  disabled: true", patch_text)
+        self.assertNotIn(
+            "config: !!js",
+            patch_text.split("- id: preset-standard", 1)[1].split(
+                "- id: preset-cordis", 1
+            )[0],
+        )
+        self.assertNotIn("catalog-preset.json", patch_text)
+        self.assertIn("selectedDefault: standard", patch_text)
+        for preset_id in ("preset-cordis", "preset-ptc", "preset-minimal"):
+            self.assertIn(f"- id: {preset_id}\n  disabled: true", patch_text)
+        self.assertNotIn("catalog-preset.json", (SOURCE / "Dockerfile").read_text())
 
     def test_build_excludes_local_secrets_and_dependencies(self):
         ignored = (SOURCE / "Dockerfile.dockerignore").read_text().splitlines()
@@ -77,13 +247,51 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("**/node_modules", ignored)
         self.assertIn("**/.venv", ignored)
         dockerfile = (SOURCE / "Dockerfile").read_text()
+        base = (REPOSITORY / "infra/images/portal/Dockerfile").read_text()
         self.assertIn("USER 1001:0", dockerfile)
-        self.assertIn("134/python-builder-313:1.0", dockerfile)
-        self.assertIn("134/python-slim-313:1.0", dockerfile)
-        self.assertIn("COPY common/contracts/jsonschema/", dockerfile)
+        self.assertIn("134/python-builder-313:1.0", base)
+        self.assertIn("134/python-slim-313:1.0", base)
+        self.assertIn("COPY common/contracts/jsonschema/", base)
         self.assertIn("dsh --version", dockerfile)
         self.assertIn("COPY --from=harness /usr/local/bin/node", dockerfile)
         self.assertNotIn("opencode", dockerfile.lower())
+
+    def test_harness_extends_the_same_portal_base_without_an_independent_app_build(
+        self,
+    ):
+        dockerfile = (SOURCE / "Dockerfile").read_text()
+        base = (REPOSITORY / "infra/images/portal/Dockerfile").read_text()
+        self.assertIn(
+            "ARG PORTAL_BASE_IMAGE=134/dwh-portal-core-service:1.2", dockerfile
+        )
+        self.assertIn("FROM ${PORTAL_BASE_IMAGE} AS runtime", dockerfile)
+        for forbidden in (
+            "COPY frontend/",
+            "COPY backend/",
+            "npm ci",
+            "pip install",
+            "alembic",
+        ):
+            self.assertNotIn(forbidden, dockerfile)
+        self.assertIn("/app/frontend-dist/", base)
+        self.assertIn('CMD ["python3", "src/api/run.py"]', base)
+        self.assertNotIn("APP_MCP_ENABLED=", base)
+        self.assertNotIn("APP_MCP_ALLOW_ANONYMOUS_READ=", base)
+        build = (SOURCE / "build.sh").read_text()
+        self.assertLess(
+            build.index('sh "$ROOT/infra/images/portal/build.sh"'),
+            build.index("docker build"),
+        )
+        compatibility = (REPOSITORY / "backend/core-service/build_image.sh").read_text()
+        self.assertIn('exec sh "$ROOT/infra/images/portal/build.sh"', compatibility)
+        alias = (REPOSITORY / "backend/core-service/Dockerfile").read_text()
+        self.assertIn("FROM ${PORTAL_BASE_IMAGE}", alias)
+        self.assertNotIn("COPY ", alias)
+        base_ignore = (
+            REPOSITORY / "infra/images/portal/Dockerfile.dockerignore"
+        ).read_text()
+        for pattern in ("**/.env", "**/.env.*", "**/.venv", "**/node_modules"):
+            self.assertIn(pattern, base_ignore)
 
     def test_every_python_source_parses_without_writing_bytecode(self):
         for path in SOURCE.rglob("*.py"):
@@ -92,12 +300,112 @@ class ConfigurationTests(unittest.TestCase):
 
 
 class LauncherTests(unittest.TestCase):
+    def test_default_provider_mode_is_ollama_with_no_cloud_credentials_or_routes(self):
+        environment = launcher.harness_environment(
+            {
+                "DEEPSEEK_API_KEY": "cloud-secret",
+                "OPENAI_API_KEY": "other-cloud-secret",
+                "PORTAL_PROVIDER_MODE": "upstream",
+                "PORTAL_OLLAMA_PROVIDERS": "untrusted",
+            }
+        )
+        self.assertEqual(environment["PORTAL_PROVIDER_MODE"], "ollama")
+        self.assertEqual(json.loads(environment["PORTAL_OLLAMA_PROVIDERS"]), {})
+        self.assertNotIn("DEEPSEEK_API_KEY", environment)
+        self.assertNotIn("OPENAI_API_KEY", environment)
+        self.assertNotIn("PORTAL_OLLAMA_MODEL", environment)
+
+    def test_ollama_profile_is_explicit_and_keeps_key_out_of_model_configuration(self):
+        environment = launcher.harness_environment(
+            {
+                "DSH_OLLAMA_BASE_URL": "http://ollama.internal:11434/v1/",
+                "DSH_OLLAMA_MODEL": "test-local-model",
+                "DSH_OLLAMA_CONTEXT_WINDOW": "16384",
+                "DSH_OLLAMA_MAX_TOKENS": "4096",
+                "DSH_OLLAMA_API_KEY": "test-internal-key",
+                "DEEPSEEK_API_KEY": "cloud-secret",
+            }
+        )
+        profiles = json.loads(environment["PORTAL_OLLAMA_PROVIDERS"])
+        self.assertEqual(set(profiles), {"portal-ollama"})
+        profile = profiles["portal-ollama"]
+        self.assertEqual(profile["api"], "openai-completions")
+        self.assertEqual(profile["baseURL"], "http://ollama.internal:11434/v1")
+        self.assertEqual(
+            profile["models"],
+            [
+                {
+                    "id": "test-local-model",
+                    "contextWindow": 16384,
+                    "maxTokens": 4096,
+                }
+            ],
+        )
+        self.assertEqual(profile["apiKeyEnv"], "PORTAL_OLLAMA_API_KEY")
+        self.assertEqual(environment["PORTAL_OLLAMA_API_KEY"], "test-internal-key")
+        self.assertNotIn("test-internal-key", environment["PORTAL_OLLAMA_PROVIDERS"])
+        self.assertNotIn("DEEPSEEK_API_KEY", environment)
+
+    def test_upstream_provider_mode_requires_explicit_selection(self):
+        environment = launcher.harness_environment(
+            {
+                "DSH_PROVIDER_MODE": "upstream",
+                "DEEPSEEK_API_KEY": "cloud-secret",
+            }
+        )
+        self.assertEqual(environment["PORTAL_PROVIDER_MODE"], "upstream")
+        self.assertEqual(environment["DEEPSEEK_API_KEY"], "cloud-secret")
+        self.assertNotIn("PORTAL_OLLAMA_PROVIDERS", environment)
+        with self.assertRaisesRegex(ValueError, "DSH_PROVIDER_MODE"):
+            launcher.commands(
+                "all", {"DSH_PROVIDER_MODE": "typo", "DSH_BIND_HOST": "127.0.0.1"}
+            )
+
+    def test_partial_or_unsafe_ollama_configuration_is_rejected_without_echoing_secrets(
+        self,
+    ):
+        for configuration in (
+            {"DSH_OLLAMA_BASE_URL": "http://ollama.internal:11434/v1"},
+            {"DSH_OLLAMA_MODEL": "local-model"},
+            {
+                "DSH_OLLAMA_BASE_URL": "http://user:private-secret@ollama.internal/v1",
+                "DSH_OLLAMA_MODEL": "local-model",
+            },
+            {
+                "DSH_OLLAMA_BASE_URL": "http://ollama.internal/v1?key=private-secret",
+                "DSH_OLLAMA_MODEL": "local-model",
+            },
+            {
+                "DSH_OLLAMA_BASE_URL": "file:///tmp/v1",
+                "DSH_OLLAMA_MODEL": "local-model",
+            },
+            {
+                "DSH_OLLAMA_BASE_URL": "http://ollama.internal/api",
+                "DSH_OLLAMA_MODEL": "local-model",
+            },
+            {
+                "DSH_OLLAMA_BASE_URL": "http://ollama.internal/v1",
+                "DSH_OLLAMA_MODEL": "local-model",
+                "DSH_OLLAMA_MAX_TOKENS": "99999",
+            },
+            {
+                "DSH_OLLAMA_BASE_URL": "http://ollama.internal/v1",
+                "DSH_OLLAMA_MODEL": "local-model",
+                "DSH_OLLAMA_CONTEXT_WINDOW": "private-secret",
+            },
+        ):
+            with self.subTest(configuration=list(configuration)):
+                with self.assertRaises(ValueError) as error:
+                    launcher.harness_environment(configuration)
+                self.assertNotIn("private-secret", str(error.exception))
+
     def test_harness_environment_excludes_portal_credentials(self):
         environment = launcher.harness_environment(
             {
                 "PATH": "/bin",
                 "APP_DB_PSG_PASS": "database-secret",
                 "APP_AUTH_SESSION_SECRET_KEY": "session-secret",
+                "APP_MCP_TOKEN": "mcp-secret",
                 "PYTHONPATH": "/app/libs",
                 "DSH_HOME": "/private-host-home",
                 "DSH_EXTRA_FLAGS": "unsafe",
@@ -109,12 +417,34 @@ class LauncherTests(unittest.TestCase):
         )
         self.assertNotIn("APP_DB_PSG_PASS", environment)
         self.assertNotIn("APP_AUTH_SESSION_SECRET_KEY", environment)
+        self.assertNotIn("APP_MCP_TOKEN", environment)
         self.assertNotIn("UNRELATED_SECRET", environment)
         self.assertNotIn("PYTHONPATH", environment)
         self.assertNotIn("DSH_EXTRA_FLAGS", environment)
         self.assertNotIn("NODE_OPTIONS", environment)
         self.assertEqual(environment["HOME"], "/var/lib/dsh")
         self.assertEqual(environment["DSH_HOME"], "/var/lib/dsh")
+
+    def test_mcp_uses_local_portal_and_only_passes_a_credential_reference(self):
+        environment = launcher.harness_environment(
+            {
+                "APP_API_PORT": "5151",
+                "DSH_PORTAL_MCP_CREDENTIAL": "portal-mcp-owner",
+                "APP_MCP_TOKEN": "mcp-secret",
+                "PORTAL_MCP_URL": "http://untrusted.invalid/mcp",
+            }
+        )
+        self.assertEqual(environment["PORTAL_MCP_URL"], "http://127.0.0.1:5151/mcp")
+        self.assertEqual(environment["PORTAL_MCP_CREDENTIAL"], "portal-mcp-owner")
+        self.assertNotIn("mcp-secret", environment.values())
+        portal = launcher.commands("portal", {})[0]["env"]
+        self.assertEqual(portal["APP_MCP_ENABLED"], "true")
+        self.assertEqual(portal["APP_MCP_ALLOW_ANONYMOUS_READ"], "true")
+        protected = launcher.commands(
+            "portal",
+            {"APP_MCP_ALLOW_ANONYMOUS_READ": "false", "APP_MCP_TOKEN": "mcp-secret"},
+        )[0]["env"]
+        self.assertEqual(protected["APP_MCP_ALLOW_ANONYMOUS_READ"], "false")
 
     def test_wildcard_bind_is_rejected_before_either_child_starts(self):
         with self.assertRaisesRegex(ValueError, "concrete"):

@@ -282,3 +282,96 @@ Airflow или CLI.
 - GIVEN пользователь открывает Objects
 - WHEN страница загружает данные
 - THEN она вызывает `GET /api/v1/assets` и отображает результат
+
+### Requirement: Portal-owned read-only catalog MCP
+
+Portal SHALL expose an opt-in Streamable HTTP MCP interface at `/mcp` on its
+existing HTTP listener, owned by the Portal process and lifecycle. Clients such
+as DSH and OpenCode SHALL NOT need to launch a Portal MCP server subprocess.
+Ordinary Portal defaults SHALL keep MCP disabled. Existing REST/UI behavior
+SHALL remain unchanged.
+
+The exact tool surface SHALL be `search_catalog`, `get_object`, `get_lineage`
+and `get_object_links`. Tools SHALL reuse existing catalog query orchestration
+and DTO serializers, without HTTP loopback or DWH metadata scans. Search SHALL
+preserve typed filters, page-size bounds, totals and collector freshness. Object
+detail SHALL include API-exposed fields and the complete ordered column list.
+Successful results SHALL contain `data` and `redacted_fields`; sensitive named
+credential fields and raw extraction/load options SHALL be recursively masked
+with explicit paths rather than silently omitted. These masks SHALL NOT be
+represented as general detection of secrets in arbitrary prose.
+
+Lineage SHALL preserve canonical node identities, stored relationship types and
+endpoint directions, unresolved targets and freshness. It SHALL be labeled as
+bounded static catalog evidence, not observed execution history. The interface
+SHALL NOT invent OpenLineage runs/events, timestamps or column lineage.
+
+Navigation tools SHALL verify object existence and return existing object and
+lineage UI routes. Links SHALL be relative unless an operator-configured HTTP(S)
+public origin without credentials/query/fragment is supplied. Request headers
+SHALL NOT determine that public origin. Returning a link SHALL NOT open a browser.
+
+#### Scenario: Replace the AI client
+
+- **GIVEN** Portal is running with MCP explicitly enabled
+- **WHEN** a compatible permitted client connects over Streamable HTTP
+- **THEN** it discovers the same four read-only tools independently of DSH
+- **AND** no extra MCP listener or client-owned server process is needed
+
+#### Scenario: Search and inspect canonical metadata
+
+- **GIVEN** an object and its columns exist in Portal snapshots
+- **WHEN** a permitted MCP client searches and requests that object
+- **THEN** search paging/freshness and object/column fields match the REST query contract
+- **AND** credential-bearing named fields are masked with their paths disclosed
+- **AND** no collection, SQL execution or DWH scan is initiated
+
+#### Scenario: Preserve partial lineage and navigation
+
+- **GIVEN** an object's bounded lineage includes unresolved targets
+- **WHEN** a permitted MCP client requests its lineage and links
+- **THEN** canonical graph endpoints and unresolved targets are preserved
+- **AND** the result identifies bounded catalog evidence rather than execution history
+- **AND** links use the verified Portal routes without opening a browser
+
+### Requirement: Explicit MCP read access mode
+
+MCP SHALL have independent interface-enablement and anonymous-read settings.
+When anonymous reads are off, every protocol operation, including initialization
+and discovery, SHALL require a dedicated MCP-only Bearer credential. Ordinary
+Portal service keys and browser cookies SHALL NOT be implicit fallback credentials.
+MCP credentials SHALL NOT grant access through existing REST authentication.
+
+As an explicitly approved temporary exception, an operator setting MAY enable
+anonymous reads of the same exact catalog tool surface. Experimental combined-
+image launchers MAY enable this exception by default; ordinary Portal defaults
+SHALL keep it off. Operator guidance and startup warnings SHALL disclose that
+anyone able to reach the endpoint can read catalog metadata in anonymous mode.
+Changing access mode SHALL require a Portal restart.
+
+Both access modes SHALL retain Host/Origin validation and a bounded request body.
+Neither mode SHALL expose mutation, collection, SQL, shell, filesystem, arbitrary
+URL fetching or live load-history tools. The interface SHALL NOT claim per-user
+authorization, OAuth discovery, shared browser login or execution isolation.
+
+#### Scenario: Reject unauthenticated discovery in token mode
+
+- **GIVEN** MCP is enabled with anonymous reads off and a dedicated token configured
+- **WHEN** initialization, discovery or a tool call lacks a valid Bearer credential
+- **THEN** the request is rejected before catalog access
+- **AND** supplied/configured credentials are not echoed in the response
+
+#### Scenario: Temporary anonymous reads can be closed
+
+- **GIVEN** MCP is enabled with anonymous reads explicitly permitted
+- **WHEN** a client connects without a credential
+- **THEN** discovery and the same four read-only catalog tools are available
+- **AND** disabling anonymous reads and restarting restores the token requirement
+
+#### Scenario: Disabled or unconfigured access fails closed
+
+- **GIVEN** MCP is disabled, or protected MCP has no configured credential
+- **WHEN** Portal starts or a client tries to access MCP
+- **THEN** disabled MCP returns 404 without starting the SDK
+- **AND** enabled protected MCP without a credential refuses startup
+- **AND** no default development credential or fallback enables anonymous reads

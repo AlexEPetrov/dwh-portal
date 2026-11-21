@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 STATE_FILE = Path("/tmp/portal-harness-mode")
 WORKSPACE = Path("/var/lib/dsh/workspace")
@@ -38,21 +39,90 @@ SHARED_ENV = {
 }
 
 
+def provider_environment(environment: dict[str, str]) -> dict[str, str]:
+    """Select an explicit provider profile without contacting any model endpoint."""
+    mode = environment.get("DSH_PROVIDER_MODE", "ollama")
+    if mode not in {"ollama", "upstream"}:
+        raise ValueError("DSH_PROVIDER_MODE must be ollama or upstream")
+    result = {"PORTAL_PROVIDER_MODE": mode}
+    if mode == "upstream":
+        return result
+
+    base_url = environment.get("DSH_OLLAMA_BASE_URL", "").strip()
+    model = environment.get("DSH_OLLAMA_MODEL", "").strip()
+    if bool(base_url) != bool(model):
+        raise ValueError(
+            "Set both DSH_OLLAMA_BASE_URL and DSH_OLLAMA_MODEL, or neither"
+        )
+    profiles = {}
+    if base_url:
+        parsed = urlsplit(base_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or not parsed.path.rstrip("/").endswith("/v1")
+        ):
+            raise ValueError(
+                "DSH_OLLAMA_BASE_URL must be an HTTP(S) /v1 URL without credentials or query"
+            )
+        try:
+            context = int(environment.get("DSH_OLLAMA_CONTEXT_WINDOW", "8192"))
+            output = int(environment.get("DSH_OLLAMA_MAX_TOKENS", "2048"))
+        except ValueError:
+            raise ValueError(
+                "Ollama context/output limits must be positive integers"
+            ) from None
+        if not 0 < output < context:
+            raise ValueError(
+                "Ollama output limit must be positive and smaller than its context window"
+            )
+        profiles["portal-ollama"] = {
+            "displayName": "Internal Ollama",
+            "api": "openai-completions",
+            "baseURL": base_url.rstrip("/"),
+            "apiKeyEnv": "PORTAL_OLLAMA_API_KEY",
+            "models": [{"id": model, "contextWindow": context, "maxTokens": output}],
+        }
+        result["PORTAL_OLLAMA_MODEL"] = model
+        # Ollama ignores this public placeholder. A secured internal gateway can
+        # supply its own key; configuration contains only the credential reference.
+        result["PORTAL_OLLAMA_API_KEY"] = (
+            environment.get("DSH_OLLAMA_API_KEY") or "ollama"
+        )
+    result["PORTAL_OLLAMA_PROVIDERS"] = json.dumps(profiles)
+    return result
+
+
 def harness_environment(environment: dict[str, str]) -> dict[str, str]:
     """Avoid passing Portal/database secrets to the harness child process."""
+    providers = provider_environment(environment)
     result = {
         key: value
         for key, value in environment.items()
-        if key in SHARED_ENV or key.startswith(PROVIDER_PREFIXES)
+        if key in SHARED_ENV
+        or (
+            providers["PORTAL_PROVIDER_MODE"] == "upstream"
+            and key.startswith(PROVIDER_PREFIXES)
+        )
     }
+    result.update(providers)
     result.update(
         {
             "HOME": "/var/lib/dsh",
             "DSH_HOME": "/var/lib/dsh",
             "DSH_AGENTS_HOME": "/var/lib/dsh/agents",
             "DSH_TELEMETRY_DISABLED": "1",
+            "PORTAL_MCP_URL": f"http://127.0.0.1:{port(environment.get('APP_API_PORT', '5051'))}/mcp",
         }
     )
+    # This is a credential reference, never the token itself. The owner stores
+    # its value in DSH's credentials provider; raw config keeps only a template.
+    if environment.get("DSH_PORTAL_MCP_CREDENTIAL"):
+        result["PORTAL_MCP_CREDENTIAL"] = environment["DSH_PORTAL_MCP_CREDENTIAL"]
     return result
 
 
@@ -97,6 +167,11 @@ def commands(mode: str, environment: dict[str, str]) -> list[dict]:
             if not key.startswith(("DSH_", *PROVIDER_PREFIXES))
         }
         portal_env["APP_API_PORT"] = str(api_port)
+        # Opt-in experimental image only; ordinary Portal settings stay disabled.
+        # The owner explicitly approved this temporary anonymous read exception.
+        portal_env.setdefault("APP_MCP_ENABLED", "true")
+        portal_env.setdefault("APP_MCP_ALLOW_ANONYMOUS_READ", "true")
+        portal_env.setdefault("APP_MCP_PUBLIC_BASE_URL", "http://127.0.0.1:5053")
         children.append(
             {
                 "args": [sys.executable, "/app/src/api/run.py"],
@@ -112,8 +187,6 @@ def commands(mode: str, environment: dict[str, str]) -> list[dict]:
         public_url = environment.get(
             "DSH_PUBLIC_URL", f"http://127.0.0.1:{harness_port}/"
         )
-        from urllib.parse import urlsplit
-
         public = urlsplit(public_url)
         if (
             public.scheme not in {"http", "https"}

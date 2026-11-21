@@ -37,7 +37,26 @@ change_classes:
 topics:
   portal-harness-image:
     paths:
+    - infra/images/portal/**
+    - backend/core-service/Dockerfile
+    - backend/core-service/build_image.sh
     - infra/images/portal-harness/**
+    - infra/compose/docker-compose-portal-harness.yml
+    - infra/compose/docker-compose-checkout.yml
+    - infra/environments/portal-harness/**
+    - infra/environments/test/up.sh
+    - infra/environments/test/down.sh
+    - infra/environments/test/compose.sh
+    - infra/scripts/build_env_portal_harness.sh
+    - infra/scripts/package_portal_harness_release.py
+    - infra/scripts/package_release.py
+    - infra/scripts/build_release.py
+    - infra/scripts/run_portal_harness_demo.sh
+    - infra/scripts/build_env_test.sh
+    - infra/scripts/_build_target.sh
+    - infra/scripts/tests/**
+    - infra/scripts/README.md
+    - infra/environments/test/README.md
     - rules/workflows/portal-harness-image.md
     approval: human_required
     workflow: portal-harness-image
@@ -48,6 +67,8 @@ topics:
     workflow: core-local-environment
   catalog:
     paths:
+    - backend/core-service/src/api/catalog_mcp.py
+    - backend/core-service/src/settings/mcp.py
     - backend/core-service/src/domains/catalog/**
     - backend/core-service/src/api/portal/**
     - frontend/web/src/modules/catalog/**
@@ -194,22 +215,72 @@ verification:
     run_template: curl --fail --silent --show-error --location '{url}' -H 'Accept: application/vnd.github.raw+json'
   PORTAL-HARNESS-SOURCE-TESTS:
     run: python3 -B -m unittest discover -s infra/images/portal-harness/tests -v
+  PORTAL-HARNESS-YAML-PREREQUISITE:
+    run: python3 -B -c "import yaml; print(yaml.__version__)"
+  PORTAL-HARNESS-COMPOSE-JSON-BASELINE:
+    run: python3 -B -c "import hashlib,json; from pathlib import Path; value=json.loads(Path('infra/compose/docker-compose-portal-harness.json').read_text()); print(hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest())"
+  INFRA-RELEASE-TESTS:
+    run: python3 -B -m unittest discover -s infra/scripts/tests -v
+  PORTAL-HARNESS-PRODUCER-MOVE:
+    run: >-
+      test ! -e infra/scripts/build_env_portal_harness.sh && test ! -L infra/scripts/build_env_portal_harness.sh &&
+      test ! -e infra/scripts/package_portal_harness_release.py && test ! -L infra/scripts/package_portal_harness_release.py &&
+      test ! -e infra/scripts/run_portal_harness_demo.sh && test ! -L infra/scripts/run_portal_harness_demo.sh &&
+      test ! -e infra/scripts/tests/test_release_layout.py && test ! -L infra/scripts/tests/test_release_layout.py &&
+      mkdir -p infra/scripts/tests &&
+      mv -n infra/environments/portal-harness/build-release.sh infra/scripts/build_env_portal_harness.sh &&
+      mv -n infra/images/portal-harness/package_release.py infra/scripts/package_portal_harness_release.py &&
+      mv -n infra/environments/portal-harness/run-demo.sh infra/scripts/run_portal_harness_demo.sh &&
+      mv -n infra/images/portal-harness/tests/test_release_layout.py infra/scripts/tests/test_release_layout.py
+  PORTAL-HARNESS-LAYOUT-MOVE:
+    run: >-
+      test ! -e infra/compose/docker-compose-portal-harness.json && test ! -L infra/compose/docker-compose-portal-harness.json &&
+      test ! -e infra/environments/portal-harness/run-sql.sh && test ! -L infra/environments/portal-harness/run-sql.sh &&
+      test ! -e infra/environments/portal-harness/run-demo.sh && test ! -L infra/environments/portal-harness/run-demo.sh &&
+      test ! -e infra/environments/portal-harness/sql.env.example && test ! -L infra/environments/portal-harness/sql.env.example &&
+      mkdir -p infra/environments/portal-harness &&
+      mv -n infra/images/portal-harness/compose-sql.json infra/compose/docker-compose-portal-harness.json &&
+      mv -n infra/images/portal-harness/run-sql.sh infra/images/portal-harness/run-demo.sh infra/images/portal-harness/sql.env.example infra/environments/portal-harness/
   PORTAL-HARNESS-NODE-INSPECT:
     run: node --version
   PORTAL-HARNESS-NODE-TESTS:
-    run: node --test infra/images/portal-harness/tests/test_dsh_parser_loader.mjs
+    run: node --test infra/images/portal-harness/tests/test_dsh_parser_loader.mjs infra/images/portal-harness/tests/test_dsh_guard.mjs infra/images/portal-harness/tests/test_dsh_provider_profile.mjs
   PORTAL-HARNESS-SHELL-CHECK:
-    run: sh -n infra/images/portal-harness/build.sh && sh -n infra/images/portal-harness/smoke.sh && bash -n infra/images/portal-harness/run-demo.sh && sh -n infra/images/portal-harness/dsh && bash -n infra/images/portal-harness/run-sql.sh
+    run: sh -n infra/images/portal/build.sh && sh -n backend/core-service/build_image.sh && sh -n infra/images/portal-harness/build.sh && sh -n infra/images/portal-harness/smoke.sh && bash -n infra/scripts/run_portal_harness_demo.sh && sh -n infra/images/portal-harness/dsh && bash -n infra/environments/portal-harness/run-sql.sh && bash -n infra/environments/portal-harness/up.sh && bash -n infra/environments/portal-harness/down.sh && bash -n infra/environments/portal-harness/compose.sh && bash -n infra/scripts/build_env_portal_harness.sh && bash -n infra/scripts/build_env_test.sh && bash -n infra/scripts/_build_target.sh && bash -n infra/environments/test/up.sh && bash -n infra/environments/test/down.sh && bash -n infra/environments/test/compose.sh
+  PORTAL-BASE-BUILD:
+    run: sh infra/images/portal/build.sh
+  PORTAL-TEST-RELEASE:
+    run: bash infra/scripts/build_env_test.sh
+  PORTAL-TEST-RELEASE-OUTPUT:
+    run_template: bash infra/scripts/build_env_test.sh "{output_directory}"
+  PORTAL-TEST-RELEASE-LOAD:
+    run_template: docker load --input "{release_directory}/dwh-portal-core-service.img"
+  PORTAL-HARNESS-LAUNCHER-MODES:
+    run: chmod +x infra/environments/portal-harness/up.sh infra/environments/portal-harness/down.sh infra/environments/portal-harness/compose.sh infra/scripts/build_env_portal_harness.sh infra/scripts/build_env_test.sh infra/environments/test/up.sh infra/environments/test/down.sh infra/environments/test/compose.sh
   PORTAL-HARNESS-DIFF:
     run: git diff --check && git diff --stat && git status --short
+  PORTAL-UNIFICATION-MODES:
+    run: git diff --summary && git ls-files --stage backend/core-service/build_image.sh infra/scripts/_build_target.sh infra/scripts/build_env_test.sh infra/images/portal-harness/build.sh && stat -c '%a %n' backend/core-service/build_image.sh infra/scripts/_build_target.sh infra/scripts/build_env_test.sh infra/images/portal-harness/build.sh infra/scripts/build_env_portal_harness.sh infra/environments/portal-harness/up.sh infra/environments/portal-harness/down.sh infra/environments/portal-harness/compose.sh infra/environments/portal-harness/run-sql.sh
+  PORTAL-UNIFICATION-EXECUTABLES:
+    run: chmod +x infra/scripts/_build_target.sh infra/images/portal/build.sh
   PORTAL-HARNESS-BUILD:
     run: sh infra/images/portal-harness/build.sh
   PORTAL-HARNESS-SMOKE:
     run: sh infra/images/portal-harness/smoke.sh
   PORTAL-HARNESS-DEMO:
-    run: bash infra/images/portal-harness/run-demo.sh
+    run: bash infra/scripts/run_portal_harness_demo.sh
   PORTAL-HARNESS-SQL:
-    run_template: bash infra/images/portal-harness/run-sql.sh "{env_file}"
+    run_template: bash infra/environments/portal-harness/run-sql.sh "{env_file}"
+  PORTAL-HARNESS-UP:
+    run_template: bash infra/environments/portal-harness/up.sh "{env_file}"
+  PORTAL-HARNESS-DOWN:
+    run_template: bash infra/environments/portal-harness/down.sh "{env_file}"
+  PORTAL-HARNESS-RELEASE:
+    run: bash infra/scripts/build_env_portal_harness.sh
+  PORTAL-HARNESS-RELEASE-OUTPUT:
+    run_template: bash infra/scripts/build_env_portal_harness.sh "{output_directory}"
+  PORTAL-HARNESS-RELEASE-LOAD:
+    run_template: docker load --input "{release_directory}/dwh-portal-dsh.img"
   OPENSPEC-CHANGE-STATUS:
     run_template: openspec status --change "{change_name}" --json
   OPENSPEC-SPECS-INSTRUCTIONS:
@@ -226,6 +297,12 @@ verification:
     run: cd backend/core-service && test -d .venv && test ! -L .venv && test ! -e .venv.before-fast-load-pages && test ! -L .venv.before-fast-load-pages && mv -T -n .venv .venv.before-fast-load-pages && test ! -e .venv && test ! -L .venv
   CORE-ENV-INSTALL:
     run: cd backend/core-service && .venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt
+  CORE-MCP-DEPENDENCY-RESOLVE:
+    run: cd backend/core-service && .venv/bin/python -m pip install --dry-run -r requirements.txt -r requirements-dev.txt
+  CORE-MCP-DEPENDENCY-CHECK:
+    run: cd backend/core-service && .venv/bin/python -m pip check
+  PORTAL-MCP-CONTRACT-DIFF:
+    run: git diff -- common/contracts/openapi/openapi.json frontend/web/src/shared/api/generated
   CORE-PYTEST-UNIT:
     run: cd backend/core-service && PYTHONPATH=. .venv/bin/pytest tests/unit/ -v
   CORE-PYTEST-TARGET:

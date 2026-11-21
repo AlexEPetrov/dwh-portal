@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.ai import ai_router
 from api.auth import auth_router
+from api.catalog_mcp import install_catalog_mcp
 from api.health import health_router
 from api.middlewares.request_context_log import register as register_request_context
 from api.portal import portal_router
@@ -28,7 +29,8 @@ tags_metadata = [
 async def lifespan(_app: FastAPI):
     log_database_targets()
     ensure_portal_startup_migrations_current()
-    yield
+    async with catalog_mcp.lifespan():
+        yield
 
 
 app: FastAPI = FastAPI(openapi_tags=tags_metadata, lifespan=lifespan)
@@ -41,6 +43,7 @@ app.include_router(auth_router)
 app.include_router(ai_router)
 app.include_router(system_router)
 app.include_router(portal_router)
+catalog_mcp = install_catalog_mcp(app)
 
 WEB_DIST_DIR = Path("/app/frontend-dist")
 
