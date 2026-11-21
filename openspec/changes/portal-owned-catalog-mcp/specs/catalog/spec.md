@@ -40,6 +40,46 @@ rules or perform loopback requests to its own REST API.
 - **THEN** the tool returns links to those routes without opening a browser
 - **AND** arbitrary input URLs are not fetched and credentials are not included in links
 
+### Requirement: Natural-language-first catalog capability discovery
+
+The existing four tools SHALL expose descriptive parameter metadata and concrete
+structured success schemas using canonical DTOs plus explicit redaction paths.
+Read-only scope, search clamping, canonical JSON shapes and access protection
+SHALL remain unchanged; validation failures SHALL be sanitized errors.
+
+Server/profile guidance SHALL instruct the LLM to select available tools for
+ordinary questions in the user's language without technical command prompts.
+MCP SHALL remain a typed capability protocol, not a natural-language parser.
+Identifiers SHALL be preserved, string-search limitations explained, and
+ambiguous single-object candidates clarified instead of choosing the first.
+
+DSH SHALL report actual global registration and scoped/step admission separately
+using supported pinned APIs, with unknown states explicit. Health SHALL require
+all four exact registrations rather than only process/guard health. Registration
+or assembly evidence SHALL NOT claim to prove model selection or successful
+reads. Missing capabilities SHALL NOT trigger invented resources or execution
+fallbacks; resource discovery stays off and the exact guard stays unchanged.
+
+#### Scenario: Natural-language question without tool names
+
+- **GIVEN** the catalog chat has a tool-capable model and catalog access
+- **WHEN** a user asks an ordinary multilingual object question
+- **THEN** guidance directs model-selected calls from descriptions and schemas
+- **AND** ambiguous matches are clarified and identifiers are not silently translated
+
+#### Scenario: Structured canonical success or sanitized error
+
+- **GIVEN** the client discovers concrete tool output schemas
+- **WHEN** the catalog returns data or invalid output
+- **THEN** success preserves masked canonical DTO shapes and invalid output is a sanitized error
+
+#### Scenario: Guard activation without catalog registration
+
+- **GIVEN** DSH has installed its guard but catalog registration is missing or partial
+- **WHEN** readiness or scoped context is evaluated
+- **THEN** missing/unknown availability is reported rather than successful catalog readiness
+- **AND** model selection and actual catalog reads remain separately unproven
+
 ### Requirement: Explicit MCP read access mode
 
 MCP SHALL have distinct interface-enablement and anonymous-read settings.

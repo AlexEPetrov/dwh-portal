@@ -334,6 +334,58 @@ SHALL NOT determine that public origin. Returning a link SHALL NOT open a browse
 - **AND** the result identifies bounded catalog evidence rather than execution history
 - **AND** links use the verified Portal routes without opening a browser
 
+### Requirement: Natural-language-first catalog capability discovery
+
+The four existing MCP tools SHALL publish meaningful capability descriptions,
+parameter descriptions and concrete structured output schemas. Successful
+envelopes SHALL reuse canonical DTOs and preserve their JSON shapes after
+credential-key masking. Output-validation failures SHALL be sanitized tool
+errors, not successful null results. Canonical search paging/clamping and
+read-only/security semantics SHALL remain unchanged.
+
+Portal server instructions and the supplied catalog chat profile SHALL guide
+the LLM to choose available capabilities for ordinary questions in the user's
+language without requiring technical tool-name prompts or command syntax.
+MCP SHALL expose typed capabilities, not interpret natural language inside
+Portal. Guidance SHALL preserve identifiers, explain string-search limitations,
+ask for clarification when multiple objects plausibly match a single-object
+request, and prohibit arbitrary first-match selection or invented results.
+
+The supplied DSH profile SHALL observe its actual tool registry and scope/step
+admission through supported pinned APIs. Catalog registration readiness SHALL
+require all four exact tool names, independently of process/guard readiness.
+Scoped assembly evidence SHALL remain distinct from global registration and
+unknown until observed. Neither SHALL be represented as proof of model tool
+selection or successful reads. Missing/unknown capability guidance SHALL report
+unavailability rather than invent resource URIs or execution fallbacks. Optional
+MCP resource discovery SHALL remain disabled and the exact execution guard
+SHALL NOT be broadened.
+
+#### Scenario: Ask an ordinary multilingual question
+
+- **GIVEN** a compatible tool-capable model and available catalog capabilities
+- **WHEN** the user asks about an object in their own language without naming a tool
+- **THEN** supplied guidance directs the model to choose calls from descriptions and schemas
+- **AND** names/identifiers are preserved without claiming cross-language semantic search
+- **AND** ambiguous single-object matches are presented for clarification, not arbitrarily selected
+
+#### Scenario: Expose typed results without changing canonical reads
+
+- **GIVEN** a client discovers and calls the four existing catalog tools
+- **WHEN** successful results are serialized after recursive masking
+- **THEN** advertised output schemas describe canonical search/detail/column/lineage/link data
+- **AND** paging, freshness, graph endpoints and explicit redaction paths remain unchanged
+- **AND** invalid outputs produce sanitized errors rather than successful null values
+
+#### Scenario: A healthy guarded process has no catalog tools
+
+- **GIVEN** DSH is running with its guard installed but MCP tools are absent or partial
+- **WHEN** catalog readiness is checked or an agent assembles its context
+- **THEN** actual registry/scope availability is reported separately from guard readiness
+- **AND** missing, stale or unknown registration does not count as catalog readiness
+- **AND** the model is instructed to report missing access without resources or execution fallbacks
+- **AND** no readiness observation is claimed to prove model selection or a completed read
+
 ### Requirement: Explicit MCP read access mode
 
 MCP SHALL have independent interface-enablement and anonymous-read settings.

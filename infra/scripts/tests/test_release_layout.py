@@ -28,6 +28,89 @@ with patch.dict(sys.modules, {"package_release": release}):
 
 
 class PortableLauncherTests(unittest.TestCase):
+    def test_db_diagnostic_is_portable_independent_and_propagates_failure(self):
+        for staged in (False, True):
+            with self.subTest(
+                staged=staged
+            ), tempfile.TemporaryDirectory() as temporary:
+                work = Path(temporary)
+                scripts = ROOT / "infra/environments/portal-harness"
+                if staged:
+                    destination = work / "release"
+                    destination.mkdir()
+                    for name in ("compose.sh", "diagnose-db.sh"):
+                        shutil.copy2(scripts / name, destination / name)
+                    (destination / "docker-compose-portal-harness.yml").write_text(
+                        "{}\n"
+                    )
+                    scripts = destination
+                env_file = work / "private settings.env"
+                marker = work / "must-not-run"
+                env_file.write_text(f'UNTRUSTED=$(touch "{marker}")\n')
+                capture = work / "arguments"
+                fake = work / "docker"
+                fake.write_text(
+                    '#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_PATH"\n'
+                    'cat > "$CAPTURE_PATH.stdin"\nexit 4\n'
+                )
+                fake.chmod(0o700)
+                result = subprocess.run(
+                    ["bash", str(scripts / "diagnose-db.sh"), env_file.name],
+                    cwd=work,
+                    env={"PATH": f"{work}:{os.defpath}", "CAPTURE_PATH": str(capture)},
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 4)
+                self.assertEqual(result.stdout, "")
+                self.assertEqual(result.stderr, "")
+                self.assertFalse(marker.exists())
+                args = capture.read_text().splitlines()
+                self.assertEqual(
+                    args[:5],
+                    [
+                        "compose",
+                        "--project-name",
+                        "dwh-portal-harness",
+                        "--env-file",
+                        str(env_file),
+                    ],
+                )
+                compose = Path(args[6]).resolve()
+                self.assertEqual(
+                    compose.parent, scripts if staged else ROOT / "infra/compose"
+                )
+                self.assertEqual(
+                    args[7:],
+                    [
+                        "--file",
+                        "-",
+                        "run",
+                        "--rm",
+                        "--no-deps",
+                        "-T",
+                        "--entrypoint",
+                        "python3",
+                        "portal-harness",
+                        "/opt/portal/diagnose_db.py",
+                    ],
+                )
+                self.assertEqual(
+                    Path(str(capture) + ".stdin").read_text(),
+                    "services:\n  portal-harness:\n    pull_policy: never\n",
+                )
+                self.assertNotIn("--pull", args)
+                self.assertNotIn("--service-ports", args)
+                capture.unlink()
+                missing = subprocess.run(
+                    ["bash", str(scripts / "diagnose-db.sh"), "missing.env"],
+                    cwd=work,
+                    env={"PATH": f"{work}:{os.defpath}", "CAPTURE_PATH": str(capture)},
+                    capture_output=True,
+                )
+                self.assertEqual(missing.returncode, 2)
+                self.assertFalse(capture.exists())
+
     def test_producer_and_target_payload_ownership_are_separate(self):
         environment = ROOT / "infra/environments/portal-harness"
         for name in (
@@ -35,7 +118,8 @@ class PortableLauncherTests(unittest.TestCase):
             "down.sh",
             "compose.sh",
             "run-sql.sh",
-            "sql.env.example",
+            "diagnose-db.sh",
+            "sample.env",
             "README.md",
         ):
             self.assertTrue((environment / name).is_file())
@@ -322,7 +406,13 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue(
                 (destination / "docker-compose-portal-harness.yml").is_file()
             )
-            for name in ("up.sh", "down.sh", "compose.sh", "run-sql.sh"):
+            for name in (
+                "up.sh",
+                "down.sh",
+                "compose.sh",
+                "run-sql.sh",
+                "diagnose-db.sh",
+            ):
                 self.assertTrue(os.access(destination / name, os.X_OK))
             self.assertFalse((destination / ".env").exists())
             self.assertFalse((destination / "build_env_portal_harness.sh").exists())

@@ -144,6 +144,8 @@ celerybeat.pid
 # Environments
 .env
 !infra/environments/**/.env
+# Harness runtime credentials are private even though legacy envs are allowlisted.
+/infra/environments/portal-harness/.env
 .venv
 /backend/core-service/.venv.before-fast-load-pages/
 env/

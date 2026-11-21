@@ -47,6 +47,7 @@ COPY backend/core-service/requirements.txt /app/requirements.txt
 COPY backend/core-service/src/ /app/src/
 COPY backend/core-service/duckdb_extensions/ /app/duckdb_extensions/
 COPY --from=frontend /build/frontend/web/dist/ /app/frontend-dist/
+COPY infra/images/portal/diagnose_db.py /opt/portal/diagnose_db.py
 RUN python3 -c "import os; from pathlib import Path; paths = ['/app/temp', '/app/docs', '/app/logs', '/app/local_storage']; [(Path(p).mkdir(parents=True, exist_ok=True), os.chown(p, 1001, 0)) for p in paths]"
 USER 1001:0
 # MCP belongs to Portal. Its application defaults remain disabled in this base.

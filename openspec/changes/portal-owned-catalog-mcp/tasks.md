@@ -34,3 +34,15 @@
 - [ ] Build the combined image and run its extended offline container smoke.
 - [ ] Verify actual pinned DSH plugin activation and an owner-driven model tool roundtrip.
 - [ ] If token mode is used, verify owner credential provisioning/redacted diagnostics in DSH.
+
+## 5. Approved natural-language-first usability follow-up
+
+- [x] Inspect pinned registry/change events, prompt context and MCP bridge APIs.
+- [x] Publish descriptive parameters and typed output envelopes reusing canonical DTOs.
+- [x] Add multilingual ordinary-question, identifier-preservation and ambiguity guidance.
+- [x] Observe actual global registrations and scoped step admission without blocking guard activation.
+- [x] Require all four host registrations in health/smoke; keep resource discovery disabled.
+- [x] Add protocol/schema, masking, registry/disconnect and readiness fixtures with mocked marker I/O.
+- [x] Reconcile the approved behavior into the catalog delta/current spec and operator guidance.
+- [x] Run follow-up registered unit/source/Node/shell/spec checks and API reconciliation.
+- [ ] Verify the updated image's actual pinned-host registration and natural-language Ollama tool roundtrip (user-run).

@@ -582,6 +582,88 @@ Run registered source/Node/diff checks without Docker. Actual model behavior and
 MCP activation remain user-run evidence. Missing tools must be reported rather
 than replaced by guessed resource URIs.
 
+## Approved natural-language-first catalog chat
+
+On 2026-11-21 the user approved descriptive parameter/output schemas, multilingual
+natural-language workflow guidance, ambiguity handling and actual DSH registry
+readiness diagnostics. The LLM selects capabilities from metadata; MCP does not
+interpret natural language. No parser, embeddings, model call inside Portal or
+new business tool surface is authorized. Keep canonical string-search semantics,
+page-size clamping, DTO shapes, masking, sanitized errors, auth and Host/Origin
+protection. Use canonical DTOs inside typed MCP envelopes rather than duplicate
+catalog fields. Keep optional resource discovery off and the exact guard intact.
+
+Pinned `packages/core/tools/src/{index,events}.ts` provides
+`definitions(scope, toolSet)` and `tools/change`. Pinned
+`packages/core/system-prompt/src/index.ts` provides dynamic context with scope
+and step admission, including required contexts. Use these supported APIs to
+publish credential-free PID-bound registry diagnostics and tell each assembling
+agent which of the four tools are actually visible/admitted. Global registration
+and last scoped assembly are distinct evidence; neither proves an LLM selected
+or executed a tool. Never block guard activation waiting for MCP, extend startup
+timeouts as a workaround, or make the diagnostic a new callable tool/HTTP route.
+Health/smoke must distinguish catalog registration from guard/process readiness.
+
+Apply core-service/API reconciliation and the existing task-scoped missing-guide
+exception. Run registered MCP/unit, image-source, Node, shell, OpenAPI export,
+frontend generation (required by the approved MCP workflow), spec and diff checks;
+build frontend if generated/consumer files change. Fixtures mock registry/events,
+prompt admission and marker I/O; no host real marker, Docker, migrations, live DB
+or Ollama/model calls. Actual pinned-host activation and natural-language model
+roundtrips remain user-run evidence, as does the separate Portal startup issue.
+
+Follow-up local evidence on 2026-11-21: all 36 MCP protocol tests and all 201
+backend unit tests passed (two existing deprecation warnings). All 37 image-source
+tests, 14 release fixtures and 16 Node tests passed; one native-stripping fixture
+was skipped on the host. Registered shell checks and both current capability
+spec validations passed. OpenAPI export and frontend API generation succeeded
+with no published/generated diff; frontend consumer impact is none and the
+conditional frontend build is not activated. The initial Node run exposed an
+outdated context mock in an existing marker-failure test; the mock was corrected
+and the full registered Node suite rerun successfully. No real diagnostic marker
+was written by fixtures, and no Docker, live DB, migration or model call ran.
+Actual pinned-host activation, scoped assembly and model-selected natural-language
+tool roundtrips remain user-run evidence; fixtures do not establish those results.
+
+## Host PostgreSQL listener diagnosis
+
+User-provided UFW status shows active filtering with PostgreSQL allows on
+`docker0` and source CIDRs `172.17.0.0/16` and `172.28.0.0/16`. These do not
+establish access for the project's own bridge. Destination `172.17.0.1` does
+not establish source subnet or ingress interface. Confirm actual addressing
+before proposing a narrowly scoped host firewall change; do not copy another
+deployment's subnet or disable UFW. `PORTAL-HARNESS-NETWORK-ADDRESSING` is a
+user-run, read-only inspection of this project's Compose-owned network, whose
+name follows the existing explicit project and network keys. If absent, report
+missing evidence instead of creating a substitute network. The agent must not
+execute this Docker command or modify firewall rules.
+
+The user then confirmed this network is `172.19.0.0/16`, gateway `172.19.0.1`,
+and explicitly approved preparing one narrow UFW allow and its exact rollback:
+TCP from `172.19.0.0/16` to `172.17.0.1:5432`. Registered
+`PORTAL-HARNESS-UFW-PG-ALLOW` and `PORTAL-HARNESS-UFW-PG-ROLLBACK` are strictly
+user-run host actions, not agent execution permissions. They neither disable
+UFW nor broaden PostgreSQL authentication. The rollback is for a rule newly
+added by this diagnostic: if UFW reports an existing rule was skipped, do not
+delete that preexisting rule. Repeat the registered DB diagnostic afterward;
+connectivity is not declared fixed merely by adding a rule. These concrete
+addresses reflect current evidence, not a portable fixed-subnet selection;
+permanent network/firewall lifecycle design remains separate work.
+
+The user confirmed PostgreSQL is a system service on the Docker host. Runtime
+evidence shows host.docker.internal resolves to 172.17.0.1, but TCP 5432 times
+out before authentication/migration inspection. This prevents Portal startup
+and catalog-tool registration; no model prompt or guard change can fix it.
+
+`PORTAL-HARNESS-HOST-PG-LISTENER` is a user-run, unprivileged read-only Linux
+listener inspection on the actual Docker host. It opens no DB connection and
+changes no server/firewall state. If `ss` is absent, report missing evidence;
+do not install tools. Interpret loopback-only vs host-interface/wildcard binding
+before proposing configuration changes. A wildcard listener alone does not
+establish firewall/routing reachability. Do not prescribe a guessed bridge CIDR,
+disable authentication, open PostgreSQL to every source or apply migrations to
+work around a TCP timeout. Agent Docker/live-DB restrictions remain unchanged.
+
 ## Upstream comparison research
 
 The user requested an Internet comparison of multi-user behavior in analogous
@@ -593,3 +675,116 @@ explicit documentation/API URL for `url`; do not execute downloaded content or
 install products. Distinguish community self-hosted, enterprise and cloud
 features, browser login from catalog authorization, and history isolation from
 execution isolation. Research does not authorize a change of product or deployment.
+
+## Approved independent database diagnostics
+
+On 2026-11-21 the user rejected any dependency on knowledge of a neighboring
+deployment and approved an independent staged diagnostic from Portal's runtime
+environment. The host listener output shows wildcard IPv4/IPv6 port 5432;
+the exact cause of the container TCP timeout remains unproven.
+
+The first user-run diagnostic failed at argument parsing: that Compose release
+does not accept `run --pull`. Use a static stdin Compose overlay with service
+`pull_policy: never` for this diagnostic only, not the unsupported run flag.
+Regression captures both argv and stdin; normal up/down policy is unchanged.
+This is a launcher compatibility correction, not DB connection evidence.
+
+Add a diagnostic to the shared Portal image, inherited by the harness, and a
+portable `diagnose-db.sh` target helper using the existing Compose resolver.
+`PORTAL-HARNESS-DB-DIAGNOSE` is user-run only. It runs a disposable container
+from the installed image with the same service environment, bridge and host
+mapping, without starting Portal/DSH, dependencies or publishing service ports.
+It needs no existing service container, external network or other deployment.
+Reconcile the release payload allowlist. Do not automatically run diagnostics
+on normal startup or bypass existing SQL migration checks.
+
+Report configuration, DNS/address resolution, per-address TCP results, PostgreSQL
+connection and canonical migration inspection as distinct stages. Use bounded
+TCP/libpq connection attempts and read-only DB sessions with statement timeouts;
+DNS resolution follows the runtime's resolver policy. Never print credentials,
+raw exception text, DSNs or settings; allow only fixed diagnostic codes and
+numeric network endpoints. Failed later stages must not be called network or
+password failures without evidence. Reuse Portal settings and canonical migration
+inspection; do not create an alternate schema-version comparison or apply SQL.
+
+Run registered image/release Python tests (mock all sockets/DB access), Node,
+shell, `PORTAL-HARNESS-DB-SHELL-CHECK` and diff checks. No Docker, live DB/Ollama,
+migrations, installation, firewall or deployed-environment changes may be
+executed by the agent. Existing API, guard, provider and network semantics remain
+unchanged; no API reconciliation is activated by this image/tooling-only addition.
+
+Local source evidence: 46 image/runtime tests and 15 release/portability tests
+passed. The Node suite passed 16 tests with one existing native-stripping skip;
+registered shell syntax checks passed. Network/DB boundaries were mocked and
+portable launchers used fake Docker only. No real environment file was read,
+image built/exported/loaded, container started or live DB accessed. The user-run
+diagnostic, actual connectivity repair and subsequent MCP/model roundtrip remain
+missing runtime evidence; this tooling does not claim to fix the TCP timeout.
+
+## Approved complete harness environment example
+
+The user requested complete Portal configuration for the harness and comparable
+structure with the test environment. Expand the existing single public
+`sql.env.example`; do not introduce a second loading protocol or modify the
+private test environment. Preserve owner-edited DB/model/provider/port/limit
+values. Group Portal process/store, app DB, optional DWH/lineage, auth, separate
+legacy Portal AI, local paths, MCP and DSH settings consistently with test Compose.
+Use current settings authoring sources to enumerate supported fields/defaults;
+mark fixed/ignored values and mount-dependent options honestly. Do not enable
+collectors, new mounts, reset, migration application or new authentication modes.
+Development credentials remain conspicuously nonproduction examples; document
+private credential provisioning and existing anonymous-MCP exposure.
+
+`PORTAL-ENV-KEY-INVENTORY` may inspect only assignment names in the existing
+test and harness files for comparison; it must never output values or source
+lines. Do not source env files or resolve real Compose settings. Add source-only
+coverage for settings-key completeness, optional-field types and launcher
+passthrough, then run registered image/release tests, Node, shell and diff checks.
+No Docker, live DB/model request, private env edit or generated release edit is
+authorized. Existing release packaging already includes the same example path;
+no backend/API/contract authoring change is needed.
+
+The user subsequently explicitly requested matching section headings in both
+files, with the harness example richer than test. This expands scope only to
+comment insertion in private `infra/environments/test/.env`, superseding the
+no-private-env-edit restriction above for headings alone. Never commit that
+file, copy its secrets or alter/remove its existing bytes. The registered
+`PORTAL-ENV-ALIGN-TEST-SECTIONS` inserts common numbered English headings,
+checks that removing inserted lines reproduces the original bytes exactly,
+checks for concurrent writes and preserves existing file permissions. It is
+idempotent and prints no values. Existing legacy comments remain untouched.
+
+The user then explicitly requested a full copy of test configuration VALUES plus
+harness additions. This authorizes creating private
+`infra/environments/portal-harness/.env`, NOT copying secrets to the public
+example. `PORTAL-ENV-PREPARE-PRIVATE-HARNESS` requires Git ignore coverage, copies
+the test file bytes as a baseline, appends only template assignment keys absent
+from test (preserving existing harness model/limit values), refuses an existing
+destination with exclusive creation and writes with private permissions. It
+never prints values or sources the configuration as shell. Do not stage/commit
+either private env. Normal Compose overrides and absent mount provisioning must
+remain explicit; copying a test-only topology input does not activate it here.
+
+The user also requested identical public template names: `sample.env` in both
+environment directories. Rename the public harness example and reconcile active
+references/release allowlists; add a public test example with the same common
+headings and nonsecret defaults. Historical move records remain historical.
+The actual test values go only into the private harness `.env`; never publish
+them under the new public name. Add an exact Git ignore for the new private
+harness file because the legacy environment wildcard currently unignores envs.
+Keep test runtime `.env`, launchers and real deployment untouched except for the
+already approved heading insertion. Include public examples in both releases.
+
+Local evidence for this follow-up: all 51 image/environment tests and 15 release
+tests passed, including complete current settings-key coverage, public template
+section/default parity, Portal-only env passthrough, temporary-fixture idempotent
+heading alignment, private-copy nonoverwrite/permissions and release allowlists.
+All 16 Node tests passed with one existing native-stripping skip; registered shell
+checks passed. The initial source run exposed a preexisting YAML quoting error
+in the upstream-research command (`Accept:` inside a plain scalar); changing it
+to a folded scalar preserved the exact invocation and the suite then passed.
+The approved real test heading insertion preserved all preexisting bytes/values.
+The private harness config was exclusively created from that baseline plus
+missing template keys, after verifying Git ignore coverage, without printing
+values. Real secrets were not copied into public examples or release sources.
+No Docker, deployment, image build/export, DB/model request or migration ran.

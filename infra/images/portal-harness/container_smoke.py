@@ -135,7 +135,8 @@ def main():
             if child.wait(timeout=20) != 0:
                 raise RuntimeError("Launcher did not shut down cleanly")
             print(
-                f"PASS: Portal UI/health/MCP, source-built DSH {version}, token/cookie auth, tool guard, shutdown"
+                f"PASS: Portal UI/health/MCP, source-built DSH {version}, token/cookie auth, "
+                "tool guard, actual host catalog registration, shutdown (no model roundtrip)"
             )
         except BaseException:
             print(redact(log_path.read_text()), file=sys.stderr)

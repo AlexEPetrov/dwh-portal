@@ -57,6 +57,8 @@ topics:
     - infra/scripts/tests/**
     - infra/scripts/README.md
     - infra/environments/test/README.md
+    - infra/environments/test/.env
+    - infra/environments/test/sample.env
     - rules/workflows/portal-harness-image.md
     approval: human_required
     workflow: portal-harness-image
@@ -207,12 +209,101 @@ contracts:
     escalate_if: business_semantic_change
     escalate_to: human_required
 verification:
+  PORTAL-ENV-RENAME-HARNESS-SAMPLE:
+    run: test ! -e infra/environments/portal-harness/sample.env && test ! -L infra/environments/portal-harness/sample.env && mv -n infra/environments/portal-harness/sql.env.example infra/environments/portal-harness/sample.env
+  PORTAL-ENV-PREPARE-PRIVATE-HARNESS:
+    run: |
+      git check-ignore -q infra/environments/portal-harness/.env && python3 -B - <<'PY'
+      import os
+      import re
+      from pathlib import Path
+      source = Path('infra/environments/test/.env')
+      destination = Path('infra/environments/portal-harness/.env')
+      template = Path('infra/environments/portal-harness/sample.env')
+      original = source.read_bytes()
+      keys = set(re.findall(rb'^([A-Z][A-Z0-9_]*)=', original, re.M))
+      additions = []
+      for line in template.read_bytes().splitlines(keepends=True):
+          match = re.match(rb'([A-Z][A-Z0-9_]*)=', line)
+          if match and match[1] not in keys:
+              additions.append(line.rstrip(b'\r\n') + b'\n')
+              keys.add(match[1])
+      payload = original + (b'' if original.endswith(b'\n') else b'\n')
+      payload += b'\n# === 8-9. Harness additions (private configuration) ===\n'
+      payload += b'# Shared values above are copied from test; Compose may override fixed runtime values.\n'
+      payload += b'# Test host-path inputs do not create mounts in harness Compose.\n'
+      payload += b''.join(additions)
+      os.umask(0o077)
+      with destination.open('xb') as target:
+          target.write(payload)
+      assert source.read_bytes() == original, 'Source configuration changed concurrently'
+      assert destination.read_bytes().startswith(original)
+      print('Private harness configuration created with unchanged test baseline plus harness-only additions; no values printed')
+      PY
+  PORTAL-ENV-ALIGN-TEST-SECTIONS:
+    run: |
+      python3 -B - <<'PY'
+      import re
+      from pathlib import Path
+      path = Path('infra/environments/test/.env')
+      original = path.read_bytes()
+      lines = original.splitlines(keepends=True)
+      headings = (
+          (b'# === 1. Process and HTTP ===', ('ENVIRONMENT', 'APP_API_')),
+          (b'# === 2. Portal snapshot store ===', ('APP_PORTAL_',)),
+          (b'# === 3. Portal database ===', ('APP_DB_',)),
+          (b'# === 4. DWH and lineage ===', ('APP_DWH_',)),
+          (b'# === 5. Portal authentication ===', ('APP_AUTH_',)),
+          (b'# === 6. Portal AI (legacy) ===', ('APP_AI_',)),
+          (b'# === 7. Local paths and mounts ===', ('APP_LOC_',)),
+      )
+      seen = set()
+      result = []
+      inserted = []
+      newline = b'\r\n' if b'\r\n' in original else b'\n'
+      for line in lines:
+          match = re.match(rb'([A-Z][A-Z0-9_]*)=', line)
+          if match:
+              key = match[1].decode('ascii')
+              for heading, prefixes in headings:
+                  if key.startswith(prefixes) and heading not in seen:
+                      seen.add(heading)
+                      if heading not in original.splitlines():
+                          result.append(heading + newline)
+                          inserted.append(len(result) - 1)
+                      break
+          result.append(line)
+      updated = b''.join(result)
+      assert b''.join(line for index, line in enumerate(result) if index not in inserted) == original
+      if updated != original:
+          with path.open('r+b') as target:
+              assert target.read() == original, 'Configuration changed concurrently; no write performed'
+              target.seek(0)
+              target.write(updated)
+              target.truncate()
+      print('Section headings aligned; all preexisting bytes, assignment values and file permissions preserved')
+      PY
+  PORTAL-ENV-KEY-INVENTORY:
+    run: python3 -B -c "import re; from pathlib import Path; paths=('infra/environments/test/.env','infra/environments/portal-harness/sample.env'); [(print(path), print('\n'.join(re.findall(r'^([A-Z][A-Z0-9_]*)=', Path(path).read_text(), re.M)))) for path in paths]"
+  PORTAL-HARNESS-UFW-PG-ALLOW:
+    run: sudo ufw allow in proto tcp from 172.19.0.0/16 to 172.17.0.1 port 5432
+  PORTAL-HARNESS-UFW-PG-ROLLBACK:
+    run: sudo ufw delete allow in proto tcp from 172.19.0.0/16 to 172.17.0.1 port 5432
+  PORTAL-HARNESS-NETWORK-ADDRESSING:
+    run: docker network inspect dwh-portal-harness_harness --format '{{json .IPAM.Config}}'
+  PORTAL-HARNESS-DB-DIAGNOSE:
+    run_template: bash infra/environments/portal-harness/diagnose-db.sh "{env_file}"
+  PORTAL-HARNESS-DB-SHELL-CHECK:
+    run: bash -n infra/environments/portal-harness/diagnose-db.sh
+  PORTAL-HARNESS-HOST-PG-LISTENER:
+    run: ss -ltn 'sport = :5432'
   PORTAL-HARNESS-STATE:
     run: git status --short
   PORTAL-HARNESS-DOCKER-INSPECT:
     run: docker version && docker image inspect 134/python-builder-313:1.0 134/python-slim-313:1.0 --format '{{.RepoTags}} {{.Id}} {{.Architecture}} {{.Os}}'
   PORTAL-HARNESS-UPSTREAM-RESEARCH:
-    run_template: curl --fail --silent --show-error --location '{url}' -H 'Accept: application/vnd.github.raw+json'
+    run_template: >-
+      curl --fail --silent --show-error --location '{url}' -H 'Accept: application/vnd.github.raw+json'
   PORTAL-HARNESS-SOURCE-TESTS:
     run: python3 -B -m unittest discover -s infra/images/portal-harness/tests -v
   PORTAL-HARNESS-YAML-PREREQUISITE:

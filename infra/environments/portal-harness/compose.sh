@@ -3,8 +3,8 @@ set -euo pipefail
 
 DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ACTION=${1:-}
-if [[ "$ACTION" != up && "$ACTION" != down ]]; then
-    printf 'Usage: compose.sh up|down [environment-file]\n' >&2
+if [[ "$ACTION" != up && "$ACTION" != down && "$ACTION" != diagnose-db ]]; then
+    printf 'Usage: compose.sh up|down|diagnose-db [environment-file]\n' >&2
     exit 2
 fi
 shift
@@ -31,6 +31,17 @@ if [[ ! -f "$COMPOSE_FILE" ]]; then
 fi
 
 ARGS=(compose --project-name dwh-portal-harness --env-file "$PORTAL_ENV_FILE" --file "$COMPOSE_FILE")
+if [[ "$ACTION" == diagnose-db ]]; then
+    # Same image, env, network and host alias; no service startup or port binding.
+    # Older Compose supports service pull_policy but not `run --pull`.
+    # Apply this policy only to diagnostics; normal up/down remain unchanged.
+    exec docker "${ARGS[@]}" --file - run --rm --no-deps -T \
+        --entrypoint python3 portal-harness /opt/portal/diagnose_db.py <<'DIAGNOSTIC_COMPOSE'
+services:
+  portal-harness:
+    pull_policy: never
+DIAGNOSTIC_COMPOSE
+fi
 if [[ "$ACTION" == up ]]; then
     exec docker "${ARGS[@]}" up -d
 fi

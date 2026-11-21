@@ -106,6 +106,100 @@ def test_lineage_preserves_exact_canonical_graph():
         assert actual["evidence"] == "catalog_snapshot_not_execution_history"
 
 
+def test_discovery_publishes_described_parameters_and_concrete_output_schemas():
+    from api.host import app
+
+    with TestClient(app) as client:
+        tools = {tool["name"]: tool for tool in rpc(client, "tools/list").json()["result"]["tools"]}
+        for name, tool in tools.items():
+            assert len(tool["description"]) > 150
+            for parameter in tool["inputSchema"]["properties"].values():
+                assert len(parameter["description"]) > 20
+            output = tool["outputSchema"]
+            assert {"data", "redacted_fields"} <= set(output["required"])
+            assert output["properties"]["data"].get("$ref")
+            assert "additionalProperties" not in output["properties"]["data"]
+            assert output["properties"]["redacted_fields"]["items"]["type"] == "string"
+            assert tool["annotations"]["readOnlyHint"] is True
+            assert tool["annotations"]["openWorldHint"] is False
+        search = tools["search_catalog"]["inputSchema"]
+        assert search["properties"]["page"]["minimum"] == 1
+        assert search["properties"]["page_size"]["minimum"] == 1
+        assert "caps it" in search["properties"]["page_size"]["description"]
+        assert "AssetListResponse" in tools["search_catalog"]["outputSchema"]["$defs"]
+        assert "AssetDetailResponse" in tools["get_object"]["outputSchema"]["$defs"]
+        assert "ColumnItem" in tools["get_object"]["outputSchema"]["$defs"]
+        assert "LineageData" in tools["get_lineage"]["outputSchema"]["$defs"]
+        assert "ObjectLinks" in tools["get_object_links"]["outputSchema"]["$defs"]
+
+
+def test_initialization_describes_model_driven_multilingual_ambiguity_policy():
+    from api.host import app
+
+    with TestClient(app) as client:
+        instructions = rpc(
+            client,
+            "initialize",
+            {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "metadata-test", "version": "1"},
+            },
+        ).json()["result"]["instructions"]
+        assert "LLM selects tools" in instructions
+        assert "not natural-language interpretation" in instructions
+        assert "never choose the first arbitrarily" in instructions
+        assert "do not silently translate identifiers" in instructions
+        assert "Answer in the user's language" in instructions
+
+
+def test_all_successful_results_validate_against_typed_envelopes():
+    from api.host import app
+    from api.portal.dto import AssetListResponse
+
+    models = {
+        "get_object": catalog_mcp.CatalogResult[catalog_mcp.ObjectData],
+        "get_lineage": catalog_mcp.CatalogResult[catalog_mcp.LineageData],
+        "get_object_links": catalog_mcp.CatalogResult[catalog_mcp.ObjectLinks],
+    }
+    with TestClient(app) as client:
+        search = call(client, "search_catalog", {})["structuredContent"]
+        catalog_mcp.CatalogResult[AssetListResponse].model_validate(search)
+        asset_id = search["data"]["items"][0]["id"]
+        for name, model in models.items():
+            result = call(client, name, {"asset_id": asset_id})
+            assert not result.get("isError")
+            model.model_validate(result["structuredContent"])
+
+
+def test_unicode_search_preserves_multiple_matches_without_auto_selecting():
+    """Backend preserves candidates; clarification is model policy, not a parser."""
+    from api.host import app
+
+    with TestClient(app) as client:
+        store = get_portal_store()
+        original_id = client.get("/api/v1/assets").json()["items"][0]["id"]
+        original = store.get_asset(uuid.UUID(original_id))
+        for schema in ("one", "two"):
+            store.upsert_asset(
+                original.model_copy(
+                    update={
+                        "id": uuid.uuid4(),
+                        "identity_key": f"mcp-multilingual-{schema}",
+                        "name": "Продажи_東京",
+                        "qualified_name": f"{schema}.Продажи_東京",
+                        "attributes": {"schema": schema},
+                    }
+                )
+            )
+        result = call(client, "search_catalog", {"q": "Продажи_東京"})["structuredContent"]["data"]
+        assert result["total"] == 2
+        assert {item["qualified_name"] for item in result["items"]} == {
+            "one.Продажи_東京",
+            "two.Продажи_東京",
+        }
+
+
 @pytest.mark.parametrize("method", ["initialize", "tools/list", "tools/call"])
 def test_token_mode_rejects_anonymous_service_keys_and_cookies(monkeypatch, method):
     from api.host import app
@@ -205,6 +299,8 @@ def test_nested_secrets_redacted_without_losing_normal_metadata():
         store = get_portal_store()
         asset = store.get_asset(uuid.UUID(asset_id))
         asset.attributes["provider"] = {"password": "not-for-model", "label": "retained"}
+        asset.attributes["extract_options"] = {"nested": ["not-for-model"]}
+        asset.attributes["metadata"] = [{"credentials": {"token": "not-for-model"}, "count": 3}]
         store.upsert_asset(asset)
         payload = call(client, "get_object", {"asset_id": asset_id})["structuredContent"]
         assert payload["data"]["object"]["attributes"]["provider"] == {
@@ -212,6 +308,10 @@ def test_nested_secrets_redacted_without_losing_normal_metadata():
             "label": "retained",
         }
         assert "object.attributes.provider.password" in payload["redacted_fields"]
+        assert payload["data"]["object"]["attributes"]["extract_options"] == "[REDACTED]"
+        assert payload["data"]["object"]["attributes"]["metadata"] == [
+            {"credentials": "[REDACTED]", "count": 3}
+        ]
         assert "not-for-model" not in json.dumps(payload)
 
 
@@ -226,6 +326,24 @@ def test_backend_exceptions_do_not_leak_connection_details(monkeypatch):
         result = call(client, "search_catalog", {})
         assert result["isError"] is True
         assert "secret" not in json.dumps(result)
+        assert "Catalog request failed" in json.dumps(result)
+
+
+def test_output_validation_errors_are_sanitized_not_successful_null(monkeypatch):
+    from api.host import app
+
+    monkeypatch.setattr(
+        catalog_mcp.assets,
+        "list_assets",
+        lambda **_: {
+            "items": [{"id": "private-invalid-output"}],
+        },
+    )
+    with TestClient(app) as client:
+        result = call(client, "search_catalog", {})
+        assert result["isError"] is True
+        assert "structuredContent" not in result
+        assert "private-invalid-output" not in json.dumps(result)
         assert "Catalog request failed" in json.dumps(result)
 
 

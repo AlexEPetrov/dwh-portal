@@ -14,8 +14,8 @@ env-file paths are relative to the caller. Without an argument they use `.env`
 beside the scripts. They never source the env file as shell code.
 
 ```sh
-bash infra/environments/portal-harness/up.sh infra/environments/portal-harness/sql.env.example
-bash infra/environments/portal-harness/down.sh infra/environments/portal-harness/sql.env.example
+bash infra/environments/portal-harness/up.sh infra/environments/portal-harness/sample.env
+bash infra/environments/portal-harness/down.sh infra/environments/portal-harness/sample.env
 ```
 
 The example must be adapted to an existing prepared Portal DB and actual internal
@@ -26,10 +26,67 @@ memory demo is separate and is not managed by this SQL project's down command.
 
 ## SQL launch
 
-From repository root, supply the actual existing Portal environment file:
+### Configuration layout
+
+[sample.env](sample.env) is the full single-file development template.
+Its common numbered sections match the test environment: process/HTTP, Portal
+snapshot store, Portal DB, optional DWH/lineage, Portal auth, legacy Portal AI,
+and local paths/mounts. MCP and DSH have additional sections. There is no second
+env-file loading protocol; existing up/down/diagnostic invocations are unchanged.
+The release already includes this same example, not a second maintained copy.
+
+Copy it to a private untracked configuration before adding real credentials.
+For the approved local setup, a private `.env` was prepared from the existing
+test configuration's unchanged values plus only missing harness settings. This
+is operator-local configuration, not release payload or a public sample. The
+private test source was not replaced, and secrets are never copied into samples.
+Test-only host-path keys remain inert in the harness unless mounts are separately
+added; fixed Compose values still take precedence. The helper defaults to this
+private `.env` when no explicit env-file argument is given.
+Public DB/auth credentials and the session signing secret are **development
+examples**, not production provisioning. Portal login, DSH Web login and MCP
+access are distinct: the retained anonymous-MCP exception is not secured by
+either browser login. Configure a dedicated MCP token/reference if closing it.
+
+All current Portal settings are represented, except the direct MCP public-base
+setting, which Compose derives from the documented public-origin variable.
+Compose's explicit environment values override file values: the SQL/seed/reset
+selection and internal listener ports remain fixed. Portal pagination/freshness,
+DWH/auth and other settings pass through the env file to the Portal child.
+Portal DB/auth/token values are not passed to the DSH child.
+
+DWH host/database and local source roots are blank by default: no DWH target or
+Airflow/Python source tree is provisioned by this template. Optional collectors
+and the live load journal need their own read-only DWH credentials; source
+analysis also needs separately configured read-only mounts. No collection is
+started by preparing the file. Test-only host-path variables are listed as
+inactive comments because this Compose does not consume them. Portal local files
+are not made persistent; the existing named volume persists DSH state only.
+
+The existing operator-selected Ollama endpoint/model/context/output values are
+preserved. They are target-specific, not universal recommendations or server
+context allocation; change them for another target. The legacy Portal AI section
+is separate and remains disabled. Restart/recreate to apply launch configuration;
+an already saved DSH model selection may still need explicit reselection.
+
+### Deployment requirements
+
+This is an independent deployment: no previous Portal container, shared Docker
+network, neighboring application or knowledge of its settings is required.
+The project creates its own bridge. Explicit external requirements are a loaded
+matching image, Docker Engine with Compose/host-gateway support, and a reachable
+PostgreSQL database with the current Portal schema and valid credentials.
+Ollama is required only for inference, not for the database diagnostic.
+
+Create a private environment file based on [sample.env](sample.env),
+setting the actual database address, port, database, user and password. Keep this
+file out of version control. It need not come from another deployment. Use the
+host alias for a host DB, or real internal DNS/IP for a remote DB as below.
+
+From repository root, supply that file to [up.sh](up.sh):
 
 ```sh
-bash infra/environments/portal-harness/run-sql.sh infra/environments/test/.env
+bash infra/environments/portal-harness/up.sh infra/environments/portal-harness/.env
 ```
 
 Use your actual path if it differs. The wrapper also works from another working
@@ -38,7 +95,7 @@ Compose-file lookup is relative to the wrapper. The file is passed to Compose,
 never sourced as shell code or printed with resolved secrets. Do not commit real
 environment files or credentials.
 
-`sql.env.example` contains host-gateway/PostgreSQL development settings and
+`sample.env` contains host-gateway/PostgreSQL development settings and
 the launch-time Ollama/MCP parameters. It is a template, not a prepared SQL
 environment. Plain localhost inside Docker is the container, not the host. An
 empty PostgreSQL database is not a Portal installation: current Portal schema/
@@ -49,6 +106,54 @@ tag remain unchanged. The harness now creates its own project-scoped bridge
 network; it does not require the former Portal deployment's network.
 Existing deployed services are not modified by the harness launch. Changing a
 provider URL/model or port is runtime configuration, not an image rebuild.
+
+### Independent database diagnostic (before or after startup)
+
+After building/loading an image containing this diagnostic, run
+[diagnose-db.sh](diagnose-db.sh) with the **same private environment file** used
+for startup:
+
+```sh
+bash infra/environments/portal-harness/diagnose-db.sh infra/environments/portal-harness/.env
+```
+
+It uses a disposable container from the locally installed service image and the
+same Compose environment, bridge and host alias. It works before the service has
+ever started, including when Portal startup fails. It does not require another
+deployment, pull images, start Portal/DSH/dependencies, publish ports, change
+firewall/authentication, apply migrations or collect data. Compose may create
+its own project network and declared state volume; these are not preconditions.
+The one-off container is removed on exit. Normal startup remains unchanged.
+
+The diagnostic prints one JSON object per stage, without settings, credentials,
+connection strings or raw driver errors. Numeric destination addresses/ports
+and, for successful TCP probes, the container-local source address are included.
+That source is before possible host NAT; it does not prove what a remote DB sees.
+
+| Stage / exit code | Meaning and next boundary |
+|---|---|
+| configuration / 2 | Missing/invalid settings or unavailable image dependencies; no connection attempted |
+| dns / 3 | Runtime name/address resolution failed; check the supplied address and runtime DNS/host mapping |
+| tcp / 4 | No resolved address accepted TCP; timeout is not a password failure, refusal is not an authentication rejection |
+| postgres / 5 | At least one TCP probe passed, but DB connection or read-only query failed; investigate PostgreSQL access policy, credentials, database and TLS; a generic failure does not select one cause |
+| schema / 6 | Canonical Portal migration inspection failed, reported mismatched revisions, or lacked required artifacts; not evidence of a TCP failure |
+| runtime / 7 | Unexpected diagnostic failure; no raw exception is disclosed |
+| result / 0 | All DB stages passed; does not prove Portal HTTP/MCP readiness or a model tool call |
+
+TCP probes try each unique resolved endpoint with a five-second timeout. At
+least one success is needed to proceed; all per-endpoint outcomes are retained.
+PostgreSQL connections use five-second libpq connection timeouts, read-only
+transactions and five-second statement/lock timeouts. These are per-operation,
+not a global execution deadline; name resolution follows the OS resolver policy.
+Database/schema inspection reuses the image's Portal settings and canonical
+migration inspector. There is no alternate version-check algorithm or automatic
+repair. A newly created empty DB still needs separately authorized schema setup.
+
+Return only the JSON diagnostic lines for troubleshooting, not the private
+environment file or resolved Compose configuration. Docker/Compose errors before
+the Python diagnostic starts are outside its sanitization boundary: review and
+redact those locally before sharing. The helper propagates the container's exit
+code; Docker/Compose can also fail independently (for example a missing image).
 
 ### PostgreSQL on the Docker host (current setup)
 
@@ -86,7 +191,7 @@ up environment changes. This does not create the Portal schema or apply migratio
 ## Using a transferred release
 
 A prepared release contains the image archive, Compose definition, the same
-portable up/down/common scripts, compatibility launcher, public env example,
+portable up/down/common scripts, [diagnose-db.sh](diagnose-db.sh), compatibility launcher, public env example,
 this guide, offline migration SQL, commit/image/source metadata and checksums.
 Frontend and application code are embedded in the image. Use only a directory
 marked `RELEASE_COMPLETE`; `RELEASE_FAILED` indicates an incomplete export.
@@ -100,6 +205,7 @@ from inside the transferred directory the equivalent commands are:
 
 ```sh
 docker load --input ./dwh-portal-dsh.img
+bash ./diagnose-db.sh ./.env
 ./up.sh ./.env
 ./down.sh ./.env
 ```

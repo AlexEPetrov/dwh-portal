@@ -18,6 +18,17 @@ Both scripts accept one optional env-file path. An explicit path is caller-relat
 the default is `.env` beside the scripts. Do not source configuration as shell code,
 commit credentials or paste env contents into diagnostics.
 
+The public template is [sample.env](sample.env), with the same common numbered
+sections as the harness environment's [sample.env](../portal-harness/sample.env).
+The harness adds MCP/DSH sections; shared Portal settings use the same names and
+public development defaults. Neither sample contains the operator's private test
+values. Provision `.env` privately; the sample's blank host mount paths and DWH
+target are not a ready-to-run production configuration. Test Compose enumerates
+its environment keys (unlike the harness's full env-file passthrough), so adding
+arbitrary settings to a file does not automatically enable them in this profile.
+Use valid target paths for all declared mounts, including the source/wheels
+development overlay. Do not copy secrets into either public sample.
+
 ```sh
 bash infra/environments/test/up.sh
 bash infra/environments/test/down.sh

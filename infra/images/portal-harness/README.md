@@ -174,6 +174,16 @@ explicit approved TLS/forwarding setup; none is configured automatically.
 
 ### Existing SQL Portal configuration in the combined image
 
+An existing deployment is not required: a private configuration can be prepared
+from the public template. The standalone project creates its own bridge. For
+an independent staged DB diagnostic that also works when Portal cannot start,
+use [diagnose-db.sh](../../environments/portal-harness/diagnose-db.sh) as described
+in the [environment guide](../../environments/portal-harness/README.md).
+It requires a rebuilt/loaded image containing the diagnostic, not a running
+Portal or knowledge of another service. PostgreSQL/schema access remains an
+explicit external requirement; no firewall, authentication or migration bypass
+is performed.
+
 The SQL store already exists. This launch only connects the combined image to
 the existing Portal database; it does not implement another store, create a new
 database, run migrations, collect metadata or replace the current deployment.
@@ -344,8 +354,8 @@ passed to DSH in this mode. No public inference fallback is configured.
 Set these in the existing environment file consumed by the SQL launch (or as
 explicit Compose environment overrides), then recreate the experimental service
 through the registered SQL launcher. Do not change the existing Portal deployment.
-The [environment example](../../environments/portal-harness/sql.env.example) leaves
-the URL/model blank for manual configuration.
+The [environment example](../../environments/portal-harness/sample.env) preserves
+the operator's selected URL/model and capacities; adapt them for another target.
 The launcher rejects a partially configured pair. Both blank means UI/MCP only,
 with no registered model and no model-server request; set both to enable chat.
 Use a model that supports tool calling to exercise Portal MCP from a prompt.
@@ -422,6 +432,67 @@ log or OpenLineage event stream; no jobs/runs/timestamps are invented. Optional
 OpenLineage projection is deferred. The existing demo derived-edge direction
 inconsistency is not silently repaired by MCP.
 
+### Ordinary chat: no technical prompts
+
+Ask naturally, for example:
+
+- “Find objects whose names contain ice_brent.”
+- “What columns does that table have?”
+- “What dependencies are recorded for that object?”
+- “Show me its page in Portal.”
+- “Найди объекты с ice_brent в названии и покажи их описание.”
+- “Какие столбцы есть у этой таблицы?”
+
+The LLM interprets the request, selects tools from their descriptions/input
+schemas and uses returned UUIDs for follow-up questions. MCP exposes typed
+capabilities and carries validated calls/results; it does not itself interpret
+natural language. Portal does not add a language parser, embeddings or model
+calls. The configured model must support tool calling; prompts and schema tests
+do not prove that a particular Ollama model chooses tools correctly.
+
+Answers should use the user's language while preserving identifiers. Catalog
+search remains string matching, not cross-language semantic retrieval. Multiple
+plausible matches for one intended object require clarification by qualified
+name/schema, not arbitrary first-match selection. Paging, no matches, freshness,
+redactions and unresolved bounded lineage must remain explicit.
+
+Tool discovery now describes every parameter and advertises concrete structured
+output schemas. Search/detail/columns/lineage reuse existing REST DTOs within the
+same success envelope. Requested page size still follows canonical clamping;
+returned page size is authoritative. Invalid outputs are sanitized errors.
+No new execution or data-access capabilities are introduced.
+
+### Catalog readiness is not process health or model proof
+
+The host guard observes the actual pinned DSH registry, not a second MCP client.
+It writes a credential-free, PID-bound, atomically replaced diagnostic at
+`/tmp/portal-harness-catalog-status.json` inside the container:
+
+- `global` reports whether all four exact host registrations exist, with
+  approved available/missing names only.
+- `last_agent_assembly` stays `unknown` until a scoped prompt assembly with a
+  step tool set is observed. It then reports that assembly's admitted tools,
+  not all sessions or a model response. Registry changes invalidate this evidence.
+- `ready` means the corresponding set contains all four tools. It does not mean
+  a model selected one or that a catalog read succeeded.
+
+Health now requires actual host catalog registration as well as the guard marker
+and protected listener. Missing/stale/incomplete/unknown diagnostics fail catalog
+readiness, including in harness-only mode if its Portal connection is unavailable.
+Guard activation never waits for MCP and its supervision timeout is unchanged.
+A required dynamic agent context uses scope/step visibility to report missing
+access rather than invent resources, results or shell/SQL/HTTP fallbacks. Optional
+resource discovery remains disabled; the four-name guard is unchanged.
+
+The offline container smoke now checks actual host registration through health,
+in addition to its separate SDK protocol checks. It still makes no model call
+and does not create an agent. The remaining target-side acceptance check is a
+new catalog chat using the ordinary prompts above: confirm actual tool calls
+and grounded answers, clarification for ambiguous names, and honest reporting
+when catalog access is absent. This requires the rebuilt image, healthy Portal
+and the owner's internal tool-capable Ollama configuration. The earlier Portal
+startup/availability issue is separate and is not declared fixed here.
+
 ### Temporary anonymous-read exception
 
 **Anyone who can reach the enabled anonymous MCP endpoint can read catalog
@@ -466,7 +537,8 @@ no collection, mutation, SQL, load-history, filesystem, arbitrary URL or shell t
 
 ## Source-only verification
 
-Run from repository root; requires Python 3.12+ and shell, no third-party packages:
+Run from repository root; requires Python 3.12+, shell and existing PyYAML for
+Compose parsing (do not install missing host tools):
 
 ```sh
 python3 -B -m unittest discover -s infra/images/portal-harness/tests -v
@@ -500,6 +572,15 @@ loader fixtures passed locally. The native stripping fixture was skipped on
 local Node 20.20.2 because that API is unavailable there. The final image build
 runs all loader tests on its Node 24 runtime before validating the real parser;
 that container check remains unexecuted by the agent.
+
+Latest natural-language usability checks on 2026-11-21: 36 MCP protocol tests,
+201 backend unit tests, 37 image-source tests, 14 release fixtures and 16 Node
+tests passed, with one host native-stripping skip. Registered shell checks and
+both current capability specs passed. OpenAPI export and frontend API generation
+left their artifacts unchanged, so no frontend consumer/build change was needed.
+Two existing backend deprecation warnings remain. The readiness tests mock actual
+registry/step views and marker I/O; they are not pinned-host/model evidence.
+No Docker, migrations, live DB or Ollama/model calls were executed by the agent.
 
 ## Upstream evidence
 

@@ -13,6 +13,10 @@
 !backend/core-service/src/**
 !backend/core-service/duckdb_extensions/
 !backend/core-service/duckdb_extensions/**
+!infra/
+!infra/images/
+!infra/images/portal/
+!infra/images/portal/diagnose_db.py
 **/.env
 **/.env.*
 **/*.pem

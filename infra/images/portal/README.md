@@ -28,3 +28,10 @@ For release assembly, use the shared producer entry points documented in
 `infra/scripts/README.md`. The test profile exports this image; the harness helper
 first builds this base and then builds the DSH extension. No Docker operation is
 executed by source-only tests; real build/runtime evidence remains user-run.
+
+The image also contains [diagnose_db.py](diagnose_db.py), inherited by the
+harness. It is an explicit operator diagnostic, not a replacement entry point
+or a relaxed startup check. The [environment guide](../../environments/portal-harness/README.md)
+documents the portable helper and staged configuration, DNS, TCP, read-only
+PostgreSQL and canonical schema checks. No host Python or networking utility
+installation is needed on the target; use a rebuilt image containing this file.

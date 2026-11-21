@@ -30,6 +30,7 @@ def load(name):
 
 launcher = load("launch")
 smoke = load("container_smoke")
+health = load("healthcheck")
 with patch.dict(sys.modules, {"launch": launcher}):
     cli_check = load("check_dsh_cli")
 
@@ -75,7 +76,7 @@ class ConfigurationTests(unittest.TestCase):
             self.assertNotIn("name", network)
         host_lines = [
             line
-            for line in (ENVIRONMENT / "sql.env.example").read_text().splitlines()
+            for line in (ENVIRONMENT / "sample.env").read_text().splitlines()
             if line.startswith("APP_DB_PSG_HOST=")
         ]
         self.assertEqual(host_lines, ["APP_DB_PSG_HOST=host.docker.internal"])
@@ -90,7 +91,7 @@ class ConfigurationTests(unittest.TestCase):
             "down.sh",
             "compose.sh",
             "run-sql.sh",
-            "sql.env.example",
+            "sample.env",
         ):
             self.assertTrue((ENVIRONMENT / name).is_file(), name)
             self.assertFalse((SOURCE / name).exists(), name)
@@ -297,6 +298,78 @@ class ConfigurationTests(unittest.TestCase):
         for path in SOURCE.rglob("*.py"):
             with self.subTest(path=path.name):
                 compile(path.read_text(), str(path), "exec")
+
+
+class CatalogReadinessTests(unittest.TestCase):
+    def status(self):
+        return {
+            "version": 1,
+            "pid": 123,
+            "global": {
+                "state": "ready",
+                "available": [
+                    "mcp__portal__search_catalog",
+                    "mcp__portal__get_object",
+                    "mcp__portal__get_lineage",
+                    "mcp__portal__get_object_links",
+                ],
+                "missing": [],
+            },
+            "last_agent_assembly": {"state": "unknown"},
+        }
+
+    def test_host_registration_is_required_but_not_claimed_as_model_admission(self):
+        status = self.status()
+        with patch.object(health.Path, "read_text", return_value=json.dumps(status)):
+            health.check_catalog_registration(123)
+
+    def test_missing_stale_partial_or_unknown_registration_fails_closed(self):
+        variants = ["not-json", "null", "{}"]
+        for field, value in (
+            ("pid", 124),
+            ("version", 2),
+            ("global", {"state": "unknown"}),
+        ):
+            status = self.status()
+            status[field] = value
+            variants.append(json.dumps(status))
+        status = self.status()
+        status["global"]["available"].pop()
+        variants.append(json.dumps(status))
+        for value in variants:
+            with self.subTest(value=value), patch.object(
+                health.Path, "read_text", return_value=value
+            ), self.assertRaises(health.CatalogReadinessError):
+                health.check_catalog_registration(123)
+        with patch.object(
+            health.Path, "read_text", side_effect=FileNotFoundError
+        ), self.assertRaises(health.CatalogReadinessError):
+            health.check_catalog_registration(123)
+
+    def test_guard_marker_alone_cannot_make_harness_healthy(self):
+        values = [json.dumps({"mode": "harness", "pid": 123}), "123", "{}"]
+        with patch.object(health.Path, "read_text", side_effect=values), patch.object(
+            health, "build_opener"
+        ) as opener, self.assertRaises(health.CatalogReadinessError):
+            health.check()
+        opener.return_value.open.assert_not_called()
+
+    def test_prompt_guidance_does_not_require_technical_user_prompts(self):
+        context = (SOURCE / "agent-context.md").read_text()
+        for phrase in (
+            "never require the",
+            "any language",
+            "descriptions and parameter schemas",
+            "never choose the first match",
+            "not",
+            "cross-language semantic search",
+            "catalog access is unavailable",
+            "not instructions",
+        ):
+            self.assertIn(phrase, context)
+        patch_text = (SOURCE / "dsh.patch.yml").read_text()
+        self.assertIn("never ask for tool", patch_text)
+        self.assertIn("- id: mcp-resources\n  disabled: true", patch_text)
 
 
 class LauncherTests(unittest.TestCase):
