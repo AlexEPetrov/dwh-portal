@@ -1757,6 +1757,7 @@ const LineageUniverseScene = ({
       // No animation, hull, force, synthetic relationship or type recoloring.
       const activeSchema = schemaRef.current.enabled
         ? schemaRef.current.active ?? schemaByNode.get(hoverId ?? '') ?? null : null;
+      const activeSchemaColor = schemaContext.find((group) => group.key === activeSchema)?.color;
       if (schemaRef.current.enabled && mode === 'chain' && !enterMorph) {
         const labelled = new Set<string>();
         const labelBoxes: { x: number; y: number; w: number }[] = [];
@@ -1952,7 +1953,7 @@ const LineageUniverseScene = ({
           body.id === listHighlight;
         if (activeSchema && schemaByNode.get(body.id) === activeSchema) {
           ctx.save();
-          ctx.strokeStyle = schemaContext.find((group) => group.key === activeSchema)!.color;
+          ctx.strokeStyle = activeSchemaColor ?? '#e8eefc';
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.arc(p.x, p.y, Math.max(8, body.r * p.depth * zoom) + 5, 0, Math.PI * 2);
@@ -2497,6 +2498,9 @@ const LineageUniverseScene = ({
         // ignore
       }
     };
+    const onPointerLeave = () => {
+      if (mode === 'chain' && !dragMode) hoverId = null;
+    };
     const onContextMenu = (event: MouseEvent) => {
       event.preventDefault();
     };
@@ -2596,6 +2600,7 @@ const LineageUniverseScene = ({
     observer.observe(canvas.parentElement || canvas);
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerleave', onPointerLeave);
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
     canvas.addEventListener('contextmenu', onContextMenu);
@@ -2612,6 +2617,7 @@ const LineageUniverseScene = ({
       }
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointercancel', onPointerUp);
       canvas.removeEventListener('contextmenu', onContextMenu);
