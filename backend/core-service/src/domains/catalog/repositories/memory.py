@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 import threading
 import uuid
-
 from collections import defaultdict
 
 from domains.catalog.models import (
@@ -132,6 +131,10 @@ class InMemoryPortalStore:
                 if needle in item.qualified_name.lower()
                 or needle in item.name.lower()
                 or (item.description and needle in item.description.lower())
+                or any(
+                    column.description and needle in column.description.lower()
+                    for column in self.columns.get(item.id, [])
+                )
             ]
         if query.changed_since is not None:
             changed_ids = {
@@ -163,9 +166,7 @@ class InMemoryPortalStore:
         active = [item for item in self.assets.values() if item.deleted_at is None]
         tables = sum(1 for item in active if item.asset_type == AssetType.TABLE)
         views = sum(
-            1
-            for item in active
-            if item.asset_type in {AssetType.VIEW, AssetType.MATERIALIZED_VIEW}
+            1 for item in active if item.asset_type in {AssetType.VIEW, AssetType.MATERIALIZED_VIEW}
         )
         return AssetCountSummary(total=len(active), tables=tables, views=views)
 
@@ -195,9 +196,7 @@ class InMemoryPortalStore:
                 StorageObjectRow(
                     asset_id=asset.id,
                     qualified_name=asset.qualified_name,
-                    display_name=str(
-                        asset.attributes.get("display_name") or asset.qualified_name
-                    ),
+                    display_name=str(asset.attributes.get("display_name") or asset.qualified_name),
                     asset_type=asset.asset_type,
                     total_bytes=item_total,
                     table_bytes=snapshot.table_bytes,
@@ -261,7 +260,10 @@ class InMemoryPortalStore:
 
     def get_columns(self, asset_id: uuid.UUID) -> list[AssetColumn]:
         columns = self.columns.get(asset_id, [])
-        return [column.model_copy(deep=True) for column in sorted(columns, key=lambda item: item.ordinal)]
+        return [
+            column.model_copy(deep=True)
+            for column in sorted(columns, key=lambda item: item.ordinal)
+        ]
 
     def add_snapshot(self, snapshot: AssetSnapshot) -> AssetSnapshot:
         with self._lock:

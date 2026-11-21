@@ -19,6 +19,7 @@ const OverviewSearch = () => {
       type: item.asset_type,
       name: item.display_name || item.name || item.qualified_name,
       qualifiedName: item.qualified_name,
+      description: item.description ?? '',
       label: `[${item.asset_type}] ${item.display_name || item.name || item.qualified_name}`,
     }))
   ).sort((a, b) => {
@@ -56,7 +57,7 @@ const OverviewSearch = () => {
           allowClear
           size="large"
           filterOption={(input, option) => matchesCatalogSearch(
-            input, option?.name ?? '', option?.qualifiedName ?? '',
+            input, option?.name ?? '', option?.qualifiedName ?? '', option?.description ?? '',
           )}
           placeholder="Название источника, таблицы или процесса…"
           options={options}

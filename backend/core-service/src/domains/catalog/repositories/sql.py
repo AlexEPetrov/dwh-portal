@@ -156,7 +156,9 @@ class SqlPortalStore:
         self, qualified_name: str, *, include_deleted: bool = False
     ) -> Asset | None:
         with self._session() as session:
-            stmt = select(PortalAssetDbModel).where(PortalAssetDbModel.qualified_name == qualified_name)
+            stmt = select(PortalAssetDbModel).where(
+                PortalAssetDbModel.qualified_name == qualified_name
+            )
             if not include_deleted:
                 stmt = stmt.where(PortalAssetDbModel.deleted_at.is_(None))
             row = session.scalar(stmt)
@@ -404,6 +406,14 @@ class SqlPortalStore:
                     func.lower(model.qualified_name).like(needle),
                     func.lower(model.name).like(needle),
                     func.lower(func.coalesce(model.description, "")).like(needle),
+                    select(PortalAssetColumnDbModel.asset_id)
+                    .where(
+                        PortalAssetColumnDbModel.asset_id == model.id,
+                        func.lower(func.coalesce(PortalAssetColumnDbModel.description, "")).like(
+                            needle
+                        ),
+                    )
+                    .exists(),
                 )
             )
         if query.changed_since is not None:
@@ -445,9 +455,7 @@ class SqlPortalStore:
     def _paged(stmt, query: AssetQuery):
         offset = max(query.page - 1, 0) * query.page_size
         return (
-            stmt.order_by(*SqlPortalStore._asset_order(query))
-            .offset(offset)
-            .limit(query.page_size)
+            stmt.order_by(*SqlPortalStore._asset_order(query)).offset(offset).limit(query.page_size)
         )
 
     @staticmethod
@@ -530,7 +538,9 @@ class SqlPortalStore:
     def replace_columns(self, asset_id: uuid.UUID, columns: list[AssetColumn]) -> None:
         with self._session(commit=True) as session:
             session.execute(
-                delete(PortalAssetColumnDbModel).where(PortalAssetColumnDbModel.asset_id == asset_id)
+                delete(PortalAssetColumnDbModel).where(
+                    PortalAssetColumnDbModel.asset_id == asset_id
+                )
             )
             for column in columns:
                 session.add(

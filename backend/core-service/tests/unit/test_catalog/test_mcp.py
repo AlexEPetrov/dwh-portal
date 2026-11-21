@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api import catalog_mcp
+from domains.catalog.models import AssetColumn
 from domains.catalog.runtime import get_portal_store
 from settings.mcp import CatalogMcpSettings
 
@@ -99,6 +100,44 @@ def test_search_detail_columns_and_links_equal_rest():
         assert links["data"] == detail["data"]["links"]
 
 
+@pytest.mark.parametrize("description_location", ["object", "column"])
+def test_topic_search_finds_description_only_matches_and_equals_rest(description_location):
+    from api.host import app
+
+    with TestClient(app) as client:
+        store = get_portal_store()
+        original_id = client.get("/api/v1/assets").json()["items"][0]["id"]
+        original = store.get_asset(uuid.UUID(original_id))
+        asset = store.upsert_asset(
+            original.model_copy(
+                update={
+                    "id": uuid.uuid4(),
+                    "identity_key": "description-only-topic",
+                    "name": "assessments",
+                    "qualified_name": "dwh.raw.assessments",
+                    "description": "Котировки Аргус" if description_location == "object" else None,
+                }
+            )
+        )
+        if description_location == "column":
+            store.replace_columns(
+                asset.id,
+                [
+                    AssetColumn(
+                        asset_id=asset.id,
+                        ordinal=1,
+                        name="value",
+                        data_type="numeric",
+                        description="Цена по данным Аргус",
+                    )
+                ],
+            )
+        rest = client.get("/api/v1/assets", params={"q": "АРГУС"}).json()
+        result = call(client, "search_catalog", {"q": "АРГУС"})["structuredContent"]
+        assert result["data"] == rest
+        assert str(asset.id) in {item["id"] for item in rest["items"]}
+
+
 def test_lineage_preserves_exact_canonical_graph():
     from api.host import app
 
@@ -133,6 +172,10 @@ def test_discovery_publishes_described_parameters_and_concrete_output_schemas():
         assert search["properties"]["page"]["minimum"] == 1
         assert search["properties"]["page_size"]["minimum"] == 1
         assert "caps it" in search["properties"]["page_size"]["description"]
+        assert (
+            "object descriptions and column descriptions"
+            in search["properties"]["q"]["description"]
+        )
         assert "AssetListResponse" in tools["search_catalog"]["outputSchema"]["$defs"]
         assert "AssetDetailResponse" in tools["get_object"]["outputSchema"]["$defs"]
         assert "ColumnItem" in tools["get_object"]["outputSchema"]["$defs"]
@@ -163,6 +206,8 @@ def test_initialization_describes_model_driven_multilingual_ambiguity_policy():
         assert "Открыть на портале" in instructions
         assert "Открыть в Universe" in instructions
         assert "do not fetch every page automatically" in instructions
+        assert "q='Аргус'" in instructions
+        assert "Search includes object descriptions and column descriptions" in instructions
 
 
 @pytest.mark.parametrize("base", ["", "https://catalog.example.invalid"])

@@ -12,6 +12,13 @@ test('picker search ignores whitespace in both queries and names', () => {
     assert.equal(matchesCatalogSearch('ice_brent', 'ICE', 'dwh.raw.ice_brent'), true);
     assert.equal(matchesCatalogSearch('   ', 'ADS-B Exchange'), true);
     assert.equal(matchesCatalogSearch('unknown', 'ADS-B Exchange'), false);
+    assert.equal(matchesCatalogSearch('Аргус', 'assessments', 'dwh.raw.assessments', 'Цены АРГУС'), true);
+});
+
+test('overview picker includes descriptions in its searchable fields', () => {
+    const source = readFileSync(new URL('../src/modules/catalog/components/OverviewSearch.tsx', import.meta.url), 'utf8');
+    assert.ok(source.includes("description: item.description ?? ''"));
+    assert.ok(source.includes("option?.description ?? ''"));
 });
 
 test('query-only navigation preserves the mounted page and input focus', () => {
