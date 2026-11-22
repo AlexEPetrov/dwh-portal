@@ -14,6 +14,7 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/web/ ./web/
 COPY frontend/ui-kit/ ./ui-kit/
 COPY frontend/app-shell/ ./app-shell/
+COPY frontend/scripts/ ./scripts/
 COPY common/contracts/jsonschema/ /build/common/contracts/jsonschema/
 # No host .env files enter this build; generated requests use the Portal origin.
 ENV VITE_API_BASE_URL=/api

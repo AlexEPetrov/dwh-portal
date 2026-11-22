@@ -388,6 +388,23 @@ class ConfigurationTests(unittest.TestCase):
         for pattern in ("**/.env", "**/.env.*", "**/.venv", "**/node_modules"):
             self.assertIn(pattern, base_ignore)
 
+    def test_portal_frontend_copies_shared_package_builder_before_build(self):
+        base = (REPOSITORY / "infra/images/portal/Dockerfile").read_text()
+        frontend_stage = base.split("AS frontend\n", 1)[1].split("\nFROM ", 1)[0]
+        self.assertIn("WORKDIR /build/frontend", frontend_stage)
+        self.assertLess(
+            frontend_stage.index("COPY frontend/scripts/ ./scripts/"),
+            frontend_stage.index("RUN cd web && npm run build"),
+        )
+        for workspace in ("ui-kit", "app-shell"):
+            manifest = json.loads(
+                (REPOSITORY / "frontend" / workspace / "package.json").read_text()
+            )
+            self.assertEqual(
+                manifest["scripts"]["build"], "node ../scripts/build-package.mjs"
+            )
+        self.assertTrue((REPOSITORY / "frontend/scripts/build-package.mjs").is_file())
+
     def test_every_python_source_parses_without_writing_bytecode(self):
         for path in SOURCE.rglob("*.py"):
             with self.subTest(path=path.name):
