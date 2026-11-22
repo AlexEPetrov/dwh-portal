@@ -85,8 +85,7 @@ class LineageService:
         if origin is None:
             return {"asset": None, "nodes": [], "edges": [], "unresolved_targets": []}
 
-        index = self._lineage_index()
-        edges = self._walk(asset_id, index, self._max_depth)
+        edges = self._walk(asset_id)
         node_ids = {asset_id}
         for edge in edges:
             node_ids.add(edge.from_asset_id)
@@ -133,26 +132,23 @@ class LineageService:
                 node_ids.add(edge.to_asset_id)
         return {asset.id: asset for asset in self._store.get_assets(node_ids)}
 
-    def _walk(
-        self,
-        start_id: uuid.UUID,
-        index: dict[uuid.UUID, list[Relationship]],
-        max_depth: int,
-    ) -> list[Relationship]:
+    def _walk(self, start_id: uuid.UUID) -> list[Relationship]:
         visited_edges: dict[uuid.UUID, Relationship] = {}
-        queue: deque[tuple[uuid.UUID, int]] = deque([(start_id, 0)])
+        frontier = {start_id}
         seen_nodes = {start_id}
+        types = set(LINEAGE_RELATIONSHIP_TYPES)
 
-        while queue:
-            current_id, depth = queue.popleft()
-            if depth >= max_depth:
-                continue
-            for edge in index.get(current_id, []):
+        for _ in range(self._max_depth):
+            if not frontier:
+                break
+            edges = self._store.list_relationships(asset_ids=frontier, types=types)
+            next_frontier: set[uuid.UUID] = set()
+            for edge in edges:
                 visited_edges[edge.id] = edge
-                neighbour = edge.to_asset_id if edge.from_asset_id == current_id else edge.from_asset_id
-                if neighbour not in seen_nodes:
-                    seen_nodes.add(neighbour)
-                    queue.append((neighbour, depth + 1))
+                next_frontier.update((edge.from_asset_id, edge.to_asset_id))
+            frontier = next_frontier - seen_nodes
+            seen_nodes.update(frontier)
+
         return list(visited_edges.values())
 
     def _list_active(self, asset_type: AssetType) -> list[Asset]:

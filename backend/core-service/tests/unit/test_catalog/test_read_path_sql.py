@@ -1,5 +1,6 @@
 import datetime
 import uuid
+from unittest.mock import MagicMock
 
 from sqlalchemy.dialects import postgresql
 
@@ -9,6 +10,7 @@ from domains.catalog.models import (
     AssetType,
     ChangeQuery,
     ChangeType,
+    RelationshipType,
 )
 from domains.catalog.repositories.sql import SqlPortalStore
 from domains.catalog.services.storage_service import StorageService
@@ -128,3 +130,23 @@ def test_history_treats_zero_total_bytes_as_missing(store, now):
     assert points[0]["index_bytes"] == 7
     assert points[0]["total_bytes"] == 17
     assert points[1]["total_bytes"] == 8
+
+
+
+def test_relationship_frontier_filters_both_endpoints_in_sql():
+    session = MagicMock()
+    store = SqlPortalStore(session_factory=lambda: session)
+    endpoint_ids = {uuid.uuid4(), uuid.uuid4()}
+
+    store.list_relationships(asset_ids=endpoint_ids, types={RelationshipType.DERIVED_FROM})
+
+    statement = session.scalars.call_args.args[0].compile(dialect=postgresql.dialect())
+    sql = str(statement)
+    assert "from_asset_id = ANY" in sql
+    assert "to_asset_id = ANY" in sql
+    assert "relationship_type IN" in sql
+    assert set(statement.params["endpoint_ids"]) == endpoint_ids
+
+    session.reset_mock()
+    assert store.list_relationships(asset_ids=set()) == []
+    session.scalars.assert_not_called()

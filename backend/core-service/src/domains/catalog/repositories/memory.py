@@ -343,18 +343,24 @@ class InMemoryPortalStore:
         self,
         *,
         asset_id: uuid.UUID | None = None,
+        asset_ids: set[uuid.UUID] | None = None,
         types: set[RelationshipType] | None = None,
     ) -> list[Relationship]:
-        items = list(self.relationships.values())
+        """Return edges incident to the selected endpoints."""
         if asset_id is not None:
-            items = [
-                item
-                for item in items
-                if item.from_asset_id == asset_id or item.to_asset_id == asset_id
-            ]
-        if types is not None:
-            items = [item for item in items if item.relationship_type in types]
-        return [item.model_copy(deep=True) for item in items]
+            asset_ids = {asset_id} if asset_ids is None else asset_ids & {asset_id}
+        with self._lock:
+            edges = list(self.relationships.values())
+        return [
+            edge.model_copy(deep=True)
+            for edge in edges
+            if (types is None or edge.relationship_type in types)
+            and (
+                asset_ids is None
+                or edge.from_asset_id in asset_ids
+                or edge.to_asset_id in asset_ids
+            )
+        ]
 
     def add_change(self, event: ChangeEvent) -> ChangeEvent:
         with self._lock:

@@ -6,7 +6,8 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import and_, case, delete, func, or_, select, text
+from sqlalchemy import and_, any_, bindparam, case, delete, func, or_, select, text
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Session
 
 from domains.catalog.models import (
@@ -678,11 +679,26 @@ class SqlPortalStore:
         self,
         *,
         asset_id: uuid.UUID | None = None,
+        asset_ids: set[uuid.UUID] | None = None,
         types: set[RelationshipType] | None = None,
     ) -> list[Relationship]:
+        """Filter edges by either endpoint in PostgreSQL before loading rows."""
+        if asset_ids is not None and asset_id is not None:
+            asset_ids = asset_ids & {asset_id}
+        if asset_ids is not None and not asset_ids:
+            return []
         with self._session() as session:
             stmt = select(PortalRelationshipDbModel)
-            if asset_id is not None:
+            if asset_ids is not None:
+                # One array bind keeps wide frontiers below PostgreSQL's parameter limit.
+                endpoints = bindparam("endpoint_ids", list(asset_ids), type_=ARRAY(UUID()))
+                stmt = stmt.where(
+                    or_(
+                        PortalRelationshipDbModel.from_asset_id == any_(endpoints),
+                        PortalRelationshipDbModel.to_asset_id == any_(endpoints),
+                    )
+                )
+            elif asset_id is not None:
                 stmt = stmt.where(
                     or_(
                         PortalRelationshipDbModel.from_asset_id == asset_id,

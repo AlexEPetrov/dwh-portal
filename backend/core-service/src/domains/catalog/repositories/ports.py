@@ -85,8 +85,11 @@ class PortalStore(Protocol):
         self,
         *,
         asset_id: uuid.UUID | None = None,
+        asset_ids: set[uuid.UUID] | None = None,
         types: set[RelationshipType] | None = None,
-    ) -> list[Relationship]: ...
+    ) -> list[Relationship]:
+        """List edges touching any selected endpoint, optionally filtered by type."""
+        ...
 
     def add_change(self, event: ChangeEvent) -> ChangeEvent: ...
 

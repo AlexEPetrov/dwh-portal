@@ -1,4 +1,10 @@
-from domains.catalog.models import AssetQuery, AssetStatus, AssetType, ChangeQuery
+from domains.catalog.models import (
+    LINEAGE_RELATIONSHIP_TYPES,
+    AssetQuery,
+    AssetStatus,
+    AssetType,
+    ChangeQuery,
+)
 from domains.catalog.services.asset_service import AssetService
 from domains.catalog.services.lineage_service import LineageService
 from domains.catalog.services.overview_service import OverviewService
@@ -36,6 +42,43 @@ def test_lineage_walks_source_to_table_and_keeps_data_flow_only(seeded_store):
     assert "WRITES_TO" in types
     names = {node.name for node in payload["nodes"]}
     assert {"ICE", "Brent Settlement", "landing/ice/brent", "ice_brent", "market_prices"} <= names
+
+
+def test_object_lineage_reads_only_incident_edges_per_level(seeded_store, monkeypatch):
+    from uuid import uuid4
+
+    raw = seeded_store.find_by_qualified_name("dwh.raw.ice_brent")
+    assert raw is not None
+    list_relationships = seeded_store.list_relationships
+    expected = list_relationships(asset_id=raw.id)
+    expected = [edge for edge in expected if edge.relationship_type in LINEAGE_RELATIONSHIP_TYPES]
+    assert expected
+    for _ in range(100):
+        seeded_store.upsert_relationship(
+            expected[0].model_copy(
+                update={"id": uuid4(), "from_asset_id": uuid4(), "to_asset_id": uuid4()}
+            )
+        )
+
+    frontiers = []
+
+    def read_edges(*, asset_ids, types):
+        frontiers.append(asset_ids)
+        return list_relationships(asset_ids=asset_ids, types=types)
+
+    monkeypatch.setattr(seeded_store, "list_relationships", read_edges)
+    result = LineageService(seeded_store, max_depth=2).get_lineage(raw.id)
+
+    neighbours = {
+        endpoint for edge in expected for endpoint in (edge.from_asset_id, edge.to_asset_id)
+    } - {raw.id}
+    assert frontiers == [{raw.id}, neighbours]
+    assert {edge.id for edge in result["edges"]} == {
+        edge.id
+        for edge in list_relationships(
+            asset_ids={raw.id} | neighbours, types=set(LINEAGE_RELATIONSHIP_TYPES)
+        )
+    }
 
 
 def test_lineage_roots_are_data_sources_and_orphan_extractions(seeded_store):
