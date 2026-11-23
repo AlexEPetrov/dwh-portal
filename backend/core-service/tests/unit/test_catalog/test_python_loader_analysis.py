@@ -215,6 +215,68 @@ def test_selected_subclass_imported_orm_inherited_writer_and_secondary(tmp_path)
     assert all(e["line"] > 0 and not e["file"].startswith("/") for e in result.evidence)
 
 
+@pytest.mark.parametrize("source_class", ["self", "Adjacent"])
+@pytest.mark.parametrize("keyword_arguments", [False, True])
+def test_hardcoded_class_targets_flow_through_cross_module_writer_arguments(
+    tmp_path, source_class, keyword_arguments
+):
+    arguments = (
+        f"frame=df, destination={source_class}.destination, namespace={source_class}.namespace"
+        if keyword_arguments
+        else f"df, {source_class}.destination, {source_class}.namespace"
+    )
+    result = _analyze(
+        tmp_path,
+        {
+            "pkg/__init__.py": "",
+            "pkg/config.py": """
+                class Parent:
+                    destination = 'parent_target'
+                    namespace = 'inbox'
+                class Adjacent:
+                    destination = 'adjacent_target'
+                    namespace = 'curated'
+            """,
+            "pkg/storage.py": """
+                class Storage:
+                    @staticmethod
+                    def write(frame, destination, namespace):
+                        frame.to_sql(name=destination, schema=namespace)
+            """,
+            "pkg/helpers.py": """
+                from .storage import Storage
+                def persist(frame, destination, namespace):
+                    Storage.write(namespace=namespace, frame=frame, destination=destination)
+            """,
+            "loader.py": f"""
+                from pkg.config import Parent, Adjacent
+                from pkg.helpers import persist
+                class Loader(Parent):
+                    def load_file(self, df):
+                        persist({arguments})
+                class Sibling(Parent):
+                    destination = 'unrelated'
+                    def load_file(self, df):
+                        persist(df, self.destination, self.namespace)
+            """,
+        },
+    )
+    expected = (
+        ("inbox", "parent_target") if source_class == "self" else ("curated", "adjacent_target")
+    )
+    assert _targets(result) == {expected}
+    assert not result.diagnostics
+    assert result.evidence == [
+        {
+            "schema": expected[0],
+            "table": expected[1],
+            "file": "pkg/storage.py",
+            "line": 5,
+            "pattern": "to_sql",
+        }
+    ]
+
+
 def test_helper_parameters_configuration_loops_and_tuple_unpacking(tmp_path):
     result = _analyze(
         tmp_path,
