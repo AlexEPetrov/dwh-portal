@@ -97,7 +97,37 @@ def provider_environment(environment: dict[str, str]) -> dict[str, str]:
     return result
 
 
-def harness_environment(environment: dict[str, str]) -> dict[str, str]:
+def portal_mcp_url(environment: dict[str, str], required: bool = False) -> str:
+    """Validate endpoint configuration without leaking URLs or credential material."""
+    value = environment.get("DSH_PORTAL_MCP_URL", "")
+    if not value and not required:
+        return f"http://127.0.0.1:{port(environment.get('APP_API_PORT', '5051'))}/mcp"
+    try:
+        parsed = urlsplit(value)
+        valid = (
+            parsed.scheme in {"http", "https"}
+            and parsed.hostname
+            and parsed.username is None
+            and parsed.password is None
+            and not any(
+                character.isspace() or ord(character) < 32 for character in value
+            )
+            and "?" not in value
+            and "#" not in value
+            and (parsed.port is None or 1 <= parsed.port <= 65535)
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError(
+            "DSH_PORTAL_MCP_URL must be an explicit HTTP(S) URL without credentials, query or fragment"
+        ) from None
+    return value
+
+
+def harness_environment(
+    environment: dict[str, str], remote_required: bool = False
+) -> dict[str, str]:
     """Avoid passing Portal/database secrets to the harness child process."""
     providers = provider_environment(environment)
     result = {
@@ -116,7 +146,7 @@ def harness_environment(environment: dict[str, str]) -> dict[str, str]:
             "DSH_HOME": "/var/lib/dsh",
             "DSH_AGENTS_HOME": "/var/lib/dsh/agents",
             "DSH_TELEMETRY_DISABLED": "1",
-            "PORTAL_MCP_URL": f"http://127.0.0.1:{port(environment.get('APP_API_PORT', '5051'))}/mcp",
+            "PORTAL_MCP_URL": portal_mcp_url(environment, required=remote_required),
         }
     )
     # This is a credential reference, never the token itself. The owner stores
@@ -219,7 +249,9 @@ def commands(mode: str, environment: dict[str, str]) -> list[dict]:
                     public.netloc,
                 ],
                 "cwd": os.fspath(WORKSPACE),
-                "env": harness_environment(environment),
+                "env": harness_environment(
+                    environment, remote_required=mode == "harness"
+                ),
             }
         )
     return children

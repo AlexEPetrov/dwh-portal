@@ -33,7 +33,6 @@ services:
     volumes:
       - ${PORTAL_HARNESS_FRONTEND_DIST_HOST:-./frontend-dist}:/app/frontend-dist
       - ${APP_LOC_LOGS_PATH_HOST}:/app/logs
-      - ${APP_LOC_REPOSITORY_PATH_HOST}:/app/local_storage
       - ${APP_DWH_AIRFLOW_DAGS_ROOT_HOST}:${APP_DWH_AIRFLOW_DAGS_ROOT}:ro
       - ${APP_DWH_PYTHON_MODULES_ROOT_HOST}:${APP_DWH_PYTHON_MODULES_ROOT}:ro
       - dsh-state:/var/lib/dsh

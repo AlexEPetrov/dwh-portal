@@ -11,6 +11,9 @@ applies_to:
   - infra/environments/test/README.md
   - infra/images/portal-harness/**
   - infra/compose/docker-compose-portal-harness.yml
+  - infra/compose/docker-compose-dsh.yml
+  - infra/environments/dsh/**
+  - infra/scripts/build_env_dsh.sh
   - infra/compose/docker-compose-checkout.yml
   - infra/environments/portal-harness/**
   - infra/environments/test/up.sh
@@ -27,6 +30,46 @@ approval_policy: human_required
 ---
 
 # Workflow: experimental Portal and harness image
+
+## Approved independent DSH deployment using the combined image
+
+On 2026-11-23 the user explicitly selected two independently deployed machines
+reusing the existing combined image, not a new DSH image recipe. Add a `dsh`
+release profile, environment and Compose project with its own state volume and
+lifecycle. Run only the harness child; require `DSH_PORTAL_MCP_URL` as an explicit
+HTTP(S) endpoint without embedded credentials, query or fragment. Validation
+errors must not echo input. Preserve the local MCP default in all/portal mode,
+credential references, provider filtering, exact four-tool guard and readiness.
+The DSH payload must not inherit a Portal env_file, DB settings, source mounts,
+frontend payload, migrations or DB diagnostic. Shared build/export orchestration
+retains output refusal, checksums, script modes and partial-failure evidence;
+profiles needing no image-derived payload need no temporary container.
+
+Remove ONLY the repository/local-storage bind and its active public host setting
+from the harness Portal profile. This supersedes that one binding in the mount
+restoration below; preserve frontend, logs, Airflow, Python, DSH state and all
+unrelated authoring/user changes. Never edit private envs or old releases.
+
+Route new paths through this workflow/policy. Run registered source/release Python,
+Node, shell and diff checks, with fake/mocked Docker only. `DSH-RELEASE`,
+`DSH-RELEASE-OUTPUT`, `DSH-RELEASE-LOAD`, `DSH-UP` and `DSH-DOWN` are user-run
+only. No agent Docker, build/export/deploy, live DB/model or firewall actions.
+Operators must provide actual remote listener/routing, Host/Origin allowance,
+MCP-only credential provisioning and approved egress; do not infer URLs, open
+ports or claim source tests establish remote connectivity or deployment.
+
+Source evidence: all 62 image/environment Python tests and 17 release Python
+tests passed. All 16 Node tests passed with the existing native-stripping skip;
+registered existing/new DSH shell syntax and diff checks passed. Initial runs
+identified two old fixture assumptions (harness-mode CLI validation without a
+remote URL and migrations in every profile); corrected fixtures passed on rerun.
+Independent-mode health still requires PID-bound guard and four-tool registration,
+but never probes a local Portal. Release tests preserve the original profiles'
+never-started/network-none export and assert no temporary container for DSH.
+No Docker, real image/release generation, private env edit, live DB/model request,
+network/firewall mutation or deployment was executed. Remote MCP connectivity,
+credential provisioning, real export/load/start and model roundtrip remain
+user-run missing runtime evidence, not established by these source fixtures.
 
 ## Approved base Portal mount restoration
 

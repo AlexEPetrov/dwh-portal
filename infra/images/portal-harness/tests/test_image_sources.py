@@ -73,14 +73,15 @@ class ConfigurationTests(unittest.TestCase):
             [
                 "${PORTAL_HARNESS_FRONTEND_DIST_HOST:-./frontend-dist}:/app/frontend-dist",
                 "${APP_LOC_LOGS_PATH_HOST}:/app/logs",
-                "${APP_LOC_REPOSITORY_PATH_HOST}:/app/local_storage",
                 "${APP_DWH_AIRFLOW_DAGS_ROOT_HOST}:${APP_DWH_AIRFLOW_DAGS_ROOT}:ro",
                 "${APP_DWH_PYTHON_MODULES_ROOT_HOST}:${APP_DWH_PYTHON_MODULES_ROOT}:ro",
                 "dsh-state:/var/lib/dsh",
             ],
         )
         base = yaml.safe_load((COMPOSE.parent / "docker-compose.yml").read_text())
-        self.assertEqual(mounts[1:5], base["services"]["core-service"]["volumes"][1:5])
+        base_mounts = base["services"]["core-service"]["volumes"]
+        self.assertEqual(mounts[1:4], [base_mounts[1], *base_mounts[3:5]])
+        self.assertNotIn("local_storage", "\n".join(mounts))
         compose["services"]["portal-harness"]["volumes"] = mounts[-1:]
         self.assertEqual(
             compose["services"]["portal-harness"].pop("command"),
@@ -653,7 +654,13 @@ class LauncherTests(unittest.TestCase):
 
     def test_modes_are_independent(self):
         self.assertEqual(len(launcher.commands("portal", {})), 1)
-        harness = launcher.commands("harness", {"DSH_BIND_HOST": "127.0.0.1"})
+        harness = launcher.commands(
+            "harness",
+            {
+                "DSH_BIND_HOST": "127.0.0.1",
+                "DSH_PORTAL_MCP_URL": "https://portal.example.test/mcp",
+            },
+        )
         self.assertIn("--no-open", harness[0]["args"])
         self.assertIn("--patch", harness[0]["args"])
         self.assertEqual(
@@ -661,7 +668,13 @@ class LauncherTests(unittest.TestCase):
         )
 
     def test_launcher_flags_precede_every_web_flag(self):
-        args = launcher.commands("harness", {"DSH_BIND_HOST": "127.0.0.1"})[0]["args"]
+        args = launcher.commands(
+            "harness",
+            {
+                "DSH_BIND_HOST": "127.0.0.1",
+                "DSH_PORTAL_MCP_URL": "https://portal.example.test/mcp",
+            },
+        )[0]["args"]
         self.assertEqual(
             args[:5],
             [
@@ -684,8 +697,8 @@ class LauncherTests(unittest.TestCase):
     def test_build_time_check_uses_real_launcher_arguments(self):
         environment = {"PATH": "/bin"}
         expected = launcher.commands(
-            "harness", {**environment, "DSH_BIND_HOST": "127.0.0.1"}
-        )[0]
+            "all", {**environment, "DSH_BIND_HOST": "127.0.0.1"}
+        )[-1]
         with patch.dict(os.environ, environment, clear=True), patch.object(
             cli_check.Path, "mkdir"
         ), patch.object(cli_check.subprocess, "run") as run:

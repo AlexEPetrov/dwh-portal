@@ -52,6 +52,9 @@ topics:
     - backend/core-service/build_image.sh
     - infra/images/portal-harness/**
     - infra/compose/docker-compose-portal-harness.yml
+    - infra/compose/docker-compose-dsh.yml
+    - infra/environments/dsh/**
+    - infra/scripts/build_env_dsh.sh
     - infra/compose/docker-compose-checkout.yml
     - infra/environments/portal-harness/**
     - infra/environments/test/up.sh
@@ -327,6 +330,18 @@ verification:
     run_template: bash infra/environments/portal-harness/diagnose-db.sh "{env_file}"
   PORTAL-HARNESS-DB-SHELL-CHECK:
     run: bash -n infra/environments/portal-harness/diagnose-db.sh
+  DSH-SHELL-CHECK:
+    run: bash -n infra/environments/dsh/compose.sh && bash -n infra/environments/dsh/up.sh && bash -n infra/environments/dsh/down.sh && bash -n infra/scripts/build_env_dsh.sh
+  DSH-RELEASE:
+    run: bash infra/scripts/build_env_dsh.sh
+  DSH-RELEASE-OUTPUT:
+    run_template: bash infra/scripts/build_env_dsh.sh "{output_directory}"
+  DSH-RELEASE-LOAD:
+    run_template: docker load --input "{release_directory}/dwh-portal-dsh.img"
+  DSH-UP:
+    run_template: bash infra/environments/dsh/up.sh "{env_file}"
+  DSH-DOWN:
+    run_template: bash infra/environments/dsh/down.sh "{env_file}"
   PORTAL-HARNESS-HOST-PG-LISTENER:
     run: ss -ltn 'sport = :5432'
   PORTAL-HARNESS-STATE:

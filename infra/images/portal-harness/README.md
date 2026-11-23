@@ -225,7 +225,7 @@ ports; do not stop the current Portal deployment. Environment overrides
 `PORTAL_HARNESS_HOST_PORT` and `DSH_HOST_PORT` select different host ports. If you
 change the DSH host port, also set `DSH_PUBLIC_URL` to the actual browser root.
 Authentication/token warnings and single-owner limitations remain as above.
-Compose restores the base Portal frontend, logs, local-storage and read-only
+Compose retains the base Portal frontend, logs and read-only
 Airflow/Python source mounts. Provision the host/container path pairs in the
 private environment file before launch; no paths or credentials are copied from
 another deployment automatically. Checkout uses its existing frontend build;
@@ -258,6 +258,19 @@ launcher/app boundary that a config dump alone does not exercise. Neither check
 starts Portal or calls a model.
 
 The launcher supports `all` (default), `portal`, and `harness` modes.
+
+For an independent second machine use the
+[DSH-only environment](infra/environments/dsh/README.md). It runs only harness
+mode from this same image and requires an explicit remote MCP HTTP(S) endpoint.
+The DSH container has no Portal env-file, DB settings or source mounts; its release
+has no frontend/source/migration payload or DB diagnostic. No new image recipe
+is introduced. The Portal harness profile removes only the repository/local-storage
+bind, preserving frontend, logs, read-only Airflow/Python and DSH state.
+All/portal keep the existing local MCP default. The remote URL setting is validated
+without echoing input; it forbids credentials/query/fragment. Protected MCP still
+uses a credential reference, and the exact four-tool guard/provider policy remains.
+See the DSH guide for listener, Host/Origin, network and authentication prerequisites;
+the existing Portal loopback publication cannot serve the second machine as-is.
 
 | Setting/path | Meaning |
 |---|---|

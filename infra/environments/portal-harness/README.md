@@ -1,5 +1,11 @@
 # Experimental Portal + DSH environment
 
+For two machines, deploy this profile as Portal (its default launch mode) and use
+the independent [DSH-only environment](infra/environments/dsh/README.md) on the
+other machine. It reuses the same image with no Portal DB settings/source mounts.
+Remote MCP requires separately provisioned listener/routing/auth; this profile's
+loopback publication is not remotely accessible. No ports are opened automatically.
+
 This directory is deployable payload input: portable lifecycle helpers, target
 configuration examples and this target-facing guide. It is copied into a release
 alongside a generated image archive, Compose definition and release metadata.
@@ -40,7 +46,7 @@ For the approved local setup, a private `.env` was prepared from the existing
 test configuration's unchanged values plus only missing harness settings. This
 is operator-local configuration, not release payload or a public sample. The
 private test source was not replaced, and secrets are never copied into samples.
-The base Portal host-path keys now configure the same logs, local-storage and
+The base Portal host-path keys now configure the same logs and
 read-only Airflow/Python source mounts here; fixed Compose values still take
 precedence. The helper defaults to this
 private `.env` when no explicit env-file argument is given.
@@ -60,13 +66,15 @@ DWH host/database and local source roots are blank by default: no DWH target or
 Airflow/Python source tree is provisioned by this template. Optional collectors
 and the live load journal need their own read-only DWH credentials; source
 analysis uses the declared read-only mounts. Before launch, provision existing
-absolute target-host paths for logs, local storage, Airflow DAGs and Python
+absolute target-host paths for logs, Airflow DAGs and Python
 modules, and set both corresponding container source roots in section 4. These
 mounts are required even when collection is not requested; blank sample paths
 are deliberately not usable deployment defaults. This base-compatible Python
 mount supports one root, not a semicolon-separated list. No collection is started
-by preparing the file or restoring the mounts. Logs and local storage persist
-on the host; the existing named volume independently persists DSH state.
+by preparing the file or restoring the mounts. Logs persist on the host;
+the existing named volume independently persists DSH state. The repository/
+local-storage host binding and its public host-path setting are intentionally
+absent from this profile; unrelated test Compose mounts are unchanged.
 
 The frontend mount uses the existing built `frontend/web/dist` in checkout and
 the image-exported `frontend-dist` beside release scripts, independent of caller

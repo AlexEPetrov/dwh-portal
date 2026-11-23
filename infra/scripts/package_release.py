@@ -35,6 +35,15 @@ PROFILES = {
         "compose": ("docker-compose-portal-harness.yml",),
         "image_paths": ("frontend-dist",),
     },
+    "dsh": {
+        "image": "134/dwh-portal-dsh:0.2.2-rc.5-source-experimental",
+        "builder": "infra/images/portal-harness/build.sh",
+        "archive": "dwh-portal-dsh.img",
+        "payload": ("up.sh", "down.sh", "compose.sh", "sample.env", "README.md"),
+        "compose": ("docker-compose-dsh.yml",),
+        "image_paths": (),
+        "migrations": False,
+    },
 }
 
 
@@ -68,37 +77,8 @@ def package_release(output: Path, profile: str, root: Path = ROOT) -> None:
                 (output / name).chmod((output / name).stat().st_mode | 0o111)
         for name in config["compose"]:
             shutil.copy2(root / "infra/compose" / name, output / name)
-        output.joinpath("migrations").mkdir()
-        container = f"portal-release-{uuid.uuid4().hex}"
-        subprocess.run(
-            ["docker", "create", "--network", "none", "--name", container, image_id],
-            check=True,
-        )
-        try:
-            subprocess.run(
-                [
-                    "docker",
-                    "cp",
-                    f"{container}:/app/migrations/all.sql",
-                    os.fspath(output / "migrations/all.sql"),
-                ],
-                check=True,
-            )
-            # Compose bind mounts remain functional after transfer. Payload
-            # trees come from the SAME image, never stale host build output.
-            for name in config["image_paths"]:
-                subprocess.run(
-                    [
-                        "docker",
-                        "cp",
-                        f"{container}:/app/{name}",
-                        os.fspath(output / name),
-                    ],
-                    check=True,
-                )
-        finally:
-            # Only this packaging operation's never-started temporary container.
-            subprocess.run(["docker", "rm", container], check=True)
+        if config.get("migrations", True) or config["image_paths"]:
+            export_image_payload(output, config, image_id)
         subprocess.run(
             [
                 "docker",
@@ -117,7 +97,7 @@ def package_release(output: Path, profile: str, root: Path = ROOT) -> None:
             "commit": commit,
             "working_tree_dirty": dirty,
         }
-        if profile == "portal-harness":
+        if profile in {"portal-harness", "dsh"}:
             metadata["dsh"] = json.loads(
                 (root / "infra/images/portal-harness/dsh-source.json").read_text()
             )
@@ -144,9 +124,40 @@ def package_release(output: Path, profile: str, root: Path = ROOT) -> None:
         raise
 
 
+def export_image_payload(output: Path, config: dict, image_id: str) -> None:
+    """Copy required image artifacts using only a never-started temporary container."""
+    if config.get("migrations", True):
+        output.joinpath("migrations").mkdir()
+    container = f"portal-release-{uuid.uuid4().hex}"
+    subprocess.run(
+        ["docker", "create", "--network", "none", "--name", container, image_id],
+        check=True,
+    )
+    try:
+        if config.get("migrations", True):
+            subprocess.run(
+                [
+                    "docker",
+                    "cp",
+                    f"{container}:/app/migrations/all.sql",
+                    os.fspath(output / "migrations/all.sql"),
+                ],
+                check=True,
+            )
+        # Payload trees come from the SAME image, never stale host build output.
+        for name in config["image_paths"]:
+            subprocess.run(
+                ["docker", "cp", f"{container}:/app/{name}", os.fspath(output / name)],
+                check=True,
+            )
+    finally:
+        # Only this packaging operation's never-started temporary container.
+        subprocess.run(["docker", "rm", container], check=True)
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3 or sys.argv[1] not in PROFILES:
         raise SystemExit(
-            "Usage: package_release.py <test|portal-harness> <new-output-directory>"
+            "Usage: package_release.py <test|portal-harness|dsh> <new-output-directory>"
         )
     package_release(Path(sys.argv[2]), sys.argv[1])

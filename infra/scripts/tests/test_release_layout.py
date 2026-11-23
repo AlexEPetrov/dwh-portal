@@ -28,6 +28,86 @@ with patch.dict(sys.modules, {"package_release": release}):
 
 
 class PortableLauncherTests(unittest.TestCase):
+    def test_dsh_portable_lifecycle_defaults_errors_and_failure_propagation(self):
+        for staged in (False, True):
+            with self.subTest(
+                staged=staged
+            ), tempfile.TemporaryDirectory() as temporary:
+                work = Path(temporary)
+                scripts = ROOT / "infra/environments/dsh"
+                if staged:
+                    destination = work / "release"
+                    destination.mkdir()
+                    for name in ("compose.sh", "up.sh", "down.sh"):
+                        shutil.copy2(scripts / name, destination / name)
+                    (destination / "docker-compose-dsh.yml").write_text("{}\n")
+                    scripts = destination
+                capture = work / "arguments"
+                marker = work / "must-not-run"
+                env_file = work / "private settings.env"
+                env_file.write_text(f'UNTRUSTED=$(touch "{marker}")\n')
+                fake = work / "docker"
+                fake.write_text(
+                    '#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_PATH"\nexit 4\n'
+                )
+                fake.chmod(0o700)
+                environment = {
+                    "PATH": f"{work}:{os.defpath}",
+                    "CAPTURE_PATH": str(capture),
+                }
+                for action in ("up", "down"):
+                    result = subprocess.run(
+                        ["bash", str(scripts / f"{action}.sh"), env_file.name],
+                        cwd=work,
+                        env=environment,
+                        capture_output=True,
+                    )
+                    self.assertEqual(result.returncode, 4)
+                    self.assertFalse(marker.exists())
+                    args = capture.read_text().splitlines()
+                    self.assertEqual(
+                        args[:5],
+                        [
+                            "compose",
+                            "--project-name",
+                            "dwh-dsh",
+                            "--env-file",
+                            str(env_file),
+                        ],
+                    )
+                    self.assertEqual(
+                        Path(args[6]).resolve(),
+                        (
+                            scripts / "docker-compose-dsh.yml"
+                            if staged
+                            else ROOT / "infra/compose/docker-compose-dsh.yml"
+                        ),
+                    )
+                    self.assertEqual(
+                        args[7:], ["up", "-d"] if action == "up" else ["down"]
+                    )
+                    capture.unlink()
+                for extra in (["missing.env"], [str(env_file), "extra.env"]):
+                    result = subprocess.run(
+                        ["bash", str(scripts / "up.sh"), *extra],
+                        cwd=work,
+                        env=environment,
+                        capture_output=True,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertFalse(capture.exists())
+                if staged:
+                    (scripts / ".env").write_text("# private fixture\n")
+                    subprocess.run(
+                        ["bash", str(scripts / "up.sh")],
+                        cwd=work,
+                        env=environment,
+                        capture_output=True,
+                    )
+                    self.assertIn(
+                        str(scripts / ".env"), capture.read_text().splitlines()
+                    )
+
     def test_db_diagnostic_is_portable_independent_and_propagates_failure(self):
         for staged in (False, True):
             with self.subTest(
@@ -171,12 +251,13 @@ class PortableLauncherTests(unittest.TestCase):
             for name in (
                 "build_env_portal_harness.sh",
                 "build_env_test.sh",
+                "build_env_dsh.sh",
                 "_build_target.sh",
                 "build_release.py",
             ):
                 shutil.copy2(ROOT / "infra/scripts" / name, scripts / name)
             marker = root / "image-build-called"
-            for profile in ("test", "portal-harness"):
+            for profile in ("test", "portal-harness", "dsh"):
                 image_dir = root / "infra/images" / profile
                 image_dir.mkdir(parents=True)
                 (image_dir / "build.sh").write_text(
@@ -187,7 +268,7 @@ class PortableLauncherTests(unittest.TestCase):
                 "from pathlib import Path\n"
                 "ROOT = Path(__file__).resolve().parents[2]\n"
                 "PROFILES = {p: {'builder': f'infra/images/{p}/build.sh'} "
-                "for p in ('test', 'portal-harness')}\n"
+                "for p in ('test', 'portal-harness', 'dsh')}\n"
                 "def require_new_output(p):\n"
                 " if p.exists() or p.is_symlink(): raise ValueError('already exists')\n"
                 "def package_release(p, profile, root):\n"
@@ -199,6 +280,7 @@ class PortableLauncherTests(unittest.TestCase):
             for profile, entry in (
                 ("test", "build_env_test.sh"),
                 ("portal-harness", "build_env_portal_harness.sh"),
+                ("dsh", "build_env_dsh.sh"),
             ):
                 command = ["bash", str(scripts / entry)]
                 subprocess.run(command, cwd=caller, env=env, check=True)
@@ -371,6 +453,80 @@ class PortableLauncherTests(unittest.TestCase):
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_dsh_release_reuses_combined_image_without_portal_payload_or_container(
+        self,
+    ):
+        config = release.PROFILES["dsh"]
+        self.assertEqual(config["image"], release.PROFILES["portal-harness"]["image"])
+        self.assertEqual(
+            config["builder"], release.PROFILES["portal-harness"]["builder"]
+        )
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as temporary:
+                destination = Path(temporary) / "release"
+                calls = []
+
+                def run(args, **kwargs):
+                    calls.append(args)
+                    self.assertEqual(args[:2], ["docker", "save"])
+                    if fail:
+                        raise subprocess.CalledProcessError(4, args)
+                    Path(args[args.index("--output") + 1]).write_bytes(
+                        b"fake shared image"
+                    )
+
+                with patch.object(
+                    release.subprocess,
+                    "check_output",
+                    side_effect=["sha256:shared\n", "commit\n", ""],
+                ), patch.object(release.subprocess, "run", side_effect=run):
+                    if fail:
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            release.package_release(destination, "dsh")
+                    else:
+                        release.package_release(destination, "dsh")
+                self.assertEqual(len(calls), 1)
+                self.assertEqual((destination / "RELEASE_FAILED").exists(), fail)
+                self.assertEqual((destination / "RELEASE_COMPLETE").exists(), not fail)
+                for name in (
+                    "migrations",
+                    "frontend-dist",
+                    "src",
+                    "diagnose-db.sh",
+                    ".env",
+                ):
+                    self.assertFalse((destination / name).exists())
+                if not fail:
+                    expected = {
+                        *config["payload"],
+                        *config["compose"],
+                        config["archive"],
+                        "release.json",
+                        "commit-sh.txt",
+                        "SHA256SUMS",
+                        "RELEASE_COMPLETE",
+                    }
+                    self.assertEqual(
+                        {path.name for path in destination.iterdir()}, expected
+                    )
+                    metadata = json.loads((destination / "release.json").read_text())
+                    self.assertEqual(metadata["profile"], "dsh")
+                    self.assertIn("dsh", metadata)
+                    for name in ("up.sh", "down.sh", "compose.sh"):
+                        self.assertTrue(os.access(destination / name, os.X_OK))
+                    for line in (destination / "SHA256SUMS").read_text().splitlines():
+                        digest, name = line.split("  ", 1)
+                        self.assertEqual(
+                            digest,
+                            hashlib.sha256(
+                                (destination / name).read_bytes()
+                            ).hexdigest(),
+                        )
+                with patch.object(builder.subprocess, "run") as build:
+                    with self.assertRaises(ValueError):
+                        builder.build_release("dsh", destination)
+                    build.assert_not_called()
+
     def test_harness_compatibility_exporter_delegates_to_shared_engine(self):
         compatibility_spec = importlib.util.spec_from_file_location(
             "package_portal_harness_release",
@@ -516,23 +672,29 @@ class ReleaseTests(unittest.TestCase):
                     | set(config["image_paths"])
                     | {
                         config["archive"],
-                        "migrations",
                         "commit-sh.txt",
                         "release.json",
                         "SHA256SUMS",
                         "RELEASE_COMPLETE",
                     }
                 )
+                if profile != "dsh":
+                    expected.add("migrations")
                 self.assertEqual({p.name for p in output.iterdir()}, expected)
                 self.assertFalse((output / ".env").exists())
                 metadata = json.loads((output / "release.json").read_text())
                 self.assertEqual(metadata["profile"], profile)
-                self.assertEqual("dsh" in metadata, profile == "portal-harness")
-                create = next(c for c in commands if c[:2] == ["docker", "create"])
-                self.assertEqual(create[2:4], ["--network", "none"])
-                self.assertEqual(create[-1], "identity")
-                remove = next(c for c in commands if c[:2] == ["docker", "rm"])
-                self.assertEqual(remove[2], create[5])
+                self.assertEqual(
+                    "dsh" in metadata, profile in {"portal-harness", "dsh"}
+                )
+                if profile != "dsh":
+                    create = next(c for c in commands if c[:2] == ["docker", "create"])
+                    self.assertEqual(create[2:4], ["--network", "none"])
+                    self.assertEqual(create[-1], "identity")
+                    remove = next(c for c in commands if c[:2] == ["docker", "rm"])
+                    self.assertEqual(remove[2], create[5])
+                else:
+                    self.assertEqual([c[1] for c in commands], ["save"])
                 self.assertFalse(
                     any(c[1] in ("start", "run", "exec") for c in commands)
                 )

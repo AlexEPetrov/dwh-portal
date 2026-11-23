@@ -11,7 +11,9 @@ from launch import commands
 def check():
     environment = dict(os.environ)
     environment["DSH_BIND_HOST"] = "127.0.0.1"
-    specification = commands("harness", environment)[0]
+    # Offline argv validation uses the combined-mode local MCP default; no remote
+    # deployment endpoint is invented or contacted during image construction.
+    specification = commands("all", environment)[-1]
     Path(specification["cwd"]).mkdir(parents=True, exist_ok=True)
     options = {
         "cwd": specification["cwd"],

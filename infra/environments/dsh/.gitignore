@@ -1,0 +1,2 @@
+# Override the legacy root environment exception: runtime credentials stay private.
+.env

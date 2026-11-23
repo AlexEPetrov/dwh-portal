@@ -1,0 +1,32 @@
+services:
+  dsh:
+    image: 134/dwh-portal-dsh:0.2.2-rc.5-source-experimental
+    init: true
+    restart: unless-stopped
+    command: ["harness"]
+    # Deliberate allowlist: never load the Portal env_file into this container.
+    environment:
+      DSH_PORT: "3080"
+      DSH_PORTAL_MCP_URL: "${DSH_PORTAL_MCP_URL:?Set the remote Portal MCP HTTP(S) endpoint}"
+      DSH_PORTAL_MCP_CREDENTIAL: "${DSH_PORTAL_MCP_CREDENTIAL:-}"
+      DSH_BIND_HOST: "${DSH_BIND_HOST:-}"
+      DSH_PUBLIC_URL: "${DSH_PUBLIC_URL:-http://127.0.0.1:3080/}"
+      DSH_PROVIDER_MODE: "${DSH_PROVIDER_MODE:-ollama}"
+      DSH_OLLAMA_BASE_URL: "${DSH_OLLAMA_BASE_URL:-}"
+      DSH_OLLAMA_MODEL: "${DSH_OLLAMA_MODEL:-}"
+      DSH_OLLAMA_CONTEXT_WINDOW: "${DSH_OLLAMA_CONTEXT_WINDOW:-8192}"
+      DSH_OLLAMA_MAX_TOKENS: "${DSH_OLLAMA_MAX_TOKENS:-2048}"
+      DSH_OLLAMA_API_KEY: "${DSH_OLLAMA_API_KEY:-ollama}"
+    ports:
+      - "127.0.0.1:${DSH_HOST_PORT:-3080}:3080"
+    volumes:
+      - dsh-state:/var/lib/dsh
+    networks:
+      - dsh
+
+volumes:
+  dsh-state: {}
+
+networks:
+  dsh:
+    driver: bridge

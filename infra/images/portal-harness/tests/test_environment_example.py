@@ -68,7 +68,6 @@ class EnvironmentExampleTests(unittest.TestCase):
             {key for key in values if key.startswith("APP_")}
             - {
                 "APP_API_PORT",
-                "APP_LOC_REPOSITORY_PATH_HOST",
                 "APP_LOC_LOGS_PATH_HOST",
                 "APP_DWH_AIRFLOW_DAGS_ROOT_HOST",
                 "APP_DWH_PYTHON_MODULES_ROOT_HOST",
@@ -117,7 +116,6 @@ class EnvironmentExampleTests(unittest.TestCase):
             int(values["DSH_OLLAMA_CONTEXT_WINDOW"]),
         )
         for key in (
-            "APP_LOC_REPOSITORY_PATH_HOST",
             "APP_LOC_LOGS_PATH_HOST",
             "APP_DWH_AIRFLOW_DAGS_ROOT_HOST",
             "APP_DWH_PYTHON_MODULES_ROOT_HOST",
