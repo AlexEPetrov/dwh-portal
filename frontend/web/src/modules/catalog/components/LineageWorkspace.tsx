@@ -1,15 +1,18 @@
 import { ArrowLeftOutlined, ExportOutlined } from '@ant-design/icons';
 import { FreshnessBar } from '@shared/ui/portal';
 import { Alert, Button, Select, Spin, Typography } from 'antd';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ASSET_TYPE_LABELS } from '../assetTypes';
 import ExtractionLoadsPanel from './ExtractionLoadsPanel';
 import LineageGraph from './LineageGraph';
 import UnresolvedTargetsAlert from './UnresolvedTargetsAlert';
-import { LINEAGE_PICKER_TYPES, useCatalogAsset, useCatalogLineage, useCatalogLineagePicker } from '../queries';
+import { useCatalogAsset, useCatalogLineage, useCatalogLineagePicker } from '../queries';
 
-const TYPE_ORDER = new Map(LINEAGE_PICKER_TYPES.map((type, index) => [type, index]));
+const PICKER_DEBOUNCE_MS = 300;
+
+const pickerLabel = (qualifiedName: string, type: string) =>
+  `${qualifiedName} · ${ASSET_TYPE_LABELS[type] ?? type}`;
 
 type Props = { assetId?: string } & (
   | { embedded?: false }
@@ -21,24 +24,30 @@ const LineageWorkspace = ({ assetId, embedded = false }: Props) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const view = searchParams.get('view') === 'map' ? 'map' : 'list';
-  const pickerQueries = useCatalogLineagePicker(!embedded);
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTerm = searchText.trim();
+  const searchReady = Boolean(searchTerm) && searchTerm === debouncedSearch;
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(searchTerm), PICKER_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [searchTerm]);
+
+  const pickerQuery = useCatalogLineagePicker(debouncedSearch, !embedded && searchReady);
   const lineageQuery = useCatalogLineage(assetId);
   const selectedAssetQuery = useCatalogAsset(assetId);
   const lineage = lineageQuery.isError ? undefined : lineageQuery.data;
-  const options = pickerQueries.flatMap((query) =>
-    (query.data?.items ?? []).map((item) => ({
-      value: item.id,
-      type: item.asset_type,
-      label: `${item.display_name || item.name || item.qualified_name} · ${ASSET_TYPE_LABELS[item.asset_type] ?? item.asset_type}`,
-    }))
-  ).sort((a, b) => {
-        const typeDiff = (TYPE_ORDER.get(a.type as (typeof LINEAGE_PICKER_TYPES)[number]) ?? 99)
-          - (TYPE_ORDER.get(b.type as (typeof LINEAGE_PICKER_TYPES)[number]) ?? 99);
-        if (typeDiff !== 0) {
-          return typeDiff;
-        }
-        return a.label.localeCompare(b.label);
-  });
+  const searchResult = searchReady ? pickerQuery.data : undefined;
+  const pickerLoading = Boolean(searchTerm) && (!searchReady || pickerQuery.isFetching);
+  const options = (searchResult?.items ?? []).map((item) => ({
+    value: item.id,
+    label: pickerLabel(item.qualified_name, item.asset_type),
+  }));
+  const selectedAsset = selectedAssetQuery.data;
+  const pickerValue = assetId ? {
+    value: assetId,
+    label: selectedAsset ? pickerLabel(selectedAsset.qualified_name, selectedAsset.asset_type) : assetId,
+  } : undefined;
 
   const chainHint = useMemo(() => {
     if (!assetId || !lineage) {
@@ -80,15 +89,30 @@ const LineageWorkspace = ({ assetId, embedded = false }: Props) => {
             id="lineage-object-picker"
             showSearch
             allowClear
-            optionFilterProp="label"
-            placeholder="Найти объект или выбрать источник…"
+            labelInValue
+            filterOption={false}
+            searchValue={searchText}
+            onSearch={setSearchText}
+            placeholder="Поиск по имени или описанию…"
             style={{ width: '100%', minWidth: 0 }}
-            value={assetId}
+            value={pickerValue}
             options={options}
-            loading={pickerQueries.some((query) => query.isFetching)}
-            notFoundContent={pickerQueries.some((query) => query.isPending) ? 'Загрузка…' : pickerQueries.some((query) => query.isError) ? 'Список недоступен' : 'Нет объектов'}
-            onChange={(value) => navigate(`${value ? `/lineage/${value}` : '/lineage'}?view=${view}`)}
+            loading={pickerLoading}
+            notFoundContent={
+              !searchTerm ? 'Введите запрос для поиска'
+                : pickerLoading ? 'Поиск…'
+                : pickerQuery.isError ? 'Поиск недоступен' : 'Нет объектов'
+            }
+            onChange={(selection: typeof pickerValue) => {
+              setSearchText('');
+              navigate(`${selection ? `/lineage/${selection.value}` : '/lineage'}?view=${view}`);
+            }}
           />
+          {searchResult && searchResult.total > searchResult.items.length ? (
+            <Typography.Text type="secondary">
+              Показано {searchResult.items.length} из {searchResult.total}. Уточните запрос.
+            </Typography.Text>
+          ) : null}
         </div> : null}
         {!embedded && assetId ? (
           <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(`/lineage?view=${view}`)}>
@@ -126,7 +150,6 @@ const LineageWorkspace = ({ assetId, embedded = false }: Props) => {
           <FreshnessBar items={freshness} />
         </details>
       ) : null}
-      {!embedded && pickerQueries.some((query) => query.isError) ? <Alert type="error" showIcon message="Не удалось загрузить часть списка объектов" /> : null}
       {selectedAssetQuery.isError ? <Alert type="error" showIcon message="Не удалось загрузить сведения выбранного объекта и доступность загрузок" description={selectedAssetQuery.error.message} /> : null}
       {assetId && selectedAssetQuery.isPending ? <Typography.Text type="secondary">Загрузка сведений выбранного объекта…</Typography.Text> : null}
       {lineageQuery.isFetching ? <Spin size="small" /> : null}

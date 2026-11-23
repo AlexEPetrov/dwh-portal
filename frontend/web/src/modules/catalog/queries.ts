@@ -18,7 +18,7 @@ import {
     listRecentLoads,
 } from '@shared/api/generated';
 import type { CancelablePromise } from '@shared/api/generated/core/CancelablePromise';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 /** Consume Query's signal and cancel the generated transport, not just its observer. */
 async function requestWithSignal<T>(signal: AbortSignal, request: CancelablePromise<T>): Promise<T> {
@@ -139,18 +139,13 @@ export const useCatalogLoads = (assetId: string, page: number, pageSize: number)
     queryFn: ({ signal }) => requestWithSignal(signal, listAssetLoads({ assetId, page, pageSize, includeTotal: false })),
 });
 
-export const LINEAGE_PICKER_TYPES = [
-    'DATA_SOURCE', 'EXTRACTION_SOURCE', 'PROCESS', 'TABLE', 'VIEW', 'STORAGE_LOCATION',
+const LINEAGE_PICKER_TYPES = [
+    'DATA_SOURCE', 'EXTRACTION_SOURCE', 'PROCESS', 'TABLE', 'VIEW', 'MATERIALIZED_VIEW',
+    'STORAGE_LOCATION',
 ] as const;
 
-export const useCatalogLineagePicker = (enabled = true) => useQueries({
-    queries: LINEAGE_PICKER_TYPES.map((type) => {
-        const params: ListAssetsData = { type, status: 'active', pageSize: 100 };
-        return {
-            ...lifecycle,
-            enabled,
-            queryKey: catalogKeys.assets(params),
-            queryFn: ({ signal }: { signal: AbortSignal }) => requestWithSignal(signal, listAssets(params)),
-        };
-    }),
-});
+export const useCatalogLineagePicker = (q: string, enabled: boolean) =>
+    useCatalogAssets(
+        { q, type: LINEAGE_PICKER_TYPES.join(','), status: 'active', pageSize: 50 },
+        enabled && Boolean(q),
+    );
