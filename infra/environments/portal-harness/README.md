@@ -40,8 +40,9 @@ For the approved local setup, a private `.env` was prepared from the existing
 test configuration's unchanged values plus only missing harness settings. This
 is operator-local configuration, not release payload or a public sample. The
 private test source was not replaced, and secrets are never copied into samples.
-Test-only host-path keys remain inert in the harness unless mounts are separately
-added; fixed Compose values still take precedence. The helper defaults to this
+The base Portal host-path keys now configure the same logs, local-storage and
+read-only Airflow/Python source mounts here; fixed Compose values still take
+precedence. The helper defaults to this
 private `.env` when no explicit env-file argument is given.
 Public DB/auth credentials and the session signing secret are **development
 examples**, not production provisioning. Portal login, DSH Web login and MCP
@@ -58,10 +59,20 @@ Portal DB/auth/token values are not passed to the DSH child.
 DWH host/database and local source roots are blank by default: no DWH target or
 Airflow/Python source tree is provisioned by this template. Optional collectors
 and the live load journal need their own read-only DWH credentials; source
-analysis also needs separately configured read-only mounts. No collection is
-started by preparing the file. Test-only host-path variables are listed as
-inactive comments because this Compose does not consume them. Portal local files
-are not made persistent; the existing named volume persists DSH state only.
+analysis uses the declared read-only mounts. Before launch, provision existing
+absolute target-host paths for logs, local storage, Airflow DAGs and Python
+modules, and set both corresponding container source roots in section 4. These
+mounts are required even when collection is not requested; blank sample paths
+are deliberately not usable deployment defaults. This base-compatible Python
+mount supports one root, not a semicolon-separated list. No collection is started
+by preparing the file or restoring the mounts. Logs and local storage persist
+on the host; the existing named volume independently persists DSH state.
+
+The frontend mount uses the existing built `frontend/web/dist` in checkout and
+the image-exported `frontend-dist` beside release scripts, independent of caller
+cwd. Checkout requires that frontend build to be present. New harness releases
+export it from the same image; old generated releases must not be hand-edited.
+There is no backend development-source or wheels overlay in this profile.
 
 The existing operator-selected Ollama endpoint/model/context/output values are
 preserved. They are target-specific, not universal recommendations or server
@@ -74,7 +85,8 @@ an already saved DSH model selection may still need explicit reselection.
 This is an independent deployment: no previous Portal container, shared Docker
 network, neighboring application or knowledge of its settings is required.
 The project creates its own bridge. Explicit external requirements are a loaded
-matching image, Docker Engine with Compose/host-gateway support, and a reachable
+matching image, provisioned bind-mount paths/frontend payload, Docker Engine with
+Compose/host-gateway support, and a reachable
 PostgreSQL database with the current Portal schema and valid credentials.
 Ollama is required only for inference, not for the database diagnostic.
 

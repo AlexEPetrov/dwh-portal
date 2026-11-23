@@ -28,6 +28,30 @@ approval_policy: human_required
 
 # Workflow: experimental Portal and harness image
 
+## Approved base Portal mount restoration
+
+On 2026-11-23 the user reported that the harness omitted the original Portal
+mounts and supplied the five required frontend/logs/local-storage/Airflow/Python
+bindings. Restore those bindings alongside the unchanged DSH state volume;
+Airflow and Python source mounts remain read-only. This supersedes earlier
+statements that host-path inputs are inert or new source mounts are out of scope.
+It does not authorize a backend development-source overlay, collection, new
+tools, private env edits or deployment execution.
+
+Keep checkout/release portability: the launcher selects the checkout's existing
+frontend build or the release's sibling frontend payload through an internal
+Compose interpolation input. Export that frontend from the same harness image
+through the shared registered release pipeline, not a handwritten/generated
+payload. Target operators provision existing absolute host paths and container
+roots for both source mounts; blank public placeholders are not deployable.
+The original single Python bind target does not accept multiple roots.
+
+Reconcile public guidance and source regressions, retaining the historical
+configuration hash after removing only approved additions. Run registered image
+and release Python, Node, shell and diff checks with fake/mocked Docker only.
+Docker/build/export/startup and actual source visibility remain user-run evidence.
+Do not alter private configs, old generated releases, API contracts or networks.
+
 ## Approved fixed project network allocation
 
 On 2026-11-21 the user reported actual project IPAM `172.22.0.0/16`, gateway

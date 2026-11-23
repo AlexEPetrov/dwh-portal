@@ -253,6 +253,7 @@ class PortableLauncherTests(unittest.TestCase):
                             fake = work / "docker"
                             fake.write_text(
                                 '#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_PATH"\n'
+                                'printf "%s\\n" "$PORTAL_HARNESS_FRONTEND_DIST_HOST" > "$CAPTURE_PATH.frontend"\n'
                             )
                             fake.chmod(0o700)
                             capture = work / "arguments"
@@ -290,6 +291,17 @@ class PortableLauncherTests(unittest.TestCase):
                                     )
                                 )
                             if environment == "portal-harness":
+                                frontend = (
+                                    Path(str(capture) + ".frontend").read_text().strip()
+                                )
+                                self.assertEqual(
+                                    Path(frontend).resolve(),
+                                    (
+                                        scripts / "frontend-dist"
+                                        if staged
+                                        else ROOT / "frontend/web/dist"
+                                    ),
+                                )
                                 self.assertEqual(
                                     args[args.index("--project-name") + 1],
                                     "dwh-portal-harness",
@@ -387,7 +399,12 @@ class ReleaseTests(unittest.TestCase):
         def run(args, **kwargs):
             commands.append(args)
             if args[:2] == ["docker", "cp"]:
-                Path(args[-1]).write_text("-- offline SQL artifact\n")
+                destination = Path(args[-1])
+                if args[-2].endswith("all.sql"):
+                    destination.write_text("-- offline SQL artifact\n")
+                else:
+                    destination.mkdir()
+                    (destination / "index.html").write_text("image frontend")
             elif args[:2] == ["docker", "save"]:
                 Path(args[args.index("--output") + 1]).write_bytes(
                     b"fake image archive"
@@ -402,6 +419,9 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue((destination / "RELEASE_COMPLETE").is_file())
             self.assertTrue((destination / "dwh-portal-dsh.img").is_file())
             self.assertTrue((destination / "migrations/all.sql").is_file())
+            self.assertEqual(
+                (destination / "frontend-dist/index.html").read_text(), "image frontend"
+            )
             self.assertTrue(
                 (destination / "docker-compose-portal-harness.yml").is_file()
             )

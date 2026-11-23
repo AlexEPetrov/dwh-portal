@@ -63,8 +63,25 @@ class ConfigurationTests(unittest.TestCase):
             'bash infra/environments/portal-harness/up.sh "{env_file}"',
         )
 
-    def test_yaml_conversion_preserves_values_except_approved_launch_and_ipam(self):
+    def test_yaml_conversion_preserves_values_except_approved_launch_ipam_and_mounts(
+        self,
+    ):
         compose = yaml.safe_load(COMPOSE.read_text())
+        mounts = compose["services"]["portal-harness"]["volumes"]
+        self.assertEqual(
+            mounts,
+            [
+                "${PORTAL_HARNESS_FRONTEND_DIST_HOST:-./frontend-dist}:/app/frontend-dist",
+                "${APP_LOC_LOGS_PATH_HOST}:/app/logs",
+                "${APP_LOC_REPOSITORY_PATH_HOST}:/app/local_storage",
+                "${APP_DWH_AIRFLOW_DAGS_ROOT_HOST}:${APP_DWH_AIRFLOW_DAGS_ROOT}:ro",
+                "${APP_DWH_PYTHON_MODULES_ROOT_HOST}:${APP_DWH_PYTHON_MODULES_ROOT}:ro",
+                "dsh-state:/var/lib/dsh",
+            ],
+        )
+        base = yaml.safe_load((COMPOSE.parent / "docker-compose.yml").read_text())
+        self.assertEqual(mounts[1:5], base["services"]["core-service"]["volumes"][1:5])
+        compose["services"]["portal-harness"]["volumes"] = mounts[-1:]
         self.assertEqual(
             compose["services"]["portal-harness"].pop("command"),
             ["${PORTAL_LAUNCH_MODE:-portal}"],

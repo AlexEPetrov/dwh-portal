@@ -33,7 +33,7 @@ PROFILES = {
             "README.md",
         ),
         "compose": ("docker-compose-portal-harness.yml",),
-        "image_paths": (),
+        "image_paths": ("frontend-dist",),
     },
 }
 
@@ -84,7 +84,7 @@ def package_release(output: Path, profile: str, root: Path = ROOT) -> None:
                 ],
                 check=True,
             )
-            # Test Compose bind mounts remain functional after transfer. Both
+            # Compose bind mounts remain functional after transfer. Payload
             # trees come from the SAME image, never stale host build output.
             for name in config["image_paths"]:
                 subprocess.run(

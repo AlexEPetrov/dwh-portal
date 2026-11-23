@@ -31,6 +31,11 @@ services:
       - "127.0.0.1:${PORTAL_HARNESS_HOST_PORT:-5053}:5051"
       - "127.0.0.1:${DSH_HOST_PORT:-3080}:3080"
     volumes:
+      - ${PORTAL_HARNESS_FRONTEND_DIST_HOST:-./frontend-dist}:/app/frontend-dist
+      - ${APP_LOC_LOGS_PATH_HOST}:/app/logs
+      - ${APP_LOC_REPOSITORY_PATH_HOST}:/app/local_storage
+      - ${APP_DWH_AIRFLOW_DAGS_ROOT_HOST}:${APP_DWH_AIRFLOW_DAGS_ROOT}:ro
+      - ${APP_DWH_PYTHON_MODULES_ROOT_HOST}:${APP_DWH_PYTHON_MODULES_ROOT}:ro
       - dsh-state:/var/lib/dsh
     extra_hosts:
       - host.docker.internal:host-gateway

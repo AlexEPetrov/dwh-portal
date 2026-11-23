@@ -53,7 +53,7 @@ No deployment starts during export.
 | Profile | Image build composition | Release-specific payload |
 |---|---|---|
 | `test` | `infra/images/portal/build.sh`: sole Portal frontend/backend recipe | `dwh-portal-core-service.img`, base/dev Compose, portable up/down, image-derived `src` and `frontend-dist` for existing bind mounts |
-| `portal-harness` | `infra/images/portal-harness/build.sh`: build that SAME Portal base, then DSH-only extension | `dwh-portal-dsh.img`, harness Compose, portable up/down/run-sql and public env example |
+| `portal-harness` | `infra/images/portal-harness/build.sh`: build that SAME Portal base, then DSH-only extension | `dwh-portal-dsh.img`, harness Compose, portable up/down/DB diagnostic, public env example and image-derived `frontend-dist` for the base-compatible mount |
 
 The shared Portal base is `134/dwh-portal-core-service:1.2`. Its recipe lives in
 `infra/images/portal/`; `backend/core-service/build_image.sh` delegates there.

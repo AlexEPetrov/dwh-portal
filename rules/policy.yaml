@@ -255,7 +255,7 @@ verification:
       payload = original + (b'' if original.endswith(b'\n') else b'\n')
       payload += b'\n# === 8-9. Harness additions (private configuration) ===\n'
       payload += b'# Shared values above are copied from test; Compose may override fixed runtime values.\n'
-      payload += b'# Test host-path inputs do not create mounts in harness Compose.\n'
+      payload += b'# Base Portal host-path inputs configure harness bind mounts; provision target paths.\n'
       payload += b''.join(additions)
       os.umask(0o077)
       with destination.open('xb') as target:

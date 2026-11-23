@@ -65,7 +65,14 @@ class EnvironmentExampleTests(unittest.TestCase):
             )
         expected.remove("APP_MCP_PUBLIC_BASE_URL")
         self.assertEqual(
-            {key for key in values if key.startswith("APP_")} - {"APP_API_PORT"},
+            {key for key in values if key.startswith("APP_")}
+            - {
+                "APP_API_PORT",
+                "APP_LOC_REPOSITORY_PATH_HOST",
+                "APP_LOC_LOGS_PATH_HOST",
+                "APP_DWH_AIRFLOW_DAGS_ROOT_HOST",
+                "APP_DWH_PYTHON_MODULES_ROOT_HOST",
+            },
             expected,
         )
         compose = yaml.safe_load(
@@ -109,8 +116,13 @@ class EnvironmentExampleTests(unittest.TestCase):
             int(values["DSH_OLLAMA_MAX_TOKENS"]),
             int(values["DSH_OLLAMA_CONTEXT_WINDOW"]),
         )
-        for key in values:
-            self.assertFalse(key.endswith("_HOST") and key.startswith("APP_LOC_"))
+        for key in (
+            "APP_LOC_REPOSITORY_PATH_HOST",
+            "APP_LOC_LOGS_PATH_HOST",
+            "APP_DWH_AIRFLOW_DAGS_ROOT_HOST",
+            "APP_DWH_PYTHON_MODULES_ROOT_HOST",
+        ):
+            self.assertEqual(values[key], "")
 
     def test_common_headings_match_the_registered_private_comment_alignment(self):
         text = EXAMPLE.read_text()

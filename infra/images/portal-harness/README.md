@@ -225,8 +225,13 @@ ports; do not stop the current Portal deployment. Environment overrides
 `PORTAL_HARNESS_HOST_PORT` and `DSH_HOST_PORT` select different host ports. If you
 change the DSH host port, also set `DSH_PUBLIC_URL` to the actual browser root.
 Authentication/token warnings and single-owner limitations remain as above.
-Host bind mounts/collector-source mounts from the old deployment are not copied
-automatically; this launch targets existing snapshots, not running collectors.
+Compose restores the base Portal frontend, logs, local-storage and read-only
+Airflow/Python source mounts. Provision the host/container path pairs in the
+private environment file before launch; no paths or credentials are copied from
+another deployment automatically. Checkout uses its existing frontend build;
+new releases export the matching frontend from the image. These mounts do not
+start collectors or expose additional DSH tools. See the environment guide for
+mount prerequisites and the single-Python-root limitation.
 
 The combined image's environment filter keeps Portal DB/auth settings out of the
 DSH process. DSH does not connect to PostgreSQL. MCP uses Portal catalog services,

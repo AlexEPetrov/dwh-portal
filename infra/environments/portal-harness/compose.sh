@@ -22,8 +22,10 @@ export PORTAL_ENV_FILE="$ENV_DIRECTORY/$(basename -- "$ENV_FILE")"
 
 # A prepared release is self-contained. A checkout keeps composition canonical.
 COMPOSE_FILE="$DIRECTORY/docker-compose-portal-harness.yml"
+export PORTAL_HARNESS_FRONTEND_DIST_HOST="$DIRECTORY/frontend-dist"
 if [[ ! -f "$COMPOSE_FILE" ]]; then
     COMPOSE_FILE="$DIRECTORY/../../compose/docker-compose-portal-harness.yml"
+    export PORTAL_HARNESS_FRONTEND_DIST_HOST="$DIRECTORY/../../../frontend/web/dist"
 fi
 if [[ ! -f "$COMPOSE_FILE" ]]; then
     printf 'Portal harness Compose definition is missing\n' >&2
