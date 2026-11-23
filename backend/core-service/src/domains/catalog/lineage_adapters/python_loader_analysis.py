@@ -72,6 +72,11 @@ class _Dml:
     model: Any
 
 
+@dataclass(frozen=True)
+class _OrmTable:
+    model: _Symbol
+
+
 @dataclass
 class _Module:
     tree: ast.Module
@@ -410,6 +415,12 @@ class PythonLoaderAnalyzer:
         self._tick()
         if value is _BLOCKED_IMPORT:
             return _BLOCKED_IMPORT
+        if isinstance(value, _OrmTable):
+            if name == "name":
+                return self._attr(value.model, "__tablename__")
+            if name == "schema":
+                return self._orm_schema(value.model)
+            return UNKNOWN
         if isinstance(value, _Namespace):
             spec = f"{value.name}.{name}"
             try:
@@ -430,7 +441,7 @@ class PythonLoaderAnalyzer:
                 for base in node.bases:
                     parent = self._expr(base, {}, value.owner.path)
                     found = self._attr(parent, name)
-                    if isinstance(found, _Bound):
+                    if isinstance(found, _Bound) and found.receiver == parent:
                         return _Bound(found.function, value.receiver)
                     if found is not UNKNOWN and not isinstance(found, _External):
                         return found
@@ -462,6 +473,14 @@ class PythonLoaderAnalyzer:
         node = self._node(value)
         if not isinstance(node, ast.ClassDef):
             return UNKNOWN
+        # SQLAlchemy builds this object at runtime. Preserve only its source-
+        # proven model identity; never fabricate columns or execute descriptors.
+        if (
+            name == "__table__"
+            and not self._declares(value, name)
+            and self._declares(value, "__tablename__")
+        ):
+            return _OrmTable(value)
         seen = set() if seen is None else seen
         if value in seen or len(seen) >= MAX_DEPTH:
             self._diagnostic("RESOLUTION_CYCLE", value.path, node)
@@ -491,7 +510,7 @@ class PythonLoaderAnalyzer:
         for base in node.bases:
             parent = self._expr(base, {}, value.path)
             found = self._attr(parent, name, seen)
-            if isinstance(found, _Bound):
+            if isinstance(found, _Bound) and found.receiver == parent:
                 return _Bound(found.function, value)
             if found is not UNKNOWN and not isinstance(found, _External):
                 return found
@@ -665,16 +684,20 @@ class PythonLoaderAnalyzer:
         return UNKNOWN
 
     def _orm(self, value, path, node):
+        if isinstance(value, _OrmTable):
+            value = value.model
         table = self._attr(value, "__tablename__")
+        self._write(self._orm_schema(value), table, path, node, "orm")
+
+    def _orm_schema(self, value):
         options = self._attr(value, "__table_args__")
         if isinstance(options, tuple):
             options = next((item for item in options if isinstance(item, dict)), UNKNOWN)
-        schema = (
+        return (
             options.get("schema")
             if isinstance(options, dict)
             else UNKNOWN if self._declares(value, "__table_args__") else None
         )
-        self._write(schema, table, path, node, "orm")
 
     def _declares(self, value, name, seen=None):
         """Distinguish absent ORM options from an explicitly unknown schema."""

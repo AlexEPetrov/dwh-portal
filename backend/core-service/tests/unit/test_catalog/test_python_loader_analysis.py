@@ -31,6 +31,142 @@ def _targets(result):
     return {(ref.schema, ref.name) for ref in result.refs}
 
 
+def _excel_loader_sources(writer):
+    return {
+        "lib/DB/base.py": """
+            from sqlalchemy.dialects.postgresql import insert
+            class InboxBase:
+                __table_args__ = {'schema': 'inbox'}
+                @classmethod
+                def upsert_data(cls, df, session):
+                    table = cls.__table__
+                    session.execute(insert(table).values(df).on_conflict_do_update(set_={}))
+        """,
+        "lib/DB/inbox/inbox_argus_data.py": """
+            from lib.DB.base import InboxBase
+            class InboxArgusData(InboxBase):
+                __tablename__ = 'argus_data'
+        """,
+        "lib/files/base_excel_template_model.py": f"""
+            class BaseExcelTemplateFileModel:
+                @classmethod
+                def load_file(cls, df, session):
+                    {writer}
+        """,
+        "loader.py": """
+            from lib.DB.inbox.inbox_argus_data import InboxArgusData
+            from lib.files.base_excel_template_model import BaseExcelTemplateFileModel
+            class ArgusDataFileModel(BaseExcelTemplateFileModel):
+                _TABLE_NAME = InboxArgusData.__tablename__
+                _INBOX_CLASS = InboxArgusData
+                _SAVE_METHOD = InboxArgusData.upsert_data
+                _COL_NAME_ACTION_DATE = InboxArgusData.action_date.name
+            class Loader(ArgusDataFileModel):
+                pass
+            class Sibling(BaseExcelTemplateFileModel):
+                _TABLE_NAME = 'not_written'
+        """,
+    }
+
+
+@pytest.mark.parametrize("renamed", [False, True])
+@pytest.mark.parametrize(
+    "writer,pattern",
+    [
+        ("cls._SAVE_METHOD(df, session)", "orm"),
+        ("cls._INBOX_CLASS.upsert_data(df, session)", "orm"),
+        ("df.to_sql(cls._TABLE_NAME, schema=cls._INBOX_CLASS.__table__.schema)", "to_sql"),
+        ("df.to_sql(cls._INBOX_CLASS.__table__.name, schema='inbox')", "to_sql"),
+    ],
+)
+def test_excel_loader_orm_attributes_reach_inherited_writer(tmp_path, writer, pattern, renamed):
+    sources = _excel_loader_sources(writer)
+    if renamed:
+        for old, new in (
+            ("_TABLE_NAME", "destination_name"),
+            ("_INBOX_CLASS", "destination_model"),
+            ("_SAVE_METHOD", "persist_rows"),
+        ):
+            sources = {name: source.replace(old, new) for name, source in sources.items()}
+    result = _analyze(tmp_path, sources)
+    assert _targets(result) == {("inbox", "argus_data")}
+    assert not result.diagnostics
+    assert {item["pattern"] for item in result.evidence} == {pattern}
+
+
+def test_excel_loader_attributes_without_reachable_write_are_not_targets(tmp_path):
+    result = _analyze(tmp_path, _excel_loader_sources("logger.info(cls._TABLE_NAME)"))
+    assert not result.refs
+    assert not result.evidence
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    ["__table_args__ = RUNTIME_OPTIONS", "__table__ = RUNTIME_TABLE"],
+)
+def test_orm_table_metadata_does_not_replace_explicit_unknowns(tmp_path, declaration):
+    result = _analyze(
+        tmp_path,
+        {"loader.py": f"""
+            from sqlalchemy import insert
+            class Model:
+                __tablename__ = 'not_proven'
+                {declaration}
+            def load_file(session):
+                session.execute(insert(Model.__table__))
+        """},
+        entry="load_file",
+    )
+    assert not result.refs
+    assert "WRITE_TARGET_UNKNOWN" in {item["code"] for item in result.diagnostics}
+
+
+@pytest.mark.parametrize("mode", ["catalog", "code"])
+def test_excel_loader_adapter_persists_write_on_same_process(store, now, tmp_path, mode):
+    _sources(tmp_path, _excel_loader_sources("cls._SAVE_METHOD(df, session)"))
+    process = _registry_process(store, now)
+    process.attributes["entry_point"] = "Loader"
+    store.upsert_asset(process)
+    table = store.upsert_asset(
+        Asset(
+            asset_type=AssetType.TABLE,
+            name="argus_data",
+            qualified_name="dwh.inbox.argus_data",
+            source_provider="postgres",
+            identity_key="inbox.argus_data",
+            first_seen_at=now,
+            last_seen_at=now,
+            attributes={"schema": "inbox"},
+        )
+    )
+    adapter = PythonModulesLineageAdapter(
+        store,
+        DwhCollectorSettings(python_modules_root=str(tmp_path), python_modules_lineage_mode=mode),
+    )
+    for _ in range(2):
+        run = adapter.collect(now)
+        assert run.status == "SUCCESS"
+        edges = store.list_relationships(asset_id=process.id, types={RelationshipType.WRITES_TO})
+        assert len(edges) == 1
+        assert edges[0].to_asset_id == table.id
+        stored = store.get_asset(process.id)
+        assert stored.identity_key == process.identity_key
+        assert stored.attributes["write_evidence"] == [
+            {
+                "schema": "inbox",
+                "table": "argus_data",
+                "file": "lib/DB/base.py",
+                "line": 8,
+                "pattern": "orm",
+            }
+        ]
+        assert str(tmp_path) not in str(stored.attributes)
+    assert (
+        len([asset for asset in store.assets.values() if asset.asset_type == AssetType.PROCESS])
+        == 1
+    )
+
+
 def test_selected_subclass_imported_orm_inherited_writer_and_secondary(tmp_path):
     result = _analyze(
         tmp_path,
