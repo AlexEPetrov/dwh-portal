@@ -5,13 +5,13 @@ import { useNavigate } from 'react-router-dom';
 import { ASSET_TYPE_LABELS } from '../assetTypes';
 import LineageAssetChip from './LineageAssetChip';
 import {
-  STAGE_ORDER,
-  TYPE_COLOR,
-  buildFlowRows,
-  flowLabelFor,
-  focusFlowRows,
-  originCaption,
-  type FlowRow
+    STAGE_ORDER,
+    TYPE_COLOR,
+    buildFlowRows,
+    flowLabelFor,
+    focusFlowRows,
+    originCaption,
+    type FlowRow
 } from './lineageFlow';
 import './lineageViews.css';
 
@@ -24,6 +24,8 @@ type Props = {
   focusAnchorKey?: string | null;
   onFocusNode?: (assetId: string, anchorKey?: string) => void;
   rootsOverview?: boolean;
+  /** Inactive tab panes stay mounted, but must not consume the initial reveal. */
+  active?: boolean;
 };
 
 const extractionSourcesLabel = (count: number): string => {
@@ -287,10 +289,12 @@ const LineageListView = ({
   focusAnchorKey = null,
   onFocusNode,
   rootsOverview = false,
+  active = true,
 }: Props) => {
   const clusterRef = useRef<HTMLDivElement>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
   const scrollFrame = useRef<number | null>(null);
+  const revealedAssetId = useRef<string>();
   const stages = useMemo(() => {
     const present = new Set(nodes.map((node) => node.asset_type));
     return STAGE_ORDER.filter((type) => present.has(type));
@@ -301,6 +305,40 @@ const LineageListView = ({
     [baseRows, focusId, focusAnchorKey]
   );
   const rows = focused.rows;
+
+  useLayoutEffect(() => {
+    if (!selectedAssetId) {
+      revealedAssetId.current = undefined;
+      return;
+    }
+    if (!active || focusId || revealedAssetId.current === selectedAssetId) {
+      return;
+    }
+    // Wait for the tab and its flex scroll container to finish layout. Do not
+    // turn route selection into manual focus: that would regroup dependency rows.
+    const frame = requestAnimationFrame(() => {
+      const selected = rowsRef.current?.querySelector<HTMLElement>('.lineage-asset-chip.is-selected');
+      if (!selected) {
+        return;
+      }
+      const scroller = findScroller(selected);
+      if (!scroller || scroller.clientHeight === 0) {
+        return;
+      }
+      // Reveal immediately, including for reduced motion. Subsequent refreshes
+      // and tab switches preserve the user's scroll position for this object.
+      scroller.scrollTop += clusterDelta(scroller, selected);
+      const view = scroller.getBoundingClientRect();
+      const box = selected.getBoundingClientRect();
+      if (box.left < view.left) {
+        scroller.scrollLeft += box.left - view.left;
+      } else if (box.right > view.right) {
+        scroller.scrollLeft += box.right - view.right;
+      }
+      revealedAssetId.current = selectedAssetId;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [rows, selectedAssetId, active, focusId]);
 
   useLayoutEffect(() => {
     const root = rowsRef.current;

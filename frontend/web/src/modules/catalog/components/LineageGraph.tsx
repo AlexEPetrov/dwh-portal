@@ -167,6 +167,7 @@ const LineageGraph = ({
                 focusAnchorKey={focus?.anchorKey}
                 onFocusNode={onFocusNode}
                 rootsOverview={rootsOverview}
+                active={activeKey === 'list'}
               />
             </div>
           ),

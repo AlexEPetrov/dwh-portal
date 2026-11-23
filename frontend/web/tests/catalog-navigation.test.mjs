@@ -7,6 +7,29 @@ import { schemaGroups, schemaPatches } from '../src/modules/catalog/components/s
 import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
 import { matchingResultsOption, overviewSearchParams, overviewSearchUrl } from '../src/modules/catalog/search.ts';
 
+test('lineage reveals the route-selected chip after layout without activating manual focus', () => {
+    const source = readFileSync(new URL('../src/modules/catalog/components/LineageListView.tsx', import.meta.url), 'utf8');
+    const reveal = source.slice(source.indexOf('if (!selectedAssetId)'), source.indexOf('const root = rowsRef.current;'));
+    assert.ok(reveal.includes('requestAnimationFrame(() =>'));
+    assert.ok(reveal.includes("querySelector<HTMLElement>('.lineage-asset-chip.is-selected')"));
+    assert.ok(reveal.includes('if (!selected)'));
+    assert.ok(reveal.includes('scroller.clientHeight === 0'));
+    assert.ok(reveal.includes('scroller.scrollTop += clusterDelta(scroller, selected)'));
+    assert.ok(reveal.includes('scroller.scrollLeft +='));
+    assert.ok(reveal.includes('return () => cancelAnimationFrame(frame)'));
+    assert.ok(!reveal.includes('onFocusNode('));
+    assert.ok(!reveal.includes('focusFlowRows('));
+});
+
+test('lineage defers hidden-tab reveal and preserves user scrolling after the first reveal', () => {
+    const source = readFileSync(new URL('../src/modules/catalog/components/LineageListView.tsx', import.meta.url), 'utf8');
+    assert.ok(source.includes('!active || focusId || revealedAssetId.current === selectedAssetId'));
+    assert.ok(source.includes('revealedAssetId.current = selectedAssetId'));
+    assert.ok(source.includes('[rows, selectedAssetId, active, focusId]'));
+    const graph = readFileSync(new URL('../src/modules/catalog/components/LineageGraph.tsx', import.meta.url), 'utf8');
+    assert.ok(graph.includes("active={activeKey === 'list'}"));
+});
+
 test('Universe schemas use explicit relation membership and count only supplied chain nodes', () => {
     const relation = (id, overrides = {}) => ({
         id, asset_type: 'TABLE', database: 'dwh',
@@ -279,7 +302,7 @@ test('compact lineage retains metadata details, explicit unresolved targets and 
 test('lineage object changes and source overview preserve the active view and Universe context', () => {
     const page = readFileSync(new URL('../src/modules/catalog/components/LineageWorkspace.tsx', import.meta.url), 'utf8');
     assert.ok(page.includes("searchParams.get('view') === 'map' ? 'map' : 'list'"));
-    assert.ok(page.includes("`${value ? `/lineage/${value}` : '/lineage'}?view=${view}`"));
+    assert.ok(page.includes("`${selection ? `/lineage/${selection.value}` : '/lineage'}?view=${view}`"));
     assert.ok(page.includes('navigate(`/lineage?view=${view}`)'));
     assert.ok(page.includes("assetId ? `/lineage/universe/${assetId}` : '/lineage/universe'"));
 });
@@ -296,7 +319,7 @@ test('object tab and standalone route reuse the whole lineage workspace, not sep
         assert.ok(!source.includes('<UnresolvedTargetsAlert'));
     }
     assert.ok(workspace.includes('useCatalogLineage(assetId)'));
-    assert.ok(workspace.includes('useCatalogLineagePicker(!embedded)'));
+    assert.ok(workspace.includes('useCatalogLineagePicker(debouncedSearch, !embedded && searchReady)'));
     assert.ok(workspace.includes('navigate(`/lineage/${assetId}?view=${view}`)'));
     assert.match(workspace, /<LineageGraph[\s\S]*?\sfillHeight\s+syncViewInUrl/);
     assert.ok(!workspace.includes('fillHeight={false}'));
