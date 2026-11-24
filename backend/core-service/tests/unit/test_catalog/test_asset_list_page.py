@@ -202,3 +202,52 @@ def test_sql_and_memory_search_use_the_same_whitespace_normalization():
     assert SEARCH_WHITESPACE in compiled.params.values()
     assert compact_catalog_text("ADS-B Exchange") == "ads-bexchange"
     assert compact_catalog_text("B\t\u00a0Ex") == "bex"
+
+
+def test_exact_asset_name_ranks_before_description_matches_on_first_page(store, now):
+    target = "dwh.raw.ice_brent"
+    for number in range(51):
+        name = f"earlier_{number:02}"
+        store.upsert_asset(
+            Asset(
+                asset_type=AssetType.TABLE,
+                qualified_name=f"dwh.a.{name}",
+                name=name,
+                description=f"Reads {target}",
+                source_provider="postgres",
+                identity_key=name,
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+        )
+    asset = store.upsert_asset(
+        Asset(
+            asset_type=AssetType.MATERIALIZED_VIEW,
+            qualified_name=target,
+            name="ice_brent",
+            source_provider="postgres",
+            identity_key=target,
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+    )
+    for q in (target.upper(), asset.name):
+        query = AssetQuery(q=q, sort="exact_name_first", page_size=50)
+        rows, total = AssetService(store).list_page(query)
+        assert total == 52
+        assert len(rows) == 50
+        assert rows[0].asset.id == asset.id
+
+    rows, _ = AssetService(store).list_page(AssetQuery(q=target, page_size=50))
+    assert asset.id not in {row.asset.id for row in rows}
+
+
+def test_sql_exact_asset_name_rank_is_applied_before_pagination():
+    query = AssetQuery(q="DWH.RAW.ICE_BRENT", sort="exact_name_first", page_size=50)
+    store = SqlPortalStore(session_factory=lambda: None)
+    compiled = store._asset_page_stmt(query).compile(dialect=postgresql.dialect())
+    order = " ".join(str(compiled).split()).split("ORDER BY CASE", 1)[1]
+    assert order.index("lower(") < order.index(" LIMIT")
+    assert ".qualified_name)" in order
+    assert ".name)" in order
+    assert list(compiled.params.values()).count("dwh.raw.ice_brent") == 2

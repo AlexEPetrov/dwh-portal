@@ -1,0 +1,258 @@
+diff --git a/backend/core-service/src/domains/catalog/lineage_adapters/python_loader_analysis.py b/backend/core-service/src/domains/catalog/lineage_adapters/python_loader_analysis.py
+index 75245fa..c55f99a 100644
+--- a/backend/core-service/src/domains/catalog/lineage_adapters/python_loader_analysis.py
++++ b/backend/core-service/src/domains/catalog/lineage_adapters/python_loader_analysis.py
+@@ -712,6 +712,9 @@ class PythonLoaderAnalyzer:
+         if not isinstance(node, ast.ClassDef):
+             return False
+         for statement in node.body:
++            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
++                if statement.name == name:
++                    return True
+             if isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                 targets = (
+                     statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+diff --git a/backend/core-service/src/domains/catalog/repositories/memory.py b/backend/core-service/src/domains/catalog/repositories/memory.py
+index 18a3d6f..4de8f9f 100644
+--- a/backend/core-service/src/domains/catalog/repositories/memory.py
++++ b/backend/core-service/src/domains/catalog/repositories/memory.py
+@@ -146,7 +146,19 @@ class InMemoryPortalStore:
+             items = [item for item in items if item.id in changed_ids]
+         reverse = query.sort.startswith("-")
+         sort_key = query.sort.lstrip("-")
+-        items.sort(key=lambda item: getattr(item, sort_key, item.qualified_name), reverse=reverse)
++        if sort_key == "exact_name_first" and query.q:
++            needle = query.q.strip().lower()
++
++            def search_order(item: Asset) -> tuple[int, str, uuid.UUID]:
++                if item.qualified_name.lower() == needle:
++                    return 0, item.qualified_name, item.id
++                if item.name.lower() == needle:
++                    return 1, item.qualified_name, item.id
++                return 2, item.qualified_name, item.id
++
++            items.sort(key=search_order)
++        else:
++            items.sort(key=lambda item: getattr(item, sort_key, item.qualified_name), reverse=reverse)
+         total = len(items)
+         start = max(query.page - 1, 0) * query.page_size
+         page_items = [item.model_copy(deep=True) for item in items[start : start + query.page_size]]
+diff --git a/backend/core-service/src/domains/catalog/repositories/sql.py b/backend/core-service/src/domains/catalog/repositories/sql.py
+index eab0aff..a99d2c2 100644
+--- a/backend/core-service/src/domains/catalog/repositories/sql.py
++++ b/backend/core-service/src/domains/catalog/repositories/sql.py
+@@ -452,6 +452,15 @@ class SqlPortalStore:
+     def _asset_order(query: AssetQuery) -> list:
+         reverse = query.sort.startswith("-")
+         key = query.sort.lstrip("-")
++        if key == "exact_name_first" and query.q:
++            model = PortalAssetDbModel
++            needle = query.q.strip().lower()
++            rank = case(
++                (func.lower(model.qualified_name) == needle, 0),
++                (func.lower(model.name) == needle, 1),
++                else_=2,
++            )
++            return [rank.asc(), model.qualified_name.asc(), model.id.asc()]
+         if key == "status":
+             column = case((PortalAssetDbModel.deleted_at.is_(None), 0), else_=1)
+         else:
+diff --git a/backend/core-service/tests/unit/test_catalog/test_asset_list_page.py b/backend/core-service/tests/unit/test_catalog/test_asset_list_page.py
+index 14d95ce..21bfc50 100644
+--- a/backend/core-service/tests/unit/test_catalog/test_asset_list_page.py
++++ b/backend/core-service/tests/unit/test_catalog/test_asset_list_page.py
+@@ -202,3 +202,52 @@ def test_sql_and_memory_search_use_the_same_whitespace_normalization():
+     assert SEARCH_WHITESPACE in compiled.params.values()
+     assert compact_catalog_text("ADS-B Exchange") == "ads-bexchange"
+     assert compact_catalog_text("B\t\u00a0Ex") == "bex"
++
++
++def test_exact_asset_name_ranks_before_description_matches_on_first_page(store, now):
++    target = "dwh.raw.ice_brent"
++    for number in range(51):
++        name = f"earlier_{number:02}"
++        store.upsert_asset(
++            Asset(
++                asset_type=AssetType.TABLE,
++                qualified_name=f"dwh.a.{name}",
++                name=name,
++                description=f"Reads {target}",
++                source_provider="postgres",
++                identity_key=name,
++                first_seen_at=now,
++                last_seen_at=now,
++            )
++        )
++    asset = store.upsert_asset(
++        Asset(
++            asset_type=AssetType.MATERIALIZED_VIEW,
++            qualified_name=target,
++            name="ice_brent",
++            source_provider="postgres",
++            identity_key=target,
++            first_seen_at=now,
++            last_seen_at=now,
++        )
++    )
++    for q in (target.upper(), asset.name):
++        query = AssetQuery(q=q, sort="exact_name_first", page_size=50)
++        rows, total = AssetService(store).list_page(query)
++        assert total == 52
++        assert len(rows) == 50
++        assert rows[0].asset.id == asset.id
++
++    rows, _ = AssetService(store).list_page(AssetQuery(q=target, page_size=50))
++    assert asset.id not in {row.asset.id for row in rows}
++
++
++def test_sql_exact_asset_name_rank_is_applied_before_pagination():
++    query = AssetQuery(q="DWH.RAW.ICE_BRENT", sort="exact_name_first", page_size=50)
++    store = SqlPortalStore(session_factory=lambda: None)
++    compiled = store._asset_page_stmt(query).compile(dialect=postgresql.dialect())
++    order = " ".join(str(compiled).split()).split("ORDER BY CASE", 1)[1]
++    assert order.index("lower(") < order.index(" LIMIT")
++    assert ".qualified_name)" in order
++    assert ".name)" in order
++    assert list(compiled.params.values()).count("dwh.raw.ice_brent") == 2
+diff --git a/backend/core-service/tests/unit/test_catalog/test_python_loader_analysis.py b/backend/core-service/tests/unit/test_catalog/test_python_loader_analysis.py
+index 04febdc..8891524 100644
+--- a/backend/core-service/tests/unit/test_catalog/test_python_loader_analysis.py
++++ b/backend/core-service/tests/unit/test_catalog/test_python_loader_analysis.py
+@@ -102,13 +102,19 @@ def test_excel_loader_attributes_without_reachable_write_are_not_targets(tmp_pat
+ 
+ @pytest.mark.parametrize(
+     "declaration",
+-    ["__table_args__ = RUNTIME_OPTIONS", "__table__ = RUNTIME_TABLE"],
++    [
++        "__table_args__ = RUNTIME_OPTIONS",
++        "__table__ = RUNTIME_TABLE",
++        "@declared_attr\n                def __table__(cls): return runtime_table()",
++        "@declared_attr\n                def __table_args__(cls): return runtime_options()",
++    ],
+ )
+ def test_orm_table_metadata_does_not_replace_explicit_unknowns(tmp_path, declaration):
+     result = _analyze(
+         tmp_path,
+         {"loader.py": f"""
+             from sqlalchemy import insert
++            from sqlalchemy.orm import declared_attr
+             class Model:
+                 __tablename__ = 'not_proven'
+                 {declaration}
+diff --git a/frontend/web/src/modules/catalog/components/LineageListView.tsx b/frontend/web/src/modules/catalog/components/LineageListView.tsx
+index 33f9497..cd1d129 100644
+--- a/frontend/web/src/modules/catalog/components/LineageListView.tsx
++++ b/frontend/web/src/modules/catalog/components/LineageListView.tsx
+@@ -11,6 +11,7 @@ import {
+     flowLabelFor,
+     focusFlowRows,
+     originCaption,
++    revealOffset,
+     type FlowRow
+ } from './lineageFlow';
+ import './lineageViews.css';
+@@ -327,14 +328,10 @@ const LineageListView = ({
+       }
+       // Reveal immediately, including for reduced motion. Subsequent refreshes
+       // and tab switches preserve the user's scroll position for this object.
+-      scroller.scrollTop += clusterDelta(scroller, selected);
+       const view = scroller.getBoundingClientRect();
+       const box = selected.getBoundingClientRect();
+-      if (box.left < view.left) {
+-        scroller.scrollLeft += box.left - view.left;
+-      } else if (box.right > view.right) {
+-        scroller.scrollLeft += box.right - view.right;
+-      }
++      scroller.scrollTop += revealOffset(box.top, box.bottom, view.top, view.bottom);
++      scroller.scrollLeft += revealOffset(box.left, box.right, view.left, view.right);
+       revealedAssetId.current = selectedAssetId;
+     });
+     return () => cancelAnimationFrame(frame);
+diff --git a/frontend/web/src/modules/catalog/components/lineageFlow.ts b/frontend/web/src/modules/catalog/components/lineageFlow.ts
+index 204a8e1..873807c 100644
+--- a/frontend/web/src/modules/catalog/components/lineageFlow.ts
++++ b/frontend/web/src/modules/catalog/components/lineageFlow.ts
+@@ -1,5 +1,14 @@
+ import type { LineageEdge, LineageNode } from '@shared/api/generated';
+ 
++/** Scroll the nearest edge of a selected item into a viewport. */
++export const revealOffset = (
++  start: number, end: number, viewportStart: number, viewportEnd: number,
++): number => {
++  if (start < viewportStart) return start - viewportStart;
++  if (end > viewportEnd) return end - viewportEnd;
++  return 0;
++};
++
+ export const TYPE_COLOR: Record<string, string> = {
+   DATA_SOURCE: 'purple',
+   EXTRACTION_SOURCE: 'blue',
+diff --git a/frontend/web/src/modules/catalog/queries.ts b/frontend/web/src/modules/catalog/queries.ts
+index 678526b..41ed9f2 100644
+--- a/frontend/web/src/modules/catalog/queries.ts
++++ b/frontend/web/src/modules/catalog/queries.ts
+@@ -146,6 +146,12 @@ const LINEAGE_PICKER_TYPES = [
+ 
+ export const useCatalogLineagePicker = (q: string, enabled: boolean) =>
+     useCatalogAssets(
+-        { q, type: LINEAGE_PICKER_TYPES.join(','), status: 'active', pageSize: 50 },
++        {
++            q,
++            type: LINEAGE_PICKER_TYPES.join(','),
++            status: 'active',
++            sort: 'exact_name_first',
++            pageSize: 50,
++        },
+         enabled && Boolean(q),
+     );
+diff --git a/frontend/web/tests/catalog-navigation.test.mjs b/frontend/web/tests/catalog-navigation.test.mjs
+index 5ecb652..cfec864 100644
+--- a/frontend/web/tests/catalog-navigation.test.mjs
++++ b/frontend/web/tests/catalog-navigation.test.mjs
+@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
+ import { readFileSync } from 'node:fs';
+ import { test } from 'node:test';
+ import { ASSET_TYPE_LABELS, CATALOG_ASSET_TYPES, OVERVIEW_ASSET_TYPES, catalogTypeUrl } from '../src/modules/catalog/assetTypes.ts';
++import { revealOffset } from '../src/modules/catalog/components/lineageFlow.ts';
+ import { inspectorConnections } from '../src/modules/catalog/components/lineageInspector.ts';
+ import { schemaGroups, schemaPatches } from '../src/modules/catalog/components/schemaNebulae.ts';
+ import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
+@@ -14,13 +15,19 @@ test('lineage reveals the route-selected chip after layout without activating ma
+     assert.ok(reveal.includes("querySelector<HTMLElement>('.lineage-asset-chip.is-selected')"));
+     assert.ok(reveal.includes('if (!selected)'));
+     assert.ok(reveal.includes('scroller.clientHeight === 0'));
+-    assert.ok(reveal.includes('scroller.scrollTop += clusterDelta(scroller, selected)'));
++    assert.ok(reveal.includes('scroller.scrollTop += revealOffset('));
+     assert.ok(reveal.includes('scroller.scrollLeft +='));
+     assert.ok(reveal.includes('return () => cancelAnimationFrame(frame)'));
+     assert.ok(!reveal.includes('onFocusNode('));
+     assert.ok(!reveal.includes('focusFlowRows('));
+ });
+ 
++test('lineage reveal scrolls to a chip completely above or below the viewport', () => {
++    assert.equal(revealOffset(40, 65, 100, 300), -60);
++    assert.equal(revealOffset(320, 345, 100, 300), 45);
++    assert.equal(revealOffset(120, 145, 100, 300), 0);
++});
++
+ test('lineage defers hidden-tab reveal and preserves user scrolling after the first reveal', () => {
+     const source = readFileSync(new URL('../src/modules/catalog/components/LineageListView.tsx', import.meta.url), 'utf8');
+     assert.ok(source.includes('!active || focusId || revealedAssetId.current === selectedAssetId'));
+diff --git a/openspec/specs/catalog/spec.md b/openspec/specs/catalog/spec.md
+index 32af5bb..10e6d03 100644
+--- a/openspec/specs/catalog/spec.md
++++ b/openspec/specs/catalog/spec.md
+@@ -62,6 +62,13 @@ MUST оставаться доступным по идентификатору 
+ - WHEN клиент запрашивает `q=ice_brent`
+ - THEN объект присутствует в результатах
+ 
++#### Scenario: Точное совпадение в селекторе Lineage
++
++- GIVEN у поискового запроса есть совпадения по имени и по описаниям
++- WHEN селектор Lineage запрашивает первую страницу с `sort=exact_name_first`
++- THEN до пагинации API сортирует точное полное имя первым, затем точное короткое имя, затем остальные совпадения
++- AND точное сравнение имени выполняется без учёта регистра
++
+ ### Requirement: Каталог всех объектов и поиск из обзора
+ 
+ Пункт навигации и заголовок `/objects` MUST называться «Все объекты»,

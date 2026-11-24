@@ -11,6 +11,7 @@ import {
     flowLabelFor,
     focusFlowRows,
     originCaption,
+    revealOffset,
     type FlowRow
 } from './lineageFlow';
 import './lineageViews.css';
@@ -327,14 +328,10 @@ const LineageListView = ({
       }
       // Reveal immediately, including for reduced motion. Subsequent refreshes
       // and tab switches preserve the user's scroll position for this object.
-      scroller.scrollTop += clusterDelta(scroller, selected);
       const view = scroller.getBoundingClientRect();
       const box = selected.getBoundingClientRect();
-      if (box.left < view.left) {
-        scroller.scrollLeft += box.left - view.left;
-      } else if (box.right > view.right) {
-        scroller.scrollLeft += box.right - view.right;
-      }
+      scroller.scrollTop += revealOffset(box.top, box.bottom, view.top, view.bottom);
+      scroller.scrollLeft += revealOffset(box.left, box.right, view.left, view.right);
       revealedAssetId.current = selectedAssetId;
     });
     return () => cancelAnimationFrame(frame);

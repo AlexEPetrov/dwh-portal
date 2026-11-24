@@ -102,13 +102,19 @@ def test_excel_loader_attributes_without_reachable_write_are_not_targets(tmp_pat
 
 @pytest.mark.parametrize(
     "declaration",
-    ["__table_args__ = RUNTIME_OPTIONS", "__table__ = RUNTIME_TABLE"],
+    [
+        "__table_args__ = RUNTIME_OPTIONS",
+        "__table__ = RUNTIME_TABLE",
+        "@declared_attr\n                def __table__(cls): return runtime_table()",
+        "@declared_attr\n                def __table_args__(cls): return runtime_options()",
+    ],
 )
 def test_orm_table_metadata_does_not_replace_explicit_unknowns(tmp_path, declaration):
     result = _analyze(
         tmp_path,
         {"loader.py": f"""
             from sqlalchemy import insert
+            from sqlalchemy.orm import declared_attr
             class Model:
                 __tablename__ = 'not_proven'
                 {declaration}

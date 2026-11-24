@@ -146,6 +146,12 @@ const LINEAGE_PICKER_TYPES = [
 
 export const useCatalogLineagePicker = (q: string, enabled: boolean) =>
     useCatalogAssets(
-        { q, type: LINEAGE_PICKER_TYPES.join(','), status: 'active', pageSize: 50 },
+        {
+            q,
+            type: LINEAGE_PICKER_TYPES.join(','),
+            status: 'active',
+            sort: 'exact_name_first',
+            pageSize: 50,
+        },
         enabled && Boolean(q),
     );

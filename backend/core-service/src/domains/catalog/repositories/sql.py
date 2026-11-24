@@ -452,6 +452,15 @@ class SqlPortalStore:
     def _asset_order(query: AssetQuery) -> list:
         reverse = query.sort.startswith("-")
         key = query.sort.lstrip("-")
+        if key == "exact_name_first" and query.q:
+            model = PortalAssetDbModel
+            needle = query.q.strip().lower()
+            rank = case(
+                (func.lower(model.qualified_name) == needle, 0),
+                (func.lower(model.name) == needle, 1),
+                else_=2,
+            )
+            return [rank.asc(), model.qualified_name.asc(), model.id.asc()]
         if key == "status":
             column = case((PortalAssetDbModel.deleted_at.is_(None), 0), else_=1)
         else:

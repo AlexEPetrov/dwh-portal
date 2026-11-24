@@ -1,5 +1,14 @@
 import type { LineageEdge, LineageNode } from '@shared/api/generated';
 
+/** Scroll the nearest edge of a selected item into a viewport. */
+export const revealOffset = (
+  start: number, end: number, viewportStart: number, viewportEnd: number,
+): number => {
+  if (start < viewportStart) return start - viewportStart;
+  if (end > viewportEnd) return end - viewportEnd;
+  return 0;
+};
+
 export const TYPE_COLOR: Record<string, string> = {
   DATA_SOURCE: 'purple',
   EXTRACTION_SOURCE: 'blue',

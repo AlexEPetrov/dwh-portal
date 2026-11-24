@@ -146,7 +146,19 @@ class InMemoryPortalStore:
             items = [item for item in items if item.id in changed_ids]
         reverse = query.sort.startswith("-")
         sort_key = query.sort.lstrip("-")
-        items.sort(key=lambda item: getattr(item, sort_key, item.qualified_name), reverse=reverse)
+        if sort_key == "exact_name_first" and query.q:
+            needle = query.q.strip().lower()
+
+            def search_order(item: Asset) -> tuple[int, str, uuid.UUID]:
+                if item.qualified_name.lower() == needle:
+                    return 0, item.qualified_name, item.id
+                if item.name.lower() == needle:
+                    return 1, item.qualified_name, item.id
+                return 2, item.qualified_name, item.id
+
+            items.sort(key=search_order)
+        else:
+            items.sort(key=lambda item: getattr(item, sort_key, item.qualified_name), reverse=reverse)
         total = len(items)
         start = max(query.page - 1, 0) * query.page_size
         page_items = [item.model_copy(deep=True) for item in items[start : start + query.page_size]]

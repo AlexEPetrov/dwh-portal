@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { ASSET_TYPE_LABELS, CATALOG_ASSET_TYPES, OVERVIEW_ASSET_TYPES, catalogTypeUrl } from '../src/modules/catalog/assetTypes.ts';
+import { revealOffset } from '../src/modules/catalog/components/lineageFlow.ts';
 import { inspectorConnections } from '../src/modules/catalog/components/lineageInspector.ts';
 import { schemaGroups, schemaPatches } from '../src/modules/catalog/components/schemaNebulae.ts';
 import { readCatalogFilters, updateCatalogFilters } from '../src/modules/catalog/navigation.ts';
@@ -14,11 +15,17 @@ test('lineage reveals the route-selected chip after layout without activating ma
     assert.ok(reveal.includes("querySelector<HTMLElement>('.lineage-asset-chip.is-selected')"));
     assert.ok(reveal.includes('if (!selected)'));
     assert.ok(reveal.includes('scroller.clientHeight === 0'));
-    assert.ok(reveal.includes('scroller.scrollTop += clusterDelta(scroller, selected)'));
+    assert.ok(reveal.includes('scroller.scrollTop += revealOffset('));
     assert.ok(reveal.includes('scroller.scrollLeft +='));
     assert.ok(reveal.includes('return () => cancelAnimationFrame(frame)'));
     assert.ok(!reveal.includes('onFocusNode('));
     assert.ok(!reveal.includes('focusFlowRows('));
+});
+
+test('lineage reveal scrolls to a chip completely above or below the viewport', () => {
+    assert.equal(revealOffset(40, 65, 100, 300), -60);
+    assert.equal(revealOffset(320, 345, 100, 300), 45);
+    assert.equal(revealOffset(120, 145, 100, 300), 0);
 });
 
 test('lineage defers hidden-tab reveal and preserves user scrolling after the first reveal', () => {

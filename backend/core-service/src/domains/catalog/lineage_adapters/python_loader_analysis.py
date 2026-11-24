@@ -712,6 +712,9 @@ class PythonLoaderAnalyzer:
         if not isinstance(node, ast.ClassDef):
             return False
         for statement in node.body:
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if statement.name == name:
+                    return True
             if isinstance(statement, (ast.Assign, ast.AnnAssign)):
                 targets = (
                     statement.targets if isinstance(statement, ast.Assign) else [statement.target]
