@@ -541,12 +541,12 @@ def test_finite_starred_and_keyword_helper_arguments(tmp_path):
     result = _analyze(
         tmp_path,
         {"loader.py": """
-        def save(schema, table, df=None):
+        def save(schema, table, df):
             df.to_sql(table, schema=schema)
-        def load_file():
+        def load_file(df):
             target = ('raw', 'one')
-            save(*target)
-            save(**{'schema': 'raw', 'table': 'two'})
+            save(*target, df=df)
+            save(**{'schema': 'raw', 'table': 'two', 'df': df})
     """},
         "load_file",
     )
